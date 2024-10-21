@@ -14,6 +14,15 @@ from hatchet.utils.rd_gccorrect import rd_gccorrect
 from hatchet.utils.compute_baf import compute_baf_task
 from hatchet.utils.correct_haplotypes import correct_haplotypes
 
+from hatchet.utils.additional_features import (
+    load_seg_file,
+    get_array_file_path,
+    check_array_files,
+    expected_count_files,
+    check_count_files,
+    workload_assignment,
+    read_snps
+)
 
 def main(args=None):
     sp.log(msg='# Parsing and checking input arguments\n', level='STEP')
@@ -37,45 +46,23 @@ def main(args=None):
     ponfile = args['ponfile']
     referencefasta = args['referencefasta']
     XX = args['XX']
+    rd_array = args['array']
+
+    segfile = args['segfile']
+    refversion = args["refversion"]
+
+    use_prebuilt_segfile = False
+    if refversion != None: # segfile == None
+        use_prebuilt_segfile = True
+        segfile = path(hatchet.data, f'{args["refversion"]}.segments.tsv')
 
     n_workers = min(len(chromosomes), threads)
 
-    # Read in centromere locations table
-    with path(hatchet.data, f'{args["ref_version"]}.centromeres.txt') as centromeres:
-        centromeres = pd.read_table(
-            centromeres,
-            header=None,
-            names=['CHR', 'START', 'END', 'NAME', 'gieStain'],
-        )
-    chr2centro = {}
-    for ch in centromeres.CHR.unique():
-        my_df = centromeres[centromeres.CHR == ch]
-        assert (my_df.gieStain == 'acen').all()
-        # Each centromere should consist of 2 adjacent segments
-        assert len(my_df == 2)
-        assert my_df.START.max() == my_df.END.min()
-        if use_chr:
-            if ch.startswith('chr'):
-                chr2centro[ch] = my_df.START.min(), my_df.END.max()
-            else:
-                chr2centro['chr' + ch] = my_df.START.min(), my_df.END.max()
-        else:
-            if ch.startswith('chr'):
-                chr2centro[ch[3:]] = my_df.START.min(), my_df.END.max()
-            else:
-                chr2centro[ch] = my_df.START.min(), my_df.END.max()
-
-    for ch in chromosomes:
-        if ch not in chr2centro:
-            raise ValueError(
-                sp.error(f'Chromosome {ch} not found in centromeres file. Inspect file provided as -C argument.')
-            )
-
-    isX = {ch: ch.endswith('X') for ch in chromosomes}
-    isY = {ch: ch.endswith('Y') for ch in chromosomes}
-
-    # check if isX true for any of the chromosomes
-    if any(isX.values()):
+    chr_prefix = "chr" if use_chr else ""
+    has_chrX = any(ch == f"{chr_prefix}X" for ch in chromosomes)
+    has_chrY = any(ch == f"{chr_prefix}Y" for ch in chromosomes)
+    xy = False
+    if has_chrX:
         sp.log(
             msg='Determining the allosomes for handling X chromosome\n',
             level='INFO',
@@ -84,38 +71,24 @@ def main(args=None):
         if XX == 'auto':
             # if read counts for Y chromosome is not provided, we cannot determine sex.
             # We assume the sample is from a female
-            if not any(isY.values()):
-                xy = False
-            else:
+            if has_chrY:
                 # find total read counts for X and Y chromosomes.
                 # if the ratio of X to Y is larger than 50, we assume the sample is from a female
-
-                # find the first chromosome such that isX is true
-                x_ch = next((ch for ch in chromosomes if isX[ch]), None)
-                y_ch = next((ch for ch in chromosomes if isY[ch]), None)
-
-                x_tc, _ = read_total_and_thresholds(x_ch, args['array'], args['segfile'])
-                y_tc, _ = read_total_and_thresholds(y_ch, args['array'], args['segfile'])
+                x_tc, _ = read_total_and_thresholds(f"{chr_prefix}X", rd_array, use_prebuilt_segfile)
+                y_tc, _ = read_total_and_thresholds(f"{chr_prefix}Y", rd_array, use_prebuilt_segfile)
                 total_x_reads = x_tc[:, 0].sum()
                 total_y_reads = y_tc[:, 0].sum()
-                if total_y_reads == 0:
-                    xy = False
-                else:
-                    xy = total_x_reads / total_y_reads <= 50
-
+                if total_y_reads != 0:
+                    xy = (total_x_reads / total_y_reads) <= 50
         elif XX == 'True':
             xy = False
-        elif XX == 'False':
+        else: # False
             xy = True
-
         sp.log(
             msg='Allosomes are determined as ' + ('XY' if xy else 'XX') + '\n',
             level='INFO',
         )
-    else:
-        # there is no X chromosome, no need to determine sex
-        # it does not matter what sex is given
-        xy = False
+
     # form parameters for each worker
     params = [
         (
@@ -123,11 +96,9 @@ def main(args=None):
             all_names,
             ch,
             outfile + f'.{ch}',
-            chr2centro[ch][0],
-            chr2centro[ch][1],
             msr,
             mtr,
-            args['array'],
+            rd_array,
             xy,
             multisample,
             phase,
@@ -135,7 +106,8 @@ def main(args=None):
             max_snps_per_block,
             test_alpha,
             nonormalFlag,
-            args['segfile'],
+            use_prebuilt_segfile,
+            segfile,
         )
         for ch in chromosomes if not ch.endswith('Y') and not (ch.endswith('X') and xy)
     ]
@@ -152,7 +124,7 @@ def main(args=None):
         level='STEP',
     )
     # merge all BB files together to get the one remaining BB file
-    if args['segfile']:
+    if segfile:
         outfiles = [a[3] + '.segfile' for a in params]
     else:
         outfiles = [a[3] for a in params]
@@ -215,11 +187,10 @@ def main(args=None):
         # autosomal_bb = rd_gccorrect(autosomal_bb, referencefasta)
         big_bb = rd_gccorrect(big_bb, referencefasta)
 
-    if xy and any(isX.values()):
-        x_ch = next((ch for ch in chromosomes if isX[ch]), None)
+    if xy and has_chrX:
         # set BAF to 0.5 for X chromosome
         # also double the RD
-        big_bb.loc[big_bb.CHR == x_ch, 'BAF'] = 0.5
+        big_bb.loc[big_bb.CHR == f"{chr_prefix}X", 'BAF'] = 0.5
 
     # Convert intervals from closed to half-open to match .1bed/HATCHet standard format
     # autosomal_bb.END = autosomal_bb.END + 1
@@ -232,106 +203,6 @@ def main(args=None):
     [os.remove(f) for f in outfiles]
 
     sp.log(msg='# Done\n', level='STEP')
-
-
-def read_snps(baf_file, ch, all_names, phasefile=None):
-    """
-    Read and validate SNP data for this patient (TSV table output from HATCHet deBAF.py).
-    """
-    all_names = [
-        name for name in all_names if name != 'normal'
-    ]   # remove normal sample -- not looking for SNP counts from normal
-
-    # Read in HATCHet BAF table
-    all_snps = pd.read_table(
-        baf_file,
-        names=['CHR', 'POS', 'SAMPLE', 'REF', 'ALT', 'REFC', 'ALTC'],
-        dtype={
-            'CHR': object,
-            'POS': np.uint32,
-            'SAMPLE': object,
-            'ALT': np.uint32,
-            'REF': np.uint32,
-            'REFC': object,
-            'ALTC': object,
-        },
-    )
-
-    # Keep only SNPs on this chromosome
-    snps = all_snps[all_snps.CHR == ch].sort_values(by=['POS', 'SAMPLE'])
-    snps = snps.reset_index(drop=True)
-
-    if len(snps) == 0:
-        raise ValueError(
-            sp.error(f'Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})')
-        )
-
-    n_samples = len(all_names)
-    if n_samples != len(snps.SAMPLE.unique()):
-        raise ValueError(
-            sp.error(f'Expected {n_samples} samples, found {len(snps.SAMPLE.unique())} samples in SNPs file.')
-        )
-
-    if set(all_names) != set(snps.SAMPLE.unique()):
-        raise ValueError(
-            sp.error(
-                f'Expected sample names did not match sample names in SNPs file.\n\
-                Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}'
-            )
-        )
-
-    # Add total counts column
-    snpsv = snps.copy()
-    snpsv['TOTAL'] = snpsv.ALT + snpsv.REF
-
-    if phasefile is not None:
-        # Read in phasing output
-        phases = pd.read_table(
-            phasefile,
-            compression='gzip',
-            comment='#',
-            names='CHR\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tPHASE'.split(),
-            usecols=['CHR', 'POS', 'PHASE'],
-            quoting=3,
-            low_memory=False,
-            dtype={'CHR': object, 'POS': np.uint32},
-        )
-        # if the last column in phase file has other information,
-        # take the GT part, which is the first elements split by colon
-        # (e.g., GT:AD:DP:GQ:PL). This is needed for ONT data and
-        # does not have any effect on Illumina shapeit phased data
-        phases.PHASE = phases.PHASE.astype(str).apply(lambda x: x.split(":")[0])
-        phases['FLIP'] = phases.PHASE.str.contains('1|0', regex=False).astype(np.int8)  # noqa: W605
-        phases['NOFLIP'] = phases.PHASE.str.contains('0|1', regex=False).astype(np.int8)  # noqa: W605
-
-        # Drop entries without phasing output
-        phases = phases[phases.FLIP + phases.NOFLIP > 0]
-
-        # For exact duplicate entries, drop one
-        phases = phases.drop_duplicates()
-
-        # For duplicate entries with the same (CHR, POS) but different phase, drop all
-        phases = phases.drop_duplicates(subset=['CHR', 'POS'], keep=False)
-
-        # Merge tables: keep only those SNPs for which we have phasing output
-        snpsv = pd.merge(snpsv, phases, on=['CHR', 'POS'], how='left')
-
-    # Create counts array and find SNPs that are not present in all samples
-    snp_counts = snpsv.pivot(index='POS', columns='SAMPLE', values='TOTAL')
-    missing_pos = snp_counts.isna().any(axis=1)
-
-    # Remove SNPs that are absent in any sample
-    snp_counts = snp_counts.dropna(axis=0)
-    snpsv = snpsv[~snpsv.POS.isin(missing_pos[missing_pos].index)]
-
-    # Pivot table for dataframe should match counts array and have no missing entries
-    check_pivot = snpsv.pivot(index='POS', columns='SAMPLE', values='TOTAL')
-    assert np.array_equal(check_pivot, snp_counts), 'SNP file reading failed'
-    assert not np.any(check_pivot.isna()), 'SNP file reading failed'
-    assert np.array_equal(all_names, list(snp_counts.columns))   # make sure that sample order is the same
-
-    return np.array(snp_counts.index), np.array(snp_counts), snpsv
-
 
 def adaptive_bins_arm(
     snp_thresholds,
@@ -626,8 +497,6 @@ def run_chromosome(
     all_names,
     chromosome,
     outfile,
-    centromere_start,
-    centromere_end,
     min_snp_reads,
     min_total_reads,
     arraystem,
@@ -638,6 +507,7 @@ def run_chromosome(
     max_snps_per_block,
     test_alpha,
     nonormalFlag,
+    use_prebuilt_segfile,
     segfile,
 ):
     """
@@ -645,6 +515,9 @@ def run_chromosome(
     """
 
     try:
+        if not use_prebuilt_segfile:
+            outfile = f"{outfile}.segfile"
+
         if os.path.exists(outfile):
             sp.log(
                 msg=f'Output file already exists, skipping chromosome {chromosome}\n',
@@ -656,9 +529,10 @@ def run_chromosome(
             msg=f'Loading intermediate files for chromosome {chromosome}\n',
             level='INFO',
         )
-        total_counts, complete_thresholds = read_total_and_thresholds(chromosome, arraystem, segfile)
-
-        if segfile:
+        total_counts, complete_thresholds = read_total_and_thresholds(chromosome, arraystem, use_prebuilt_segfile)
+        dfs = None
+        bafs = None
+        if not use_prebuilt_segfile:
             sp.log(
                 msg='# Collecting read depth anf BAF info for pre-specified segments!\n',
                 level='STEP',
@@ -672,46 +546,27 @@ def run_chromosome(
             # snpsv is DataFrame with ALT/REF counts, phase info
             positions, snp_counts, snpsv = read_snps(baffile, chromosome, all_names, phasefile=phasefile)
             bins = bins_from_segfile(total_counts, complete_thresholds, positions)
-
-            starts = bins[0]
-            ends = bins[1]
-
-            if xy and chromosome.endswith('X'):
-                # the sample is from a male. Don't compute BAF on X chromosome
-                dfs = None
-                bafs = None
-            else:
+            starts, ends = bins[0], bins[1]
+            if not(xy and chromosome.endswith('X')):
+                # female or non-X chromosome 
                 # Partition SNPs for BAF inference
-                dfs = [snpsv[(snpsv.POS >= starts[i]) & (snpsv.POS <= ends[i])] for i in range(len(starts))]
+                dfs, bafs = get_dfs_bafs(snpsv, starts, ends, min_snp_reads, blocksize, 
+                                                 max_snps_per_block, test_alpha, multisample)
 
-                # if len(dfs) > 1:
-                #    for i in range(len(dfs)):
-                #        assert np.all(
-                #            dfs[i].pivot(index='POS', columns='SAMPLE', values='TOTAL').sum(axis=0) >= min_snp_reads
-                #        ), i
-
-                # Infer BAF
-                bafs = [
-                    compute_baf_task(
-                        d,
-                        blocksize,
-                        max_snps_per_block,
-                        test_alpha,
-                        multisample,
-                    )
-                    for d in dfs
-                ]
-
-            bb = merge_data(bins, dfs, bafs, all_names, chromosome)
+            bb = merge_data(bins, dfs, bafs, all_names, chromosome, "unit")
             bb.to_csv(f'{outfile}.segfile', index=False, sep='\t')
-            # np.savetxt(outfile + '.totalcounts', total_counts)
-            # np.savetxt(outfile + '.thresholds', complete_thresholds)
 
             sp.log(
                 msg=f'Done with custom segmentation on chromosome {chromosome}\n',
                 level='INFO',
             )
         else:
+            # load centromere start & end
+            seg_df, _ = load_seg_file(segfile, chromosome.startswith("chr"))
+            seg_df_ch: pd.DataFrame = seg_df[seg_df["CHR"] == chromosome]
+            assert len(seg_df_ch) == 2 # p-arm and q-arm, can be removed after double check
+            centromere_start = seg_df_ch.END.min() - 1 # inclusive
+            centromere_end = seg_df_ch.START.max() - 1 # inclusive
             # adaptive binning
             if xy and chromosome.endswith('X'):
                 sp.log(
@@ -734,7 +589,6 @@ def run_chromosome(
                 positions = np.concatenate([positions_p, positions_q])
                 snp_counts = np.zeros((len(positions), len(all_names) - 1), dtype=np.int8)
                 snpsv = None
-
             else:
                 # sp.log(msg=f"Reading SNPs file for chromosome {chromosome}\n", level = "INFO")
                 # Load SNP positions and counts for this chromosome
@@ -796,35 +650,10 @@ def run_chromosome(
                     # Partition SNPs for BAF inference
 
                     # Infer BAF
-                    if xy and chromosome.endswith('X'):
-                        dfs = None
-                        bafs = None
-                    else:
-                        dfs = [snpsv[(snpsv.POS >= starts[i]) & (snpsv.POS <= ends[i])] for i in range(len(starts))]
-
-                        if len(dfs) > 1:
-                            for i in range(len(dfs)):
-                                assert np.all(
-                                    dfs[i]
-                                    .pivot(
-                                        index='POS',
-                                        columns='SAMPLE',
-                                        values='TOTAL',
-                                    )
-                                    .sum(axis=0)
-                                    >= min_snp_reads
-                                ), i
-
-                        bafs = [
-                            compute_baf_task(
-                                d,
-                                blocksize,
-                                max_snps_per_block,
-                                test_alpha,
-                                multisample,
-                            )
-                            for d in dfs
-                        ]
+                    if not (xy and chromosome.endswith('X')):
+                        # female or non-X chromosome 
+                        dfs, bafs = get_dfs_bafs(snpsv, starts, ends, min_snp_reads, blocksize, 
+                                                 max_snps_per_block, test_alpha, multisample)
                     bb = merge_data(bins, dfs, bafs, all_names, chromosome, arm)
 
                     bafs = bb.pivot(index=['CHR', 'START'], columns='SAMPLE', values='BAF').to_numpy()
@@ -853,8 +682,6 @@ def run_chromosome(
             bb = pd.concat(armbbs)
 
             bb.to_csv(outfile, index=False, sep='\t', float_format='%.5f')
-            # np.savetxt(outfile + '.totalcounts', total_counts)
-            # np.savetxt(outfile + '.thresholds', complete_thresholds)
 
             sp.log(msg=f'Done chromosome {chromosome}\n', level='INFO')
     except Exception as e:
@@ -862,27 +689,44 @@ def run_chromosome(
         sp.log(msg=str(e), level='ERROR')
         traceback.print_exc()
         raise e
+    
+def get_dfs_bafs(snpsv, starts, ends, min_snp_reads, 
+                 blocksize, max_snps_per_block, test_alpha, multisample):
+    dfs = [snpsv[(snpsv.POS >= starts[i]) & (snpsv.POS <= ends[i])] for i in range(len(starts))]
+    if len(dfs) > 1:
+        for i in range(len(dfs)):
+            assert np.all(
+                dfs[i]
+                .pivot(
+                    index='POS',
+                    columns='SAMPLE',
+                    values='TOTAL',
+                )
+                .sum(axis=0)
+                >= min_snp_reads
+            ), i
+
+    bafs = [
+        compute_baf_task(
+            d,
+            blocksize,
+            max_snps_per_block,
+            test_alpha,
+            multisample,
+        )
+        for d in dfs
+    ]
+    return dfs, bafs
 
 
 def run_chromosome_wrapper(param):
     run_chromosome(*param)
 
 
-def read_total_and_thresholds(chromosome, arraystem, segfile):
-    if segfile:
-        total_name, thresholds_name = (
-            f'{chromosome}.segfile_total.gz',
-            f'{chromosome}.segfile_thresholds.gz',
-        )
-    else:
-        total_name, thresholds_name = (
-            f'{chromosome}.total.gz',
-            f'{chromosome}.thresholds.gz',
-        )
+def read_total_and_thresholds(chromosome, arraystem, use_prebuilt_segfile):
+    total_file, thresholds_file = get_array_file_path(arraystem, chromosome, use_prebuilt_segfile)
 
-    total_file = os.path.join(arraystem, total_name)
-    thresholds_file = os.path.join(arraystem, thresholds_name)
-
+    # TODO this is tautology since it is checked in argparse already?
     if not os.path.exists(total_file) or not os.path.exists(thresholds_file):
         raise ValueError(
             sp.error(

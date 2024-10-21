@@ -13,6 +13,12 @@ from hatchet.utils.Supporting import (
     bcolors,
     numericOrder,
 )
+
+from hatchet.utils.additional_features import (
+    use_chr_prefix,
+    sort_chroms,
+    get_array_file_path
+)
 from hatchet import config, __version__
 
 
@@ -473,14 +479,15 @@ def parse_count_reads_args(args=None):
         required=False,
         type=str,
         default=config.count_reads.segfile,
-        help='path to bed file containing pre-specified segments for which to compute RDR',
+        help='path to bed file containing pre-specified segments for which to compute RDR, \
+        exclusive to --refversion',
     )
     parser.add_argument(
         '-V',
         '--refversion',
-        required=True,
+        required=False,
         type=str,
-        help='Version of reference genome used in BAM files',
+        help='Version of reference genome used in BAM files, exclusive to --segfile',
     )
     parser.add_argument(
         '-O',
@@ -602,22 +609,24 @@ def parse_count_reads_args(args=None):
     if args.chromosomes:
         chromosomes = [c for c in chromosomes if c in args.chromosomes]
 
-    # Check that chr notation is consistent across chromosomes
-    using_chr = [a.startswith('chr') for a in chromosomes]
-    if any(using_chr):
-        ensure(
-            all(using_chr),
-            'Some chromosomes use chr notation while others do not.',
-        )
-        use_chr = True
-    else:
-        use_chr = False
+    use_chr = use_chr_prefix(chromosomes)
+
+    segfile = None
+    if args.segfile != 'None':
+        ensure(isfile(args.segfile), 'The specified segfile does not exist')
+        segfile = args.segfile
 
     ver = args.refversion
+    if ver != None:
+        ensure(
+            ver in ('hg19', 'hg38'),
+            'Invalid reference genome version. Supported versions are hg38 and hg19.',
+        )
     ensure(
-        ver in ('hg19', 'hg38'),
-        'Invalid reference genome version. Supported versions are hg38 and hg19.',
+        (ver != None and segfile == None) or (ver == None and segfile != None),
+        'Either reference version or segment file can be specified, but not both/neither of them.'
     )
+
     ensure(os.path.exists(args.baffile), f'BAF file not found: {args.baffile}')
     ensure(
         args.processes > 0,
@@ -645,8 +654,6 @@ def parse_count_reads_args(args=None):
         ),
     )
 
-    segfile = None if args.segfile == 'None' else args.segfile
-
     return {
         'bams': bams,
         'names': names,
@@ -661,7 +668,7 @@ def parse_count_reads_args(args=None):
         'refversion': ver,
         'baf_file': args.baffile,
         'readquality': args.readquality,
-        'segfile': segfile,
+        'seg_file': segfile,
     }
 
 
@@ -789,17 +796,19 @@ def parse_combine_counts_args(args=None):
     parser.add_argument(
         '-V',
         '--refversion',
-        required=True,
+        required=False,
         type=str,
-        help='Version of reference genome used in BAM files',
+        help='Version of reference genome used in BAM files, exclusive to --segfile',
     )
+    # FIXME
     parser.add_argument(
         '-f',
         '--segfile',
         required=False,
         type=str,
         default=config.count_reads.segfile,
-        help='path to bed file containing pre-specified segments for which to compute RDR',
+        help='path to bed file containing pre-specified segments for which to compute RDR, \
+        exclusive to --refversion',
     )
     parser.add_argument(
         '-x',
@@ -841,44 +850,47 @@ def parse_combine_counts_args(args=None):
     )
     names = open(namesfile).read().split()
 
-    segfile = None if args.segfile == 'None' else args.segfile
-    if 'normal' not in names:
-        nonormalFlag = True
-    else:
-        nonormalFlag = False
+    segfile = None
+    if args.segfile != 'None':
+        ensure(isfile(args.segfile), 'The specified segfile does not exist')
+        segfile = args.segfile
 
-    chromosomes = set()
-    if segfile:
-        thresh_name, tot_name = 'segfile_thresholds', 'segfile_total'
-    else:
-        thresh_name, tot_name = 'thresholds', 'total'
-    for f in os.listdir(args.array):
-        tkns = f.split('.')
-        if len(tkns) > 1 and (tkns[1] == thresh_name or tkns[1] == tot_name):
-            chromosomes.add(tkns[0])
-    chromosomes = sorted(chromosomes)
+    ver = args.refversion
+    if ver != None:
+        ensure(
+            ver in ('hg19', 'hg38'),
+            'Invalid reference genome version. Supported versions are hg38 and hg19.',
+        )
+
+    ensure(
+        (ver != None and segfile == None) or (ver == None and segfile != None),
+        'Either reference version or segment file can be specified, but not both/neither of them.'
+    )
+
+    nonormalFlag = 'normal' not in names
+
+    chromosomes = []
+    seg_midfix = "segfile_" if segfile != None else ""
+    # if segfile != None:
+    #     thresh_name, tot_name = 'segfile_thresholds', 'segfile_total'
+    # else:
+    #     thresh_name, tot_name = 'thresholds', 'total'
+    for basename in os.listdir(args.array):
+        if str(basename).endswith(f"{seg_midfix}total.gz"):
+            chromosomes.append(str(basename).split('.')[0])
+    chromosomes = sort_chroms(chromosomes)
 
     for ch in chromosomes:
+        totals_arr, thresholds_arr = get_array_file_path(args.array, ch, segfile == None)
         if args.not_compressed:
-            totals_arr = os.path.join(args.array, f'{ch}.{tot_name}')
-            thresholds_arr = os.path.join(args.array, f'{ch}.{thresh_name}')
-        else:
-            totals_arr = os.path.join(args.array, f'{ch}.{tot_name}.gz')
-            thresholds_arr = os.path.join(args.array, f'{ch}.{thresh_name}.gz')
-        if not os.path.exists(totals_arr):
-            raise ValueError(error('Missing array file: {}'.format(totals_arr)))
-        if not os.path.exists(thresholds_arr):
-            raise ValueError(error('Missing array file: {}'.format(thresholds_arr)))
+            totals_arr = totals_arr[:-3]
+            thresholds_arr = thresholds_arr[:-3]
+        ensure(isfile(totals_arr), f"Missing array file: {totals_arr}")
+        ensure(isfile(thresholds_arr), f"Missing array file: {thresholds_arr}")
 
     log(msg=f'Identified {len(chromosomes)} chromosomes.\n', level='INFO')
 
-    using_chr = [a.startswith('chr') for a in chromosomes]
-    if any(using_chr):
-        if not all(using_chr):
-            raise ValueError(error("Some starts files use 'chr' notation while others do not."))
-        use_chr = True
-    else:
-        use_chr = False
+    use_chr = use_chr_prefix(chromosomes)
 
     ensure(args.processes > 0, 'The number of jobs must be positive.')
     ensure(
@@ -886,12 +898,6 @@ def parse_combine_counts_args(args=None):
         'The minimum number of SNP-covering reads must be positive.',
     )
     ensure(args.mtr > 0, 'The minimum number of total reads must be positive.')
-
-    ver = args.refversion
-    ensure(
-        ver in ('hg19', 'hg38'),
-        'Invalid reference genome version. Supported versions are hg38 and hg19.',
-    )
 
     outdir = os.sep.join(args.outfile.split(os.sep)[:-1])
     ensure(
@@ -921,7 +927,7 @@ def parse_combine_counts_args(args=None):
         'max_snps_per_block': args.max_spb,
         'test_alpha': args.alpha,
         'multisample': not args.ss_em,
-        'ref_version': ver,
+        'refversion': ver,
         'nonormalFlag': nonormalFlag,
         'ponfile': args.ponfile,
         'segfile': segfile,

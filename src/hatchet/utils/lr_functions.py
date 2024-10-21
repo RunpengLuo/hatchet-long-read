@@ -16,6 +16,12 @@ from hatchet.utils.combine_counts import (
 )
 from hatchet.utils.rd_gccorrect import rd_gccorrect
 
+from hatchet.utils.additional_features import (
+    load_gtf_file,
+    load_mosdepth_files,
+    init_bb_dataframe
+)
+
 
 def genotype_snps(args):
     """
@@ -217,75 +223,34 @@ def combine_counts(args, haplotype_file, mosdepth_files):
     XX = args['XX']
     rd_array = args['array']
 
-    def read_ranges_from_file(filename):
-        """
-        Reads haplotype blocks from gtf file
-        """
-        df = pd.read_csv(
-            filename,
-            sep='\t',
-            header=None,
-            comment='#',
-            names=[
-                'CHR',
-                'source',
-                'feature',
-                'START',
-                'END',
-                'score',
-                'strand',
-                'frame',
-                'attribute',
-            ],
-        )
-        ranges = df[['CHR', 'START', 'END']]
-        return ranges
+    haplotype_blocks = load_gtf_file(haplotype_file)[['CHR', 'START', 'END']]
 
-    # Read ranges from the haplotype file
-    haplotype_blocks = read_ranges_from_file(haplotype_file)
+    bed_mosdepths = load_mosdepth_files(all_names, mosdepth_files)
 
-    bed_mosdepths = []
-    for sname, sbed_file in zip(all_names, mosdepth_files):
-        with gzip.open(sbed_file, 'rt') as f:
-            bed_data = pd.read_csv(f, sep='\t', names=['CHR', 'START', 'END', 'AVG_DEPTH'])
-            bed_data['sample'] = sname
-            bed_mosdepths.append((sname, bed_data))
-
-    bb_column_names = [
-        'CHR',
-        'UNIT',
-        'START',
-        'END',
-        'SAMPLE',
-        'RD',
-        'TOTAL_READS',
-        'NORMAL_READS',
-        'SNPS',
-        'BCOUNT',
-        'TOTAL_SNP_READS',
-        'HAPLO',
-        'SNP_POS',
-        'SNP_REF_COUNTS',
-        'SNP_ALT_COUNTS',
-        'BAF',
-        'BLOCK_START',
-        'BLOCK_END',
-    ]
-    big_bb = pd.DataFrame(columns=bb_column_names)
+    # bb/bulk.bb
+    big_bb = init_bb_dataframe()
     for ch in chromosomes:
         positions, snp_counts, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
+        # not using segfile for total/thresholds
+        # directly read per-SNP counts and per-SNP bin bounderies
         total_counts, complete_thresholds = read_total_and_thresholds(ch, rd_array, False)
+        # use haplotype file instead, like segfile format
         blocks = haplotype_blocks[haplotype_blocks.CHR == ch]
 
+        # all mosdepth from same chromosome across all samples; n is sample name
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
-        for index, row in blocks.iterrows():
-            block_bb = pd.DataFrame(columns=bb_column_names)
-
-            mos_block = [(n, mos[mos.START > row.START - 1000]) for n, mos in mosdepth_ch]
-            mos_block = [(n, mos[mos.END < row.END + 1000]) for n, mos in mos_block]
+        # iterate through every haplotype block
+        for _, row in blocks.iterrows():
+            block_bb = init_bb_dataframe()
+            mos_block = [(n, mos[(mos.START > row.START - 1000) & 
+                                 (mos.END < row.END + 1000)]) 
+                         for n, mos in mosdepth_ch]
 
             block_snps_idx = np.where((positions >= row.START) & (positions <= row.END))[0]
+            if len(block_snps_idx) == 0:
+                # no SNPs in current block
+                continue
             block_snp_pos = positions[block_snps_idx]
             block_snp_counts = snp_counts[block_snps_idx]
             if len(block_snp_counts) == 0:
@@ -405,6 +370,7 @@ def combine_counts(args, haplotype_file, mosdepth_files):
 
             # Correct the tumor reads propotionally to the total reads in corresponding samples
             big_bb.loc[big_bb.SAMPLE == sample, 'RD'] = my_bb.RD * correction
+
     if args['gc_correct']:
         log(
             msg='# In long read sequencing pipeline, GC correction for RD is not recommended\n',

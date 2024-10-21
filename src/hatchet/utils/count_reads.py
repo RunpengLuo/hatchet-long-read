@@ -14,6 +14,15 @@ from hatchet.utils.ArgParsing import parse_count_reads_args
 from hatchet.utils.Supporting import log, logArgs, error
 import hatchet.utils.TotalCounting as tc
 
+from hatchet.utils.additional_features import (
+    load_seg_file,
+    get_array_file_path,
+    check_array_files,
+    expected_count_files,
+    check_count_files,
+    workload_assignment,
+    read_snps
+)
 
 def main(args=None):
     log(msg='# Parsing and checking input arguments\n', level='STEP')
@@ -27,6 +36,7 @@ def main(args=None):
         tbams, tnames = zip(*sorted(zip(*(bams[1:], names[1:])), key=lambda x: x[1]))
         bams = [bams[0]] + list(tbams)
         names = [names[0]] + list(tnames)
+    # TODO sort the bams when nonormal is TRUE
 
     chromosomes = args['chromosomes']
     samtools = args['samtools']
@@ -35,25 +45,41 @@ def main(args=None):
     mosdepth = args['mosdepth']
     tabix = args['tabix']
     readquality = args['readquality']
+    use_chr = args['use_chr'] # bam file use_chr
 
-    if args['segfile']:
-        chromosomes = get_chromosomes_segfile(args['segfile'])
-    if len(check_array_files(outdir, chromosomes, args['segfile'])) == 0:
+    baffile = args['baf_file']
+    segfile = args['seg_file']
+    refversion = args["refversion"]
+
+    use_prebuilt_segfile = False
+    if refversion != None: # segfile == None
+        use_prebuilt_segfile = True
+        segfile = path(hatchet.data, f'{args["refversion"]}.segments.tsv')
+    
+    _, seg_chroms = load_seg_file(segfile, use_chr)
+
+    # only chromosomes that present in both BAM file and segment file are handled
+    chromosomes = list(set(chromosomes).intersection(seg_chroms))
+    if len(chromosomes) == 0:
+        ValueError(error("No chromosomes present in both BAM file and segment file / refversion"))
+
+    if len(check_array_files(outdir, chromosomes, use_prebuilt_segfile)) == 0:
         log(
             msg='# Found all array files, skipping to total read counting. \n',
             level='STEP',
         )
     else:
 
-        if len(check_counts_files(outdir, chromosomes, names)) == 0:
+        if len(check_count_files(outdir, chromosomes, names)) == 0:
             log(
                 msg='# Found all count files, skipping to forming arrays\n',
                 level='STEP',
             )
 
         else:
-            if args['segfile'] and (not os.path.exists(args['segfile'])):
-                raise ValueError(error('A path to a nonexistant segfile was given to count-reads!'))
+            # moved to argparse
+            # if args['segfile'] and (not os.path.exists(args['segfile'])):
+            #     raise ValueError(error('A path to a nonexistant segfile was given to count-reads!'))
 
             params = zip(
                 np.repeat(chromosomes, len(bams)),
@@ -64,26 +90,11 @@ def main(args=None):
                 [readquality] * len(bams) * len(chromosomes),
             )
 
-            n_workers_samtools = min(processes, len(bams) * len(chromosomes))
+            n_workers_samtools, _ = workload_assignment(processes, len(bams) * len(chromosomes))
             with Pool(n_workers_samtools) as p:   # divide by 2 because each worker starts 2 processes
                 p.map(count_chromosome_wrapper, params)
 
-            n_workers_mosdepth = min(processes, len(bams))
-
-            # compute number of decompression threads to use for each call to mosdepth
-            if processes > len(bams):
-                base = min(int(processes / n_workers_mosdepth), 4)
-                threads_per_task = [base] * len(bams)
-
-                if base < 4:
-                    remainder = processes % n_workers_mosdepth
-                    i = 0
-                    while remainder > 0:
-                        threads_per_task[i] += 1
-                        i += 1
-                        remainder -= 1
-            else:
-                threads_per_task = [1] * len(bams)
+            n_workers_mosdepth, threads_per_task = workload_assignment(processes, len(bams))
 
             # Note: These function calls are the only section that uses mosdepth
             mosdepth_params = [
@@ -100,51 +111,15 @@ def main(args=None):
             with Pool(n_workers_mosdepth) as p:
                 p.map(mosdepth_wrapper, mosdepth_params)
 
-            if len(check_counts_files(outdir, chromosomes, names)) > 0:
-                print(check_counts_files(outdir, chromosomes, names))
+            nonexist_count_files = check_count_files(outdir, chromosomes, names)
+            if len(nonexist_count_files) > 0:
+                print('\t'.join(nonexist_count_files))
                 raise ValueError(error('Missing some counts files!'))
-
-        ### Aggregate count files into count arrays for adaptive binning ###
-        # (formerly formArray)
-        use_chr = args['use_chr']
-
-        n_workers = min(len(chromosomes), processes)
-
-        # Read in centromere locations table
-        with path(hatchet.data, f'{args["refversion"]}.centromeres.txt') as centromeres:
-            centromeres = pd.read_table(
-                centromeres,
-                header=None,
-                names=['CHR', 'START', 'END', 'NAME', 'gieStain'],
-            )
-
-        chr2centro = {}
-        for ch in centromeres.CHR.unique():
-            my_df = centromeres[centromeres.CHR == ch]
-            assert (my_df.gieStain == 'acen').all()
-            # Each centromere should consist of 2 adjacent segments
-            assert len(my_df == 2)
-            assert my_df.START.max() == my_df.END.min()
-            if use_chr:
-                if ch.startswith('chr'):
-                    chr2centro[ch] = my_df.START.min(), my_df.END.max()
-                else:
-                    chr2centro['chr' + ch] = my_df.START.min(), my_df.END.max()
-            else:
-                if ch.startswith('chr'):
-                    chr2centro[ch[3:]] = my_df.START.min(), my_df.END.max()
-                else:
-                    chr2centro[ch] = my_df.START.min(), my_df.END.max()
-
-        for ch in chromosomes:
-            if ch not in chr2centro:
-                raise ValueError(
-                    error(f'Chromosome {ch} not found in centromeres file. Inspect file provided as -C argument.')
-                )
 
         # Use Tabix to index per-position coverage bed files for each sample
         for name in names:
             perpos_file = os.path.join(outdir, name + '.per-base.bed.gz')
+            # sync call
             subprocess.run([tabix, '-f', perpos_file])
 
         # form parameters for each worker
@@ -153,61 +128,60 @@ def main(args=None):
                 outdir,
                 names,
                 ch,
-                chr2centro[ch][0],
-                chr2centro[ch][1],
-                args['baf_file'],
+                baffile,
                 tabix,
-                args['segfile'],
+                use_prebuilt_segfile,
+                segfile,
             )
             for ch in chromosomes
         ]
-
+        n_workers, _ = workload_assignment(processes, len(chromosomes))
         # dispatch workers
         with Pool(n_workers) as p:
             p.map(run_chromosome_wrapper, params)
 
         np.savetxt(os.path.join(outdir, 'samples.txt'), names, fmt='%s')
 
-        if len(check_array_files(outdir, chromosomes, args['segfile'])) > 0:
+        if len(check_array_files(outdir, chromosomes, use_prebuilt_segfile)) > 0:
             raise ValueError(error('Missing some output arrays!'))
-        else:
-            log(
-                msg='# Array forming completed successfully, removing intermediate count files. \n',
-                level='STEP',
-            )
-            [os.remove(f) for f in expected_counts_files(outdir, chromosomes, names)]
+        # successful
+        log(
+            msg='# Array forming completed successfully, removing intermediate count files. \n',
+            level='STEP',
+        )
+        [os.remove(f) for f in expected_count_files(outdir, chromosomes, names)]
 
     totals_file = os.path.join(outdir, 'total.tsv')
     if os.path.exists(totals_file):
         log(msg='# Found total reads file, exiting. \n', level='STEP')
         return
-    else:
-        # TODO: take -q option and pass in here
-        log(
-            msg='# Counting total number of reads for normal and tumor samples\n',
-            level='STEP',
-        )
-        total_counts = tc.tcount(
-            samtools=samtools,
-            samples=[(bams[i], names[i]) for i in range(len(names))],
-            chromosomes=chromosomes,
-            num_workers=processes,
-            q=readquality,
-        )
 
-        try:
-            total = {name: sum(total_counts[name, chromosome] for chromosome in chromosomes) for name in names}
-        except KeyError:
-            raise KeyError(error('Either a chromosome or a sample has not been considered in the total counting!'))
+    # TODO: take -q option and pass in here
+    log(
+        msg='# Counting total number of reads for normal and tumor samples\n',
+        level='STEP',
+    )
+    total_counts = tc.tcount(
+        samtools=samtools,
+        samples=[(bams[i], names[i]) for i in range(len(names))],
+        chromosomes=chromosomes,
+        num_workers=processes,
+        q=readquality,
+    )
 
-        log(
-            msg='# Writing the total read counts for all samples in {}\n'.format(totals_file),
-            level='STEP',
-        )
-        with open(totals_file, 'w') as f:
-            for name in names:
-                f.write('{}\t{}\n'.format(name, total[name]))
+    try:
+        total = {name: sum(total_counts[name, chromosome] for chromosome in chromosomes) for name in names}
+    except KeyError:
+        raise KeyError(error('Either a chromosome or a sample has not been considered in the total counting!'))
 
+    log(
+        msg='# Writing the total read counts for all samples in {}\n'.format(totals_file),
+        level='STEP',
+    )
+    with open(totals_file, 'w') as f:
+        for name in names:
+            f.write('{}\t{}\n'.format(name, total[name]))
+    return
 
 def mosdepth_wrapper(params):
     run_mosdepth(*params)
@@ -247,7 +221,7 @@ def run_mosdepth(outdir, sample_name, bam, threads, mosdepth, readquality):
         log('Exception in countPos: {}\n'.format(e), level='ERROR')
         raise e
 
-
+# {sample_name}.{ch}.starts.gz
 def count_chromosome(ch, outdir, samtools, bam, sample_name, readquality, compression_level=6):
     try:
         outfile = os.path.join(outdir, f'{sample_name}.{ch}.starts')
@@ -287,77 +261,6 @@ def count_chromosome(ch, outdir, samtools, bam, sample_name, readquality, compre
 def count_chromosome_wrapper(param):
     count_chromosome(*param)
 
-
-def read_snps(baf_file, ch, all_names):
-    """
-    Read and validate SNP data for this patient (TSV table output from HATCHet deBAF.py).
-    """
-    all_names = [
-        name for name in all_names if name != 'normal'
-    ]   # remove normal sample -- not looking for SNP counts from normal
-
-    # Read in HATCHet BAF table
-    all_snps = pd.read_table(
-        baf_file,
-        names=['CHR', 'POS', 'SAMPLE', 'REF', 'ALT', 'REFC', 'ALTC'],
-        dtype={
-            'CHR': object,
-            'POS': np.uint32,
-            'SAMPLE': object,
-            'ALT': np.uint32,
-            'REF': np.uint32,
-            'REFC': object,
-            'ALTC': object,
-        },
-    )
-
-    # Keep only SNPs on this chromosome
-    snps = all_snps[all_snps.CHR == ch].sort_values(by=['POS', 'SAMPLE'])
-    snps = snps.reset_index(drop=True)
-
-    if len(snps) == 0:
-        raise ValueError(
-            error(f'Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})')
-        )
-
-    n_samples = len(all_names)
-    if n_samples != len(snps.SAMPLE.unique()):
-        raise ValueError(
-            error(f'Expected {n_samples} samples, found {len(snps.SAMPLE.unique())} samples in SNPs file.')
-        )
-
-    if set(all_names) != set(snps.SAMPLE.unique()):
-        raise ValueError(
-            error(
-                f'Expected sample names did not match sample names in SNPs file.\n\
-                Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}'
-            )
-        )
-
-    # Add total counts column
-    snpsv = snps.copy()
-    snpsv['TOTAL'] = snpsv.ALT + snpsv.REF
-
-    # Create counts array and find SNPs that are not present in all samples
-    snp_counts = snpsv.pivot(index='POS', columns='SAMPLE', values='TOTAL')
-    missing_pos = snp_counts.isna().any(axis=1)
-
-    # Remove SNPs that are absent in any sample
-    snp_counts = snp_counts.dropna(axis=0)
-    snpsv = snpsv[~snpsv.POS.isin(missing_pos[missing_pos].index)]
-
-    # Pivot table for dataframe should match counts array and have no missing entries
-    check_pivot = snpsv.pivot(index='POS', columns='SAMPLE', values='TOTAL')
-    assert np.array_equal(check_pivot, snp_counts), 'SNP file reading failed'
-    assert not np.any(check_pivot.isna()), 'SNP file reading failed'
-    assert np.array_equal(all_names, list(snp_counts.columns)), (
-        all_names,
-        list(snp_counts.columns),
-    )   # make sure that sample order is the same
-
-    return np.array(snp_counts.index), np.array(snp_counts), snpsv
-
-
 def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix, chunksize=1e5):
     """
     NOTE: Assumes that starts_files[i] corresponds to the same sample as perpos_files[i]
@@ -376,22 +279,31 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
     for i in range(len(starts_files)):
         # populate starts in even entries
         fname = starts_files[i]
-        if fname.endswith('.gz'):
-            f = gzip.open(fname)
-        else:
-            f = open(fname)
+        fd = gzip.open(fname, 'r') if fname.endswith('.gz') else open(fname, 'r')
+        read_starts = [int(a) for a in fd]
+        fd.close()
 
-        cx = gzip.open(fname, 'r')
-        read_starts = [int(a) for a in cx]
+        # if fname.endswith('.gz'):
+        #     f = gzip.open(fname)
+        # else:
+        #     f = open(fname)
 
-        end = thresholds[0]
+        # cx = gzip.open(fname, 'r')
+        # read_starts = [int(a) for a in cx]
+
+        # end = thresholds[0]
+
+        # read_starts counter 
         j = 0
         for idx in range(1, len(thresholds)):
-            start = end
+            start = thresholds[idx - 1]
             end = thresholds[idx]
 
+            # count #read-starts in range [start, end)
+            # assume read_starts is pre-sorted
             my_count = 0
             while j < len(read_starts) and read_starts[j] < end:
+                # unnecessary check ALA threshold are adjacent with 1-base difference.
                 assert read_starts[j] >= start
                 my_count += 1
                 j += 1
@@ -399,12 +311,13 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
             arr[idx - 1, i * 2] = my_count
 
         arr[idx - 1, i * 2] += len(read_starts) - j
-        f.close()
+        # f.close()
 
     for i in range(len(perpos_files)):
         # populate threshold coverage in odd entries
         fname = perpos_files[i]
 
+        # <sample>.per-base.bed.gz
         chr_sample_file = os.path.join(fname[:-3] + '.' + chromosome)
 
         if not os.path.exists(chr_sample_file):
@@ -442,6 +355,7 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
 
                 # count the number of reads covering the chromosome end
                 arr[idx, 0] = end_reads
+            records.close()
 
         if os.path.exists(chr_sample_file):
             os.remove(chr_sample_file)
@@ -470,10 +384,9 @@ def run_chromosome(
     outdir,
     all_names,
     chromosome,
-    centromere_start,
-    centromere_end,
     baf_file,
     tabix,
+    use_prebuilt_segfile,
     seg_file,
 ):
     """
@@ -482,11 +395,7 @@ def run_chromosome(
     """
 
     try:
-        if seg_file:
-            totals_name, thresholds_name = f'{chromosome}.segfile_total.gz', f'{chromosome}.segfile_thresholds.gz'
-        else:
-            totals_name, thresholds_name = f'{chromosome}.total.gz', f'{chromosome}.thresholds.gz'
-        totals_out, thresholds_out = os.path.join(outdir, totals_name), os.path.join(outdir, thresholds_name)
+        [totals_out, thresholds_out] = get_array_file_path(outdir, chromosome, use_prebuilt_segfile)
 
         if os.path.exists(totals_out) and os.path.exists(thresholds_out):
             log(
@@ -500,9 +409,7 @@ def run_chromosome(
         perpos_files = [os.path.join(outdir, name + '.per-base.bed.gz') for name in all_names]
 
         # Identify the start-positions files for this chromosome
-        starts_files = []
-        for name in all_names:
-            starts_files.append(os.path.join(outdir, name + '.' + chromosome + '.starts.gz'))
+        starts_files = [os.path.join(outdir, f"{name}.{chromosome}.starts.gz") for name in all_names]
 
         log(
             msg=f'Reading SNPs file for chromosome {chromosome}\n',
@@ -523,26 +430,21 @@ def run_chromosome(
         else:
             positions, _, _ = read_snps(baf_file, chromosome, all_names)
 
-        if seg_file:
-            thresholds_segfile = get_thresholds_segfile(seg_file, chromosome)
-            if len(thresholds_segfile) > 0:
-                total_counts, complete_thresholds = form_counts_array(
-                    starts_files, perpos_files, thresholds_segfile, chromosome, tabix=tabix
-                )
-
-                totals_out = os.path.join(outdir, f'{chromosome}.segfile_total.gz')
-                thresholds_out = os.path.join(outdir, f'{chromosome}.segfile_thresholds.gz')
-                np.savetxt(totals_out, total_counts, fmt='%d')
-                np.savetxt(thresholds_out, complete_thresholds, fmt='%d')
-
-        else:
+        seg_df, _ = load_seg_file(seg_file, chromosome.startswith("chr"))
+        seg_df_ch: pd.DataFrame = seg_df[seg_df["CHR"] == chromosome]
+        if use_prebuilt_segfile:
+            assert len(seg_df_ch) == 2 # p-arm and q-arm, can be removed after double check
+            centromere_start = seg_df_ch.END.min() - 1 # inclusive
+            centromere_end = seg_df_ch.START.max() - 1 # inclusive
             # create segments for computing read depth, these will be the midpoints of germline SNPs
             # during the adaptive binning process in combine_counts.py, these segments will be combined in order to meet
             # QC metrics, i.e. the minimum number of SNP-covering reads
+            # REF_START(1), S1, T1, S2, T2 ... Sn, Tn, REF_END
             thresholds = np.trunc(np.vstack([positions[:-1], positions[1:]]).mean(axis=0)).astype(np.uint32)
+
             last_idx_p = np.argwhere(thresholds > centromere_start)[0][0]
             first_idx_q = np.argwhere(thresholds > centromere_end)[0][0]
-            all_thresholds = np.concatenate(
+            thresholds = np.concatenate(
                 [
                     [1],
                     thresholds[:last_idx_p],
@@ -551,15 +453,22 @@ def run_chromosome(
                     thresholds[first_idx_q:],
                 ]
             )
+        else:
+            thresholds = seg_df_ch["START"].to_numpy(np.uint64)
+            if len(thresholds) > 0:
+                if thresholds[0] != 1:
+                    thresholds = np.concatenate([[1], thresholds])
 
-            log(msg=f'Loading counts for chromosome {chromosome}\n', level='INFO')
-            # Load read count arrays from file (also adds end of chromosome as a threshold)
-            total_counts, complete_thresholds = form_counts_array(
-                starts_files, perpos_files, all_thresholds, chromosome, tabix=tabix
+        # TODO raise error if thresholds is empty as well
+        if np.any(np.diff(thresholds) < 0):
+            raise ValueError(f'improper negative interval in provided segment file for chromosome {chromosome}')
+
+        log(msg=f'Loading counts for chromosome {chromosome}\n', level='INFO')
+        total_counts, complete_thresholds = form_counts_array(
+            starts_files, perpos_files, thresholds, chromosome, tabix=tabix
             )
-
-            np.savetxt(totals_out, total_counts, fmt='%d')
-            np.savetxt(thresholds_out, complete_thresholds, fmt='%d')
+        np.savetxt(totals_out, total_counts, fmt='%d')
+        np.savetxt(thresholds_out, complete_thresholds, fmt='%d')
 
         log(msg=f'Done chromosome {chromosome}\n', level='INFO')
     except Exception as e:
@@ -571,84 +480,6 @@ def run_chromosome(
 
 def run_chromosome_wrapper(param):
     run_chromosome(*param)
-
-
-def expected_counts_files(dcounts, chrs, all_names):
-    expected = []
-
-    for chr in chrs:
-        for name in all_names:
-            fname = os.path.join(dcounts, '.'.join([name, chr, 'starts.gz']))
-            expected.append(fname)
-
-    # mosdepth output
-    for name in all_names:
-        fname = os.path.join(dcounts, name + '.mosdepth.global.dist.txt')
-        expected.append(fname)
-
-        fname = os.path.join(dcounts, name + '.mosdepth.summary.txt')
-        expected.append(fname)
-
-        fname = os.path.join(dcounts, name + '.per-base.bed.gz')
-        expected.append(fname)
-
-        fname = os.path.join(dcounts, name + '.per-base.bed.gz.csi')
-        expected.append(fname)
-
-    return expected
-
-
-def check_counts_files(dcounts, chrs, all_names):
-    return [a for a in expected_counts_files(dcounts, chrs, all_names) if not os.path.exists(a)]
-
-
-def expected_arrays(darray, chrs, segfile):
-    expected = []
-    # formArray (abin/<chr>.<total/thresholds> files))
-
-    fname = os.path.join(darray, 'samples.txt')
-    expected.append(fname)
-
-    for ch in chrs:
-        if segfile:
-            total_name, thresholds_name = f'{ch}.segfile_total.gz', f'{ch}.segfile_thresholds.gz'
-        else:
-            total_name, thresholds_name = f'{ch}.total.gz', f'{ch}.thresholds.gz'
-
-        fname = os.path.join(darray, total_name)
-        expected.append(fname)
-
-        fname = os.path.join(darray, thresholds_name)
-        expected.append(fname)
-
-    return expected
-
-
-def check_array_files(darray, chrs, segfile):
-    return [a for a in expected_arrays(darray, chrs, segfile) if not os.path.exists(a)]
-
-
-def get_thresholds_segfile(segfile, chromosome):
-    with open(segfile, 'r') as f:
-        fi = f.readlines()
-        # detect optional header
-        header = not np.any(i.isdigit() for i in fi[0].split())
-        fi = fi[1:] if header else fi
-        thresholds_segfile = np.array([i.split()[1] for i in fi if i.split()[0] == chromosome], dtype=np.uint64)
-    if len(thresholds_segfile) > 0:
-        if thresholds_segfile[0] > 1:
-            thresholds_segfile = np.concatenate([[1], thresholds_segfile])
-    if np.any(np.diff(thresholds_segfile) < 0):
-        raise ValueError(f'improper negative interval in provided segment file for chromosome {chromosome}')
-    return np.array(thresholds_segfile)
-
-
-def get_chromosomes_segfile(segfile):
-    df = pd.read_csv(segfile, sep='\t')
-    # get chromosomes from 1st column of segfile
-    chromosomes = list(df.iloc[:, 0].unique())
-    return chromosomes
-
 
 if __name__ == '__main__':
     main()
