@@ -116,7 +116,7 @@ def main(args=None):
                 '-o',
                 f'{output}/baf/tumor.1bed',
                 '-l',
-                f'{output}',
+                f'{output}/baf',
                 '--chromosomes',
             ]
             + (chromosomes or [])  # important to keep this as a list here to allow proper argparse parsing
