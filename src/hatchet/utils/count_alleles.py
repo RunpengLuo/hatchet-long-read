@@ -22,9 +22,11 @@ def main(args=None):
     args = ap.parse_count_alleles_arguments(args)
     logArgs(args, 80)
 
-    if args['outputNormal'] != None and args['outputTumors'] != None:
-        if os.path.exists(args['outputNormal']) and os.path.exists(args['outputTumors']):
-            log(msg=f'both {args['outputNormal']} and {args['outputTumors']} exists, skip count allele\n', level='STEP')
+    output_normal = args['outputNormal']
+    output_tumor = args['outputTumors']
+    if output_normal != None and output_tumor != None:
+        if os.path.exists(output_normal) and os.path.exists(output_tumor):
+            log(msg=f'both {output_normal} and {output_tumor} exists, skip count allele\n', level='STEP')
             return
 
     log(msg='# Extracting heterozygous SNPs\n', level='STEP')
@@ -63,7 +65,7 @@ def main(args=None):
             msg='# Writing the allele counts of the normal sample for selected SNPs\n',
             level='STEP',
         )
-        handle = open(args['outputNormal'], 'w') if args['outputNormal'] is not None else sys.stdout
+        handle = open(output_normal, 'w') if output_normal is not None else sys.stdout
         for chro in args['chromosomes']:
             if (args['normal'][1], chro) in hetSNPs:
                 for snp in sorted(hetSNPs[args['normal'][1], chro]):
@@ -114,7 +116,7 @@ def main(args=None):
         msg='# Writing the allele counts of tumor samples for selected SNPs\n',
         level='STEP',
     )
-    handle = open(args['outputTumors'], 'w') if args['outputTumors'] is not None else sys.stdout
+    handle = open(output_tumor, 'w') if output_tumor is not None else sys.stdout
     for sample in args['samples']:
         for chro in args['chromosomes']:
             if (sample[1], chro) in counts:
