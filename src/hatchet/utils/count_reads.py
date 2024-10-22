@@ -54,7 +54,9 @@ def main(args=None):
     use_prebuilt_segfile = False
     if refversion != None: # segfile == None
         use_prebuilt_segfile = True
-        segfile = path(hatchet.data, f'{args["refversion"]}.segments.tsv')
+        with path(hatchet.data, f'{args["refversion"]}.segments.tsv') as p:
+            segfile = str(p)
+        log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level='INFO')
     
     _, seg_chroms = load_seg_file(segfile, use_chr)
 
