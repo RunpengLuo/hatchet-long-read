@@ -22,6 +22,11 @@ def main(args=None):
     args = ap.parse_count_alleles_arguments(args)
     logArgs(args, 80)
 
+    if args['outputNormal'] != None and args['outputTumors'] != None:
+        if os.path.exists(args['outputNormal']) and os.path.exists(args['outputTumors']):
+            log(msg=f'both {args['outputNormal']} and {args['outputTumors']} exists, skip count allele\n', level='STEP')
+            return
+
     log(msg='# Extracting heterozygous SNPs\n', level='STEP')
 
     hetSNPs = selectHetSNPs(
