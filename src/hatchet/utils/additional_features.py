@@ -39,7 +39,7 @@ def use_chr_prefix(chromosomes: list):
         return True
     return False
 
-def has_header(file: str, header_prefix=["chr", "Chr", "CHROMOSOME", "#ID"]):
+def has_header(file: str, header_prefix=["CHR", "Chr", "CHROMOSOME", "#ID"]):
     if file.endswith(".gz"):
         fd = gzip.open(file, 'r')
     else:

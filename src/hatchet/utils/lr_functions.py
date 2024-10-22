@@ -231,10 +231,8 @@ def combine_counts(args, haplotype_file, mosdepth_files):
     big_bb = init_bb_dataframe()
     for ch in chromosomes:
         positions, snp_counts, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
-        # not using segfile for total/thresholds
         # directly read per-SNP counts and per-SNP bin bounderies
         total_counts, complete_thresholds = read_total_and_thresholds(ch, rd_array, False)
-        # use haplotype file instead, like segfile format
         blocks = haplotype_blocks[haplotype_blocks.CHR == ch]
 
         # all mosdepth from same chromosome across all samples; n is sample name
