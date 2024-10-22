@@ -276,7 +276,8 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
         entry [i, 2j] contains the number of reads starting in (starts[i], starts[i + 1]) in sample j
         entry [i, 2j + 1] contains the number of reads covering position starts[i] in sample j
     """
-    arr = np.zeros((thresholds.shape[0] + 1, len(starts_files) * 2))   # add one for the end of the chromosome
+    len_threshold = len(thresholds)
+    arr = np.zeros((len_threshold + 1, len(starts_files) * 2))   # add one for the end of the chromosome
 
     for i in range(len(starts_files)):
         # populate starts in even entries
@@ -285,34 +286,25 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
         read_starts = [int(a) for a in fd]
         fd.close()
 
-        # if fname.endswith('.gz'):
-        #     f = gzip.open(fname)
-        # else:
-        #     f = open(fname)
-
-        # cx = gzip.open(fname, 'r')
-        # read_starts = [int(a) for a in cx]
-
-        # end = thresholds[0]
-
         # read_starts counter 
-        j = 0
-        for idx in range(1, len(thresholds)):
-            start = thresholds[idx - 1]
-            end = thresholds[idx]
-
-            # count #read-starts in range [start, end)
-            # assume read_starts is pre-sorted
-            my_count = 0
-            while j < len(read_starts) and read_starts[j] < end:
+        visited_reads = 0
+        total_reads = len(read_starts)
+        for idx in range(len_threshold-1):
+            if visited_reads == total_reads:
+                break
+            start, end = thresholds[idx], thresholds[idx + 1]
+            # count #read-starts in range [start, end), assume read_starts is pre-sorted
+            num_reads = 0
+            while read_starts[visited_reads] < end:
                 # unnecessary check ALA threshold are adjacent with 1-base difference.
-                assert read_starts[j] >= start
-                my_count += 1
-                j += 1
+                assert read_starts[visited_reads] >= start
+                num_reads += 1
+                visited_reads += 1
 
-            arr[idx - 1, i * 2] = my_count
-
-        arr[idx - 1, i * 2] += len(read_starts) - j
+            arr[idx, i * 2] = num_reads
+        
+        # this assumes that the last segment must ends at the chromosome end
+        arr[idx, i * 2] += len(read_starts) - visited_reads
         # f.close()
 
     for i in range(len(perpos_files)):
@@ -336,24 +328,24 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
                     end = int(tokens[2])
                     nreads = int(tokens[3])
 
-                    while idx < len(thresholds) and thresholds[idx] - 1 < end:
+                    while idx < len_threshold and thresholds[idx] - 1 < end:
                         assert thresholds[idx] - 1 >= start
                         arr[idx, (2 * i) + 1] = nreads
                         idx += 1
-                    last_record = line
+                    last_record = (start, end, nreads)
 
             if i == 0:
+                # first file is for normal sample
                 # identify the (effective) chromosome end as the last well-formed record
-                assert idx == len(thresholds)
-                _, _, chr_end, end_reads = last_record.split()
-                chr_end = int(chr_end)
-                end_reads = int(end_reads)
-
+                assert idx == len_threshold
+                assert last_record != None
+                (_, chr_end, end_reads) = last_record
                 assert chr_end > thresholds[-1]
-                assert len(thresholds) == len(arr) - 1
+                assert len_threshold == len(arr) - 1
 
                 # add the chromosome end to thresholds
                 thresholds = np.concatenate([thresholds, [chr_end]])
+                len_threshold = len(thresholds)
 
                 # count the number of reads covering the chromosome end
                 arr[idx, 0] = end_reads

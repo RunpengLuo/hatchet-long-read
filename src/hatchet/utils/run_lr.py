@@ -150,6 +150,8 @@ def main(args=None):
 
         if config.run.combine_counts:
             haplotype_file = config.run.ont_haplotype_file
+            #TODO what's the diff with mosdepth from count-reads?
+            # count-reads delete mosdepth result before combine-counts.
             mosdepth_files = config.run.ont_mosdepth_files.split()
             if not os.path.exists(haplotype_file):
                 raise RuntimeError(
