@@ -233,31 +233,37 @@ def combine_counts(args, haplotype_file, mosdepth_files):
         positions, snp_counts, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
         # directly read per-SNP counts and per-SNP bin bounderies
         total_counts, complete_thresholds = read_total_and_thresholds(ch, rd_array, True)
-        blocks = haplotype_blocks[haplotype_blocks.CHR == ch]
+        hap_blocks_ch = haplotype_blocks[haplotype_blocks.CHR == ch] #TODO use groupby
 
         # all mosdepth from same chromosome across all samples; n is sample name
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
         # iterate through every haplotype block
-        for _, row in blocks.iterrows():
+        for _, row in hap_blocks_ch.iterrows():
             block_bb = init_bb_dataframe()
-            mos_block = [(n, mos[(mos.START > row.START - 1000) & 
-                                 (mos.END < row.END + 1000)]) 
+            mos_block = [(n, mos[(mos.START > row.START - 1000) & (mos.END < row.END + 1000)]) 
                          for n, mos in mosdepth_ch]
 
             block_snps_idx = np.where((positions >= row.START) & (positions <= row.END))[0]
             if len(block_snps_idx) == 0:
                 # no SNPs in current block
                 continue
+            # extract snp positions within the haplotype block region
             block_snp_pos = positions[block_snps_idx]
             block_snp_counts = snp_counts[block_snps_idx]
-            if len(block_snp_counts) == 0:
-                continue
+            assert len(block_snp_counts) != 0 #TODO this guard must satisfied
+
+            # extract thresholds coverring all the extracted SNPs.
+            # works if thresholds are defined in default manner (per threshold per snp)
             block_thr_idx = np.where(
                 (complete_thresholds >= block_snp_pos[0]) & (complete_thresholds <= block_snp_pos[-1])
             )[0]
             if len(block_snps_idx) > len(block_thr_idx) + 1 or len(block_thr_idx) == 0:
                 # centromere loci
+                # FIXME use other format than threshold to account for non-consecutive segments
+                log(f"SKIP centromere region with h-block: {row.START}-{row.END}, \
+                    len(block_snps_idx):{len(block_snps_idx)}, len(block_thr_idx):{len(block_thr_idx)} \
+                        block_snp_pos[0]:{block_snp_pos[0]}, block_snp_pos[-1]:{block_snp_pos[0]}", level="STEP")
                 continue
             log(
                 msg=f'snpcount {len(block_snps_idx)} thrcount {len(block_thr_idx)}\n',
@@ -265,26 +271,26 @@ def combine_counts(args, haplotype_file, mosdepth_files):
             )
 
             # thresholds must begin and end outside the boundaries:
-            block_thr_idx = np.insert(block_thr_idx, 0, block_thr_idx[0] - 1)
-            block_thr_idx = np.append(block_thr_idx, block_thr_idx[-1] + 1)
+            # TODO block_thr_idx index assumption
+            if block_thr_idx[0] > 0:
+                block_thr_idx = np.concatenate([[block_thr_idx[0] - 1], block_thr_idx])
+            if block_thr_idx[-1] < len(complete_thresholds) - 1:
+                block_thr_idx = np.concatenate([block_thr_idx, [block_thr_idx[-1] + 1]])
 
             block_thr_pos = complete_thresholds[block_thr_idx]
             block_thr_counts = total_counts[block_thr_idx]
 
-            bins = adaptive_bins_arm(
+            (starts, ends, totals, rdrs) = adaptive_bins_arm(
                 snp_thresholds=block_thr_pos,
                 total_counts=block_thr_counts,
                 snp_positions=block_snp_pos,
                 snp_counts=block_snp_counts,
                 chromosome=ch,
                 min_snp_reads=msr,
-                min_total_reads=1,
+                min_total_reads=1, #TODO
                 nonormalFlag=nonormalFlag,
                 mos_block=mos_block,
             )
-
-            starts = bins[0]
-            ends = bins[1]
 
             dfs = [snpsv[(snpsv.POS >= starts[i]) & (snpsv.POS <= ends[i])] for i in range(len(starts))]
             dfs = [df.dropna(subset=['FLIP']) for df in dfs]
@@ -303,12 +309,12 @@ def combine_counts(args, haplotype_file, mosdepth_files):
                     #     msg=f'{ch} {sample} {start} {end} {total} {bcount} {bcount/total}\n',
                     #     level='STEP',
                     # )
-                    if np.isnan(bins[3][i][0]) or (bins[2][i][1] == 0 and bins[2][i][0] == 0):
+                    if np.isnan(rdrs[i][0]) or (totals[i][1] == 0 and totals[i][0] == 0):
                         # rd cannot be computed since there are no reads in tumor or normal
                         continue
-                    tot_reads = round(min(20*bins[2][i][0],bins[2][i][1]))
-                    rd = int(min(20, bins[3][i][0]))
-                    nor_reads = int(bins[2][i][0])
+                    tot_reads = round(min(20*totals[i][0],totals[i][1]))
+                    rd = int(min(20, rdrs[i][0]))
+                    nor_reads = int(totals[i][0])
                     bin_row = [
                         ch,
                         'unit',
