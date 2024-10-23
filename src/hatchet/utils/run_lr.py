@@ -129,21 +129,22 @@ def main(args=None):
         # Variable-width/adaptive binning
 
         if config.run.count_reads:
+            ref_ver = ['-V', config.genotype_snps.reference_version]
+            if config.count_reads.segfile != "" and config.count_reads.segfile != "None":
+                ref_ver = ['--segfile', config.count_reads.segfile] # override refversion
 
             os.makedirs(f'{output}/rdr', exist_ok=True)
             params = [
-                '-N', config.run.normal, '-T',
-                *config.run.bams.split(),
-                '-S',
-                *('normal ' + config.run.samples).split(),
-                '-V', config.genotype_snps.reference_version,
-                '-b', f'{output}/baf/tumor.1bed',
-                '-O', f'{output}/rdr',
-                '--segfile', config.count_reads.segfile,
-                '--chromosomes',
-                *(chromosomes or []),  # important to keep this as a list here to allow proper argparse parsing
-                *extra_args
-            ]
+                    '-N', config.run.normal, '-T',
+                    *config.run.bams.split(),
+                    '-S',
+                    *('normal ' + config.run.samples).split()] + ref_ver + [
+                    '-b', f'{output}/baf/tumor.1bed',
+                    '-O', f'{output}/rdr',
+                    '--chromosomes',
+                    *(chromosomes or []),  # important to keep this as a list here to allow proper argparse parsing
+                    *extra_args
+                ]
             count_reads(args=params)
 
         # ----------------------------------------------------
@@ -153,6 +154,11 @@ def main(args=None):
             #TODO what's the diff with mosdepth from count-reads?
             # count-reads delete mosdepth result before combine-counts.
             mosdepth_files = config.run.ont_mosdepth_files.split()
+            for mf in mosdepth_files:
+                if not os.path.exists(mf):
+                    raise RuntimeError(
+                        (f'mosdepth file does not found with given filename: {mf}')
+                    )
             if not os.path.exists(haplotype_file):
                 raise RuntimeError(
                     (
@@ -161,7 +167,7 @@ def main(args=None):
                     )
                 )
             import sys
-
+            # TODO why redirection here
             _stdout = sys.stdout
             sys.stdout = StringIO()
             os.makedirs(f'{output}/bb', exist_ok=True)
