@@ -5,7 +5,6 @@ import subprocess as sp
 import numpy as np
 import pandas as pd
 import gzip
-import subprocess
 import traceback
 from importlib.resources import path
 import hatchet.data
@@ -54,7 +53,7 @@ def main(args=None):
     use_prebuilt_segfile = False
     if refversion != None: # segfile == None
         use_prebuilt_segfile = True
-        with path(hatchet.data, f'{args["refversion"]}.segments.tsv') as p:
+        with path(hatchet.data, f'{args["refversion"]}.segments.bed') as p:
             segfile = str(p)
         log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level='INFO')
     
@@ -122,7 +121,7 @@ def main(args=None):
         for name in names:
             perpos_file = os.path.join(outdir, name + '.per-base.bed.gz')
             # sync call
-            subprocess.run([tabix, '-f', perpos_file])
+            sp.run([tabix, '-f', perpos_file])
 
         # form parameters for each worker
         params = [
@@ -316,29 +315,32 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
 
         if not os.path.exists(chr_sample_file):
             with open(chr_sample_file, 'w') as f:
-                subprocess.run([tabix, fname, chromosome], stdout=f)
+                sp.run([tabix, fname, chromosome], stdout=f)
 
         with open(chr_sample_file, 'r') as records:
+            record_lines = records.readlines()
+            assert len(record_lines) > 1, f"empty mosdepth file {chr_sample_file}"
             idx = 0
-            last_record = None
-            for line in records:
+            for line in record_lines[:-1]:
                 tokens = line.split()
                 if len(tokens) == 4:
                     start = int(tokens[1])
                     end = int(tokens[2])
                     nreads = int(tokens[3])
-
+                    # FIXME wired loop
                     while idx < len_threshold and thresholds[idx] - 1 < end:
+                        # start <= thresholds[idx] - 1 < end
                         assert thresholds[idx] - 1 >= start
                         arr[idx, (2 * i) + 1] = nreads
                         idx += 1
-                    last_record = (start, end, nreads)
+
+            last_record = (int(r) for r in record_lines[-1].strip().split()[1:])
+            # chr_name chr_length chr_length 0
 
             if i == 0:
                 # first file is for normal sample
                 # identify the (effective) chromosome end as the last well-formed record
                 assert idx == len_threshold
-                assert last_record != None
                 (_, chr_end, end_reads) = last_record
                 assert chr_end > thresholds[-1]
                 assert len_threshold == len(arr) - 1
@@ -364,8 +366,8 @@ def get_chr_end(stem, all_names, chromosome):
 
     last_start = 0
     for sfname in starts_files:
-        zcat = subprocess.Popen(('zcat', sfname), stdout=subprocess.PIPE)
-        tail = subprocess.Popen(('tail', '-1'), stdin=zcat.stdout, stdout=subprocess.PIPE)
+        zcat = sp.Popen(('zcat', sfname), stdout=sp.PIPE)
+        tail = sp.Popen(('tail', '-1'), stdin=zcat.stdout, stdout=sp.PIPE)
         my_last = int(tail.stdout.read().decode('utf-8').strip())
 
         if my_last > last_start:

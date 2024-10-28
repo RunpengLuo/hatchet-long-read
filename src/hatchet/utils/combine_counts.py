@@ -8,7 +8,7 @@ import pandas as pd
 
 import hatchet.data
 from hatchet.utils.ArgParsing import parse_combine_counts_args
-import hatchet.utils.Supporting as sp
+from hatchet.utils.Supporting import log, logArgs, error
 from hatchet.utils.pon_normalization import correct_baf, pon_normalize_rdr
 from hatchet.utils.rd_gccorrect import rd_gccorrect
 from hatchet.utils.compute_baf import compute_baf_task
@@ -25,9 +25,9 @@ from hatchet.utils.additional_features import (
 )
 
 def main(args=None):
-    sp.log(msg='# Parsing and checking input arguments\n', level='STEP')
+    log(msg='# Parsing and checking input arguments\n', level='STEP')
     args = parse_combine_counts_args(args)
-    sp.logArgs(args, 80)
+    logArgs(args, 80)
 
     baffile = args['baffile']
     threads = args['processes']
@@ -54,7 +54,9 @@ def main(args=None):
     use_prebuilt_segfile = False
     if refversion != None: # segfile == None
         use_prebuilt_segfile = True
-        segfile = path(hatchet.data, f'{args["refversion"]}.segments.tsv')
+        with path(hatchet.data, f'{args["refversion"]}.segments.bed') as p:
+            segfile = str(p)
+        log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level='INFO')
 
     n_workers = min(len(chromosomes), threads)
 
@@ -63,7 +65,7 @@ def main(args=None):
     has_chrY = any(ch == f"{chr_prefix}Y" for ch in chromosomes)
     xy = False
     if has_chrX:
-        sp.log(
+        log(
             msg='Determining the allosomes for handling X chromosome\n',
             level='INFO',
         )
@@ -84,7 +86,7 @@ def main(args=None):
             xy = False
         else: # False
             xy = True
-        sp.log(
+        log(
             msg='Allosomes are determined as ' + ('XY' if xy else 'XX') + '\n',
             level='INFO',
         )
@@ -119,7 +121,7 @@ def main(args=None):
     with Pool(n_workers) as p:
         p.map(run_chromosome_wrapper, params)
 
-    sp.log(
+    log(
         msg='# Merging per-chromosome bb files and correcting read counts\n',
         level='STEP',
     )
@@ -162,7 +164,7 @@ def main(args=None):
             )
 
         if 'NORMAL_READS' not in big_bb:
-            sp.log('# NOTE: adding NORMAL_READS column to bb file', level='INFO')
+            log('# NOTE: adding NORMAL_READS column to bb file', level='INFO')
             big_bb['NORMAL_READS'] = (big_bb.CORRECTED_READS / big_bb.RD).astype(np.uint32)
 
     # Correct BAF when there is no normal sample. This correction useful only in LOH regions in high-purity samples
@@ -171,13 +173,13 @@ def main(args=None):
         big_bb['BAF'] = big_bb['BAF'].round(5)
 
     if ponfile is not None:
-        sp.log(
+        log(
             msg='# Performing panel of normal read depth correction for cell-free data\n',
             level='STEP',
         )
         big_bb = pon_normalize_rdr(big_bb, args['ponfile'])
     if args['gc_correct']:
-        sp.log(
+        log(
             msg='# Performing GC bias correction on read depth signal\n',
             level='STEP',
         )
@@ -202,7 +204,7 @@ def main(args=None):
     # Remove intermediate BB files
     [os.remove(f) for f in outfiles]
 
-    sp.log(msg='# Done\n', level='STEP')
+    log(msg='# Done\n', level='STEP')
 
 def adaptive_bins_arm(
     snp_thresholds,
@@ -253,6 +255,7 @@ def adaptive_bins_arm(
     # number of reads overlapping position snp_thresholds[i]
     odd_index = np.array([i * 2 + 1 for i in range(int(n_samples))], dtype=np.int8)
 
+    # per-threshold bin counts
     bin_total = np.zeros(n_samples)
     if nonormalFlag:
         bin_snp = np.zeros(n_samples)
@@ -269,6 +272,7 @@ def adaptive_bins_arm(
     bss = []
     i = 1
     j = 0
+    #FIXME i < len(snp_thresholds) - 1?
     while i < len(snp_thresholds - 1) and j < len(snp_positions):
         # Extend the current bin to the next threshold
         next_threshold = snp_thresholds[i]
@@ -345,7 +349,7 @@ def adaptive_bins_arm(
 
     # handle the case of 1 bin
     if len(ends) == 0:
-        sp.log(
+        log(
             msg='WARNING: found only 1 bin in chromosome arm, may not meet MSR and MTR\t',
             level='WARN',
         )
@@ -519,13 +523,13 @@ def run_chromosome(
             outfile = f"{outfile}.segfile"
 
         if os.path.exists(outfile):
-            sp.log(
+            log(
                 msg=f'Output file already exists, skipping chromosome {chromosome}\n',
                 level='INFO',
             )
             return
 
-        sp.log(
+        log(
             msg=f'Loading intermediate files for chromosome {chromosome}\n',
             level='INFO',
         )
@@ -533,11 +537,11 @@ def run_chromosome(
         dfs = None
         bafs = None
         if not use_prebuilt_segfile:
-            sp.log(
+            log(
                 msg='# Collecting read depth anf BAF info for pre-specified segments!\n',
                 level='STEP',
             )
-            sp.log(
+            log(
                 msg=f'Reading SNPs file for chromosome {chromosome}\n',
                 level='INFO',
             )
@@ -556,7 +560,7 @@ def run_chromosome(
             bb = merge_data(bins, dfs, bafs, all_names, chromosome, "unit")
             bb.to_csv(f'{outfile}.segfile', index=False, sep='\t')
 
-            sp.log(
+            log(
                 msg=f'Done with custom segmentation on chromosome {chromosome}\n',
                 level='INFO',
             )
@@ -569,7 +573,7 @@ def run_chromosome(
             centromere_end = seg_df_ch.START.max() - 1 # inclusive
             # adaptive binning
             if xy and chromosome.endswith('X'):
-                sp.log(
+                log(
                     msg='Running on sex chromosome X in a male -- ignoring SNPs \n',
                     level='INFO',
                 )
@@ -590,7 +594,7 @@ def run_chromosome(
                 snp_counts = np.zeros((len(positions), len(all_names) - 1), dtype=np.int8)
                 snpsv = None
             else:
-                # sp.log(msg=f"Reading SNPs file for chromosome {chromosome}\n", level = "INFO")
+                # log(msg=f"Reading SNPs file for chromosome {chromosome}\n", level = "INFO")
                 # Load SNP positions and counts for this chromosome
                 positions, snp_counts, snpsv = read_snps(baffile, chromosome, all_names, phasefile=phasefile)
 
@@ -621,7 +625,7 @@ def run_chromosome(
 
             armbbs = []
             for arm in ['p', 'q']:
-                sp.log(
+                log(
                     msg=f'Binning {arm} arm of chromosome {chromosome}\n',
                     level='INFO',
                 )
@@ -658,7 +662,7 @@ def run_chromosome(
 
                     bafs = bb.pivot(index=['CHR', 'START'], columns='SAMPLE', values='BAF').to_numpy()
                     if bafs.shape[0] > 2:
-                        sp.log(
+                        log(
                             msg=f'Correcting haplotype switches on {arm} arm...\n',
                             level='STEP',
                         )
@@ -669,7 +673,7 @@ def run_chromosome(
                         bb['ORIGINAL_BAF'] = bb.BAF
                         bb['BAF'] = corrected_bafs.flatten()
                 else:
-                    sp.log(
+                    log(
                         msg=f'No SNPs found in {arm} arm for {chromosome}\n',
                         level='INFO',
                     )
@@ -677,16 +681,16 @@ def run_chromosome(
                 armbbs.append(bb)
 
             if all(element is None for element in armbbs):
-                raise ValueError(sp.error(f'No SNPs found on either arm of chromosome {chromosome}!'))
+                raise ValueError(error(f'No SNPs found on either arm of chromosome {chromosome}!'))
 
             bb = pd.concat(armbbs)
 
             bb.to_csv(outfile, index=False, sep='\t', float_format='%.5f')
 
-            sp.log(msg=f'Done chromosome {chromosome}\n', level='INFO')
+            log(msg=f'Done chromosome {chromosome}\n', level='INFO')
     except Exception as e:
-        sp.log(msg=f'Error in chromosome {chromosome}:', level='ERROR')
-        sp.log(msg=str(e), level='ERROR')
+        log(msg=f'Error in chromosome {chromosome}:', level='ERROR')
+        log(msg=str(e), level='ERROR')
         traceback.print_exc()
         raise e
     
@@ -729,15 +733,12 @@ def read_total_and_thresholds(chromosome, arraystem, use_prebuilt_segfile):
     # TODO this is tautology since it is checked in argparse already?
     if not os.path.exists(total_file) or not os.path.exists(thresholds_file):
         raise ValueError(
-            sp.error(
+            error(
                 f'input files {total_file} or {thresholds_file} for custom segmentation not found!'
                 ' Make sure you have run both count-reads and combine-counts with or without the segmentation file'
             )
         )
-
-    total_counts = np.loadtxt(total_file, dtype=np.uint32)
-    complete_thresholds = np.loadtxt(thresholds_file, dtype=np.uint32)
-    return total_counts, complete_thresholds
+    return np.loadtxt(total_file, dtype=np.uint32), np.loadtxt(thresholds_file, dtype=np.uint32)
 
 
 def bins_from_segfile(total_counts, thresholds, snp_positions):
@@ -798,7 +799,7 @@ def bins_from_segfile(total_counts, thresholds, snp_positions):
 
     # handle the case of 1 bin
     if len(ends) == 0:
-        sp.log(
+        log(
             msg='WARNING: found only 1 bin in chromosome arm, may not meet MSR and MTR\t',
             level='WARN',
         )
