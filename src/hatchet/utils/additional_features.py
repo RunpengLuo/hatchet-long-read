@@ -40,10 +40,7 @@ def use_chr_prefix(chromosomes: list):
     return False
 
 def has_header(file: str, header_prefix=["CHR", "Chr", "CHROMOSOME", "#ID"]):
-    if file.endswith(".gz"):
-        fd = gzip.open(file, 'r')
-    else:
-        fd = open(file, 'r')
+    fd = gzip.open(file, 'r') if file.endswith(".gz") else open(file, 'r')
     first_line = fd.readline()
     fd.close()
     for hp in header_prefix:
@@ -52,14 +49,14 @@ def has_header(file: str, header_prefix=["CHR", "Chr", "CHROMOSOME", "#ID"]):
     return False
 
 # load segment file in BED format with 1-indexed and left-close right-open format
-# CHR\tSTART\tEND\tNAME\t...
+# CHR\tSTART\tEND\t...
 def load_seg_file(seg_file: str, use_chr_bam: bool):
     if has_header(seg_file):
         seg_df = pd.read_csv(seg_file, sep='\t')
     else:
         seg_df = pd.read_csv(seg_file, sep='\t', header=None,
-                             usecols=range(4),
-                             names=["CHR", "START", "END", "NAME"])
+                             usecols=range(3),
+                             names=["CHR", "START", "END"])
 
     seg_df["CHR"] = seg_df["CHR"].astype("str")
     use_chr_seg = use_chr_prefix(seg_df["CHR"].tolist())
@@ -141,19 +138,24 @@ def check_array_files(dirname: str, chromosomes: list, use_prebuilt_segfile: boo
         expected.extend([ptotal, pthres])
     return [a for a in expected if not os.path.isfile(a)]
 
-def expected_count_files(dirname: str, chromosomes: list, sample_names: list):
+def expected_count_files(dirname: str, chromosomes: list, sample_names: list, use_region: bool):
     expected = []
     sample_suffixes = [".mosdepth.global.dist.txt", 
-                       ".mosdepth.summary.txt", 
-                       ".per-base.bed.gz", 
-                       ".per-base.bed.gz.csi"]
+                       ".mosdepth.summary.txt"]
+    if use_region:
+        sample_suffixes += [".regions.bed.gz",
+                            ".regions.bed.gz.csi"]
+    else:
+        sample_suffixes += [".per-base.bed.gz", 
+                            ".per-base.bed.gz.csi"]
+
     for name in sample_names:
         expected.extend([os.path.join(dirname, f"{name}.{ch}.starts.gz") for ch in chromosomes])
         expected.extend([os.path.join(dirname, f"{name}{sfx}") for sfx in sample_suffixes])
     return expected
 
-def check_count_files(dirname: str, chromosomes: list, sample_names: list):
-    return [a for a in expected_count_files(dirname, chromosomes, sample_names) if not os.path.isfile(a)]
+def check_count_files(dirname: str, chromosomes: list, sample_names: list, use_region=False):
+    return [a for a in expected_count_files(dirname, chromosomes, sample_names, use_region) if not os.path.isfile(a)]
 
 # at most <max_threads> per task is assigned if sum <= nproc
 # use <= 1 process per task

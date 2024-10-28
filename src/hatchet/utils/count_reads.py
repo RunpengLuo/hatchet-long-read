@@ -31,11 +31,14 @@ def main(args=None):
     bams = args['bams']
     names = args['names']
 
-    if not args['nonormal']:
+    if args['nonormal']:
+        bams, names = zip(*sorted(zip(*(bams, names)), key=lambda x: x[1]))
+        bams = list(bams)
+        names = list(names)
+    else:
         tbams, tnames = zip(*sorted(zip(*(bams[1:], names[1:])), key=lambda x: x[1]))
         bams = [bams[0]] + list(tbams)
         names = [names[0]] + list(tnames)
-    # TODO sort the bams when nonormal is TRUE
 
     chromosomes = args['chromosomes']
     samtools = args['samtools']
@@ -78,10 +81,6 @@ def main(args=None):
             )
 
         else:
-            # moved to argparse
-            # if args['segfile'] and (not os.path.exists(args['segfile'])):
-            #     raise ValueError(error('A path to a nonexistant segfile was given to count-reads!'))
-
             params = zip(
                 np.repeat(chromosomes, len(bams)),
                 [outdir] * len(bams) * len(chromosomes),
@@ -92,8 +91,16 @@ def main(args=None):
             )
 
             n_workers_samtools, _ = workload_assignment(processes, len(bams) * len(chromosomes))
-            with Pool(n_workers_samtools) as p:   # divide by 2 because each worker starts 2 processes
-                p.map(count_chromosome_wrapper, params)
+            try:
+                with Pool(n_workers_samtools) as p:
+                    p.map(count_chromosome_wrapper, params)
+            except Exception as e:
+                log(msg=f"ERROR! count_chromosome raise exception: {e}\n",level='ERROR')
+                p.terminate()
+                raise ValueError()
+            finally:
+                p.join()
+                log(msg="All count_chromosome finished", level='STEP')
 
             n_workers_mosdepth, threads_per_task = workload_assignment(processes, len(bams))
 
@@ -109,8 +116,16 @@ def main(args=None):
                 )
                 for i in range(len(bams))
             ]
-            with Pool(n_workers_mosdepth) as p:
-                p.map(mosdepth_wrapper, mosdepth_params)
+            try:
+                with Pool(n_workers_mosdepth) as p:
+                    p.map(mosdepth_wrapper, mosdepth_params)
+            except Exception as e:
+                log(msg=f"ERROR! mosdepth raise exception: {e}\n",level='ERROR')
+                p.terminate()
+                raise ValueError()
+            finally:
+                p.join()
+                log(msg="All mosdepth finished", level='STEP')
 
             nonexist_count_files = check_count_files(outdir, chromosomes, names)
             if len(nonexist_count_files) > 0:
@@ -118,6 +133,7 @@ def main(args=None):
                 raise ValueError(error('Missing some counts files!'))
 
         # Use Tabix to index per-position coverage bed files for each sample
+        # TODO removed later
         for name in names:
             perpos_file = os.path.join(outdir, name + '.per-base.bed.gz')
             # sync call
@@ -138,8 +154,16 @@ def main(args=None):
         ]
         n_workers, _ = workload_assignment(processes, len(chromosomes))
         # dispatch workers
-        with Pool(n_workers) as p:
-            p.map(run_chromosome_wrapper, params)
+        try:
+            with Pool(n_workers) as p:
+                p.map(run_chromosome_wrapper, params)
+        except Exception as e:
+                log(msg=f"ERROR! run_chromosome raise exception: {e}\n",level='ERROR')
+                p.terminate()
+                raise ValueError()
+        finally:
+            p.join()
+            log(msg="All run_chromosome finished", level='STEP')
 
         np.savetxt(os.path.join(outdir, 'samples.txt'), names, fmt='%s')
 
@@ -157,11 +181,11 @@ def main(args=None):
         log(msg='# Found total reads file, exiting. \n', level='STEP')
         return
 
-    # TODO: take -q option and pass in here
     log(
         msg='# Counting total number of reads for normal and tumor samples\n',
         level='STEP',
     )
+    # TODO total counts might be redundant with above count chromosome step
     total_counts = tc.tcount(
         samtools=samtools,
         samples=[(bams[i], names[i]) for i in range(len(names))],
@@ -222,7 +246,10 @@ def run_mosdepth(outdir, sample_name, bam, threads, mosdepth, readquality):
         log('Exception in countPos: {}\n'.format(e), level='ERROR')
         raise e
 
-# {sample_name}.{ch}.starts.gz
+"""
+For each chromosome within each BAM file, compute all reads starting position
+output: {sample_name}.{ch}.starts.gz
+"""
 def count_chromosome(ch, outdir, samtools, bam, sample_name, readquality, compression_level=6):
     try:
         outfile = os.path.join(outdir, f'{sample_name}.{ch}.starts')
@@ -294,7 +321,7 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
             start, end = thresholds[idx], thresholds[idx + 1]
             # count #read-starts in range [start, end), assume read_starts is pre-sorted
             num_reads = 0
-            while read_starts[visited_reads] < end:
+            while visited_reads < len(read_starts) and read_starts[visited_reads] < end:
                 # unnecessary check ALA threshold are adjacent with 1-base difference.
                 assert read_starts[visited_reads] >= start
                 num_reads += 1
