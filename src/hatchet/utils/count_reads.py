@@ -295,7 +295,7 @@ def form_counts_array(starts_files, perpos_files, thresholds, chromosome, tabix,
             start, end = thresholds[idx], thresholds[idx + 1]
             # count #read-starts in range [start, end), assume read_starts is pre-sorted
             num_reads = 0
-            while read_starts[visited_reads] < end:
+            while visited_reads < len(read_starts) and read_starts[visited_reads] < end:
                 # unnecessary check ALA threshold are adjacent with 1-base difference.
                 assert read_starts[visited_reads] >= start
                 num_reads += 1
