@@ -212,18 +212,12 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
         )
 
     n_samples = len(all_names)
-    if n_samples != len(snps.SAMPLE.unique()):
-        raise ValueError(
-            sp.error(f'Expected {n_samples} samples, found {len(snps.SAMPLE.unique())} samples in SNPs file.')
-        )
-
-    if set(all_names) != set(snps.SAMPLE.unique()):
-        raise ValueError(
-            sp.error(
+    ensure(n_samples == len(snps.SAMPLE.unique(), 
+                            f'Expected {n_samples} samples, found {len(snps.SAMPLE.unique())} samples in SNPs file.'))
+    ensure(set(all_names) != set(snps.SAMPLE.unique()), 
                 f'Expected sample names did not match sample names in SNPs file.\n\
-                Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}'
-            )
-        )
+                Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}')
+
 
     # Add total counts column
     snpsv = snps.copy()
@@ -275,3 +269,7 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
     assert not np.any(check_pivot.isna()), 'SNP file reading failed'
     assert np.array_equal(all_names, list(snp_counts.columns))   # make sure that sample order is the same
     return np.array(snp_counts.index), np.array(snp_counts), snpsv
+
+def adaptive_binning():
+
+    pass
