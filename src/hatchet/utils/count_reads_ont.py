@@ -18,6 +18,7 @@ from hatchet.utils.additional_features import (
     sort_chroms,
     get_array_file_path,
     check_array_files,
+    expected_starts_files,
     expected_count_files,
     check_count_files,
     workload_assignment,
@@ -74,26 +75,29 @@ def main(args=None):
 
     #
     # compute samtools starts.gz TODO can be optimized
-    samtools_params = zip(
-        np.repeat(chromosomes, len(bams)),
-        [outdir] * len(bams) * len(chromosomes),
-        [samtools] * len(bams) * len(chromosomes),
-        bams * len(chromosomes),
-        names * len(chromosomes),
-        [readquality] * len(bams) * len(chromosomes),
-    )
+    if any(not os.path.exists(f) for f in expected_starts_files(outdir, chromosomes, names)):
+        samtools_params = zip(
+            np.repeat(chromosomes, len(bams)),
+            [outdir] * len(bams) * len(chromosomes),
+            [samtools] * len(bams) * len(chromosomes),
+            bams * len(chromosomes),
+            names * len(chromosomes),
+            [readquality] * len(bams) * len(chromosomes),
+        )
 
-    n_workers_samtools, _ = workload_assignment(processes, len(bams) * len(chromosomes))
-    try:
-        with Pool(n_workers_samtools) as p:
-            p.map(count_chromosome_wrapper, samtools_params)
-    except Exception as e:
-        log(msg=f"ERROR! count_chromosome raise exception: {e}\n",level='ERROR')
-        p.terminate()
-        raise ValueError()
-    finally:
-        p.join()
-        log(msg="All count_chromosome finished", level='STEP')
+        n_workers_samtools, _ = workload_assignment(processes, len(bams) * len(chromosomes))
+        try:
+            with Pool(n_workers_samtools) as p:
+                p.map(count_chromosome_wrapper, samtools_params)
+        except Exception as e:
+            log(msg=f"ERROR! count_chromosome raise exception: {e}\n",level='ERROR')
+            p.terminate()
+            raise ValueError()
+        finally:
+            p.join()
+            log(msg="All count_chromosome finished", level='STEP')
+    else:
+        log(msg="found all count_chromosome intermediate files, skip", level='STEP')
 
     #
     # compute mosdepth with --by BED option
