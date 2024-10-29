@@ -24,7 +24,7 @@ from hatchet.utils.additional_features import (
     workload_assignment,
     read_snps,
     load_snps_positions,
-    segments2thres_file
+    segments2thresholds
 )
 
 from hatchet.utils.count_reads import count_chromosome_wrapper, get_chr_end
@@ -123,16 +123,16 @@ def main(args=None):
                     log(msg=f"compute region file for {ch}\n", level='INFO')
                     snp_positions_ch = snp_positions[i]
                 seg_df_ch = seg_df[seg_df["CHR"] == ch]
-                thres_file_ch, init_thres = segments2thres_file(snp_positions_ch, seg_df_ch, consider_snp=True)
+                thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
                 if not init_thres:
                     raise ValueError(f"ERROR, {segfile} is invalid/empty for {ch}")
-                if np.any(np.diff(thres_file_ch) < 0):
+                if np.any(np.diff(thresholds_ch) < 0):
                     raise ValueError(f'improper negative interval in provided segment file for chromosome {ch}')
-                np.savetxt(rg_fd, thres_file_ch, fmt=str(ch)+"\t%d\t%d")
+                np.savetxt(rg_fd, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
                 
                 segment_file_ch = os.path.join(outdir, f"{ch}.threshold.gz")
-                np.savetxt(segment_file_ch, thres_file_ch, fmt=str(ch)+"\t%d\t%d")
-                log(msg=f"#segments for {ch}: {len(thres_file_ch)}", level='INFO')
+                np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
+                log(msg=f"#segments for {ch}: {len(thresholds_ch)}", level='INFO')
             rg_fd.close()
         
         ret = sp.run(['gzip', '-6', segment_file])
