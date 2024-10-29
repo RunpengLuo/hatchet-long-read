@@ -28,6 +28,7 @@ def genotype_snps(args):
     This functions creates extracts each chromosome from the genotype file,
     and saves it to a separate file in the output directory.
     """
+    log(msg='genotype_snps_ont test version\n', level='STEP')
     log(
         msg=(
             '# Parsing the input arguments, checking the consistency of given files, and extracting required ',
@@ -70,6 +71,7 @@ def phase_snps(args):
     This functions creates extracts each phased genotype from genotpes
     file and saves it to phased.vcf.gz in the output directory.
     """
+    log(msg='phase_snps_ont test version\n', level='STEP')
     log(
         msg=(
             '# Parsing the input arguments, checking the consistency of given files, and extracting required ',

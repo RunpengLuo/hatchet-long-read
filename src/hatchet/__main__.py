@@ -9,7 +9,10 @@ import hatchet
 
 from hatchet.utils.commands import commands, command_aliases
 
+# temporary options for ONT testing
 from hatchet.utils.count_reads_ont import main as count_reads_ont # noqa: F401
+from hatchet.utils.lr_functions import genotype_snps as genotype_snps_ont # noqa: F401
+from hatchet.utils.lr_functions import phase_snps as phase_snps_ont # noqa: F401
 from hatchet.utils.count_reads import main as count_reads  # noqa: F401
 from hatchet.utils.count_reads_fw import main as count_reads_fw  # noqa: F401
 from hatchet.utils.genotype_snps import main as genotype_snps  # noqa: F401
