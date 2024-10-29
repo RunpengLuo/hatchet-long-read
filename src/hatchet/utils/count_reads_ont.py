@@ -24,7 +24,7 @@ from hatchet.utils.additional_features import (
     workload_assignment,
     read_snps,
     load_snps_positions,
-    segments2thresholds
+    segments2thres_file
 )
 
 from hatchet.utils.count_reads import count_chromosome_wrapper, get_chr_end
@@ -120,19 +120,19 @@ def main(args=None):
                     last_start = get_chr_end(outdir, names, ch)
                     snp_positions_ch = np.arange(5000, last_start, 5000)
                 else:
-                    log(msg=f"compute region file for {ch}", level='INFO')
+                    log(msg=f"compute region file for {ch}\n", level='INFO')
                     snp_positions_ch = snp_positions[i]
                 seg_df_ch = seg_df[seg_df["CHR"] == ch]
-                thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
+                thres_file_ch, init_thres = segments2thres_file(snp_positions_ch, seg_df_ch, consider_snp=True)
                 if not init_thres:
                     raise ValueError(f"ERROR, {segfile} is invalid/empty for {ch}")
-                if np.any(np.diff(thresholds_ch) < 0):
+                if np.any(np.diff(thres_file_ch) < 0):
                     raise ValueError(f'improper negative interval in provided segment file for chromosome {ch}')
-                np.savetxt(rg_fd, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
+                np.savetxt(rg_fd, thres_file_ch, fmt=str(ch)+"\t%d\t%d")
                 
                 segment_file_ch = os.path.join(outdir, f"{ch}.threshold.gz")
-                np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
-                log(msg=f"#segments for {ch}: {len(thresholds_ch)}", level='INFO')
+                np.savetxt(segment_file_ch, thres_file_ch, fmt=str(ch)+"\t%d\t%d")
+                log(msg=f"#segments for {ch}: {len(thres_file_ch)}", level='INFO')
             rg_fd.close()
         
         ret = sp.run(['gzip', '-6', segment_file])
@@ -241,8 +241,8 @@ Returns: <n> x <2d> np.ndarray
 """
 def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: str):
     try:
-        [totals_out, thresholds] = get_array_file_path(outdir, chromosome)
-        reg_df_ch, _ = load_seg_file(thresholds, use_chr, [])
+        [tot_file, thres_file] = get_array_file_path(outdir, chromosome)
+        reg_df_ch, _ = load_seg_file(thres_file, use_chr, [])
         segments = reg_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
         num_segments = len(segments)
 
@@ -268,9 +268,9 @@ def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: st
             reg_df = reg_df[reg_df["CHR"] == chromosome]
             arr[:, 2*idx + 1] = reg_df["DEPTH"].to_numpy()
 
-        np.savetxt(arr, totals_out, fmt='%d')
+        np.savetxt(tot_file, arr, fmt='%d')
     except Exception as e:
-        log(f"ERROR! count array {chromosome}: {e}", level="ERROR")
+        log(f"ERROR! count array {chromosome}: {e}\n", level="ERROR")
         raise e
     finally:
         log(f'Done count array {chromosome}\n', level='STEP')
