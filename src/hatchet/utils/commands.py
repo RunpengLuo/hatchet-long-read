@@ -1,5 +1,6 @@
 # All supported HATCHet commands
 commands = (
+    'count-reads-ont',
     'count-reads',
     'count-reads-fw',
     'genotype-snps',

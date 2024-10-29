@@ -9,6 +9,7 @@ import hatchet
 
 from hatchet.utils.commands import commands, command_aliases
 
+from hatchet.utils.count_reads_ont import main as count_reads_ont # noqa: F401
 from hatchet.utils.count_reads import main as count_reads  # noqa: F401
 from hatchet.utils.count_reads_fw import main as count_reads_fw  # noqa: F401
 from hatchet.utils.genotype_snps import main as genotype_snps  # noqa: F401

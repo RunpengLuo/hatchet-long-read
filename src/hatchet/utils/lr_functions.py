@@ -232,7 +232,7 @@ def combine_counts(args, haplotype_file, mosdepth_files):
     for ch in chromosomes:
         positions, snp_counts, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
         # directly read per-SNP counts and per-SNP bin bounderies
-        total_counts, complete_thresholds = read_total_and_thresholds(ch, rd_array, True)
+        total_counts, complete_thresholds = read_total_and_thresholds(ch, rd_array)
         hap_blocks_ch = haplotype_blocks[haplotype_blocks.CHR == ch] #TODO use groupby
 
         # all mosdepth from same chromosome across all samples; n is sample name

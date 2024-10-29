@@ -76,8 +76,8 @@ def main(args=None):
             if has_chrY:
                 # find total read counts for X and Y chromosomes.
                 # if the ratio of X to Y is larger than 50, we assume the sample is from a female
-                x_tc, _ = read_total_and_thresholds(f"{chr_prefix}X", rd_array, use_prebuilt_segfile)
-                y_tc, _ = read_total_and_thresholds(f"{chr_prefix}Y", rd_array, use_prebuilt_segfile)
+                x_tc, _ = read_total_and_thresholds(f"{chr_prefix}X", rd_array)
+                y_tc, _ = read_total_and_thresholds(f"{chr_prefix}Y", rd_array)
                 total_x_reads = x_tc[:, 0].sum()
                 total_y_reads = y_tc[:, 0].sum()
                 if total_y_reads != 0:
@@ -126,10 +126,7 @@ def main(args=None):
         level='STEP',
     )
     # merge all BB files together to get the one remaining BB file
-    if segfile:
-        outfiles = [a[3] + '.segfile' for a in params]
-    else:
-        outfiles = [a[3] for a in params]
+    outfiles = [a[3] for a in params]
     bbs = [pd.read_table(bb, dtype={'CHR': str}) for bb in outfiles]
     big_bb = pd.concat(bbs)
     big_bb = big_bb.sort_values(by=['CHR', 'START', 'SAMPLE'])
@@ -519,9 +516,6 @@ def run_chromosome(
     """
 
     try:
-        if not use_prebuilt_segfile:
-            outfile = f"{outfile}.segfile"
-
         if os.path.exists(outfile):
             log(
                 msg=f'Output file already exists, skipping chromosome {chromosome}\n',
@@ -558,7 +552,7 @@ def run_chromosome(
                                                  max_snps_per_block, test_alpha, multisample)
 
             bb = merge_data(bins, dfs, bafs, all_names, chromosome, "unit")
-            bb.to_csv(f'{outfile}.segfile', index=False, sep='\t')
+            bb.to_csv(outfile, index=False, sep='\t')
 
             log(
                 msg=f'Done with custom segmentation on chromosome {chromosome}\n',
@@ -727,8 +721,8 @@ def run_chromosome_wrapper(param):
     run_chromosome(*param)
 
 
-def read_total_and_thresholds(chromosome, arraystem, use_prebuilt_segfile):
-    total_file, thresholds_file = get_array_file_path(arraystem, chromosome, use_prebuilt_segfile)
+def read_total_and_thresholds(chromosome, arraystem):
+    total_file, thresholds_file = get_array_file_path(arraystem, chromosome)
 
     # TODO this is tautology since it is checked in argparse already?
     if not os.path.exists(total_file) or not os.path.exists(thresholds_file):

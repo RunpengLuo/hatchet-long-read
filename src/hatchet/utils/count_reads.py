@@ -65,9 +65,9 @@ def main(args=None):
     # only chromosomes that present in both BAM file and segment file are handled
     chromosomes = list(set(chromosomes).intersection(seg_chroms))
     if len(chromosomes) == 0:
-        ValueError(error("No chromosomes present in both BAM file and segment file / refversion"))
+        raise ValueError(error("No chromosomes present in both BAM file and segment file / refversion"))
 
-    if len(check_array_files(outdir, chromosomes, use_prebuilt_segfile)) == 0:
+    if len(check_array_files(outdir, chromosomes)) == 0:
         log(
             msg='# Found all array files, skipping to total read counting. \n',
             level='STEP',
@@ -167,7 +167,7 @@ def main(args=None):
 
         np.savetxt(os.path.join(outdir, 'samples.txt'), names, fmt='%s')
 
-        if len(check_array_files(outdir, chromosomes, use_prebuilt_segfile)) > 0:
+        if len(check_array_files(outdir, chromosomes)) > 0:
             raise ValueError(error('Missing some output arrays!'))
         # successful
         log(
@@ -265,6 +265,7 @@ def count_chromosome(ch, outdir, samtools, bam, sample_name, readquality, compre
 
         # Get start positions
         st = sp.Popen((samtools, 'view', '-q', str(readquality), bam, ch), stdout=sp.PIPE)
+        # 1-based leftmost mapping POSition
         cut = sp.Popen(('cut', '-f', '4'), stdin=st.stdout, stdout=sp.PIPE)
         gzip = sp.Popen(
             ('gzip', '-{}'.format(compression_level)),
@@ -415,10 +416,13 @@ def run_chromosome(
     """
     Construct arrays that contain all counts needed to perform adaptive binning for a single chromosome
     (across all samples).
+    
+    new feature: use BED format for thresholds to allow non-consecutive bins
+    keep same file name
     """
 
     try:
-        [totals_out, thresholds_out] = get_array_file_path(outdir, chromosome, use_prebuilt_segfile)
+        [totals_out, thresholds_out] = get_array_file_path(outdir, chromosome)
 
         if os.path.exists(totals_out) and os.path.exists(thresholds_out):
             log(

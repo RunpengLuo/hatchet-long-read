@@ -870,18 +870,17 @@ def parse_combine_counts_args(args=None):
     nonormalFlag = 'normal' not in names
 
     chromosomes = []
-    seg_midfix = "segfile_" if segfile != None else ""
     # if segfile != None:
     #     thresh_name, tot_name = 'segfile_thresholds', 'segfile_total'
     # else:
     #     thresh_name, tot_name = 'thresholds', 'total'
     for basename in os.listdir(args.array):
-        if str(basename).endswith(f"{seg_midfix}total.gz"):
+        if str(basename).endswith(f"total.gz"):
             chromosomes.append(str(basename).split('.')[0])
     chromosomes = sort_chroms(chromosomes)
 
     for ch in chromosomes:
-        totals_arr, thresholds_arr = get_array_file_path(args.array, ch, segfile == None)
+        totals_arr, thresholds_arr = get_array_file_path(args.array, ch)
         if args.not_compressed:
             totals_arr = totals_arr[:-3]
             thresholds_arr = thresholds_arr[:-3]

@@ -3,6 +3,7 @@ import numpy as np
 
 import os
 import gzip
+import subprocess
 
 from hatchet.utils.Supporting import (
     ensure,
@@ -13,9 +14,12 @@ from hatchet.utils.Supporting import (
     bcolors,
     numericOrder,
 )
-import hatchet.utils.Supporting as sp
 
 def sort_chroms(chromosomes: list):
+    assert len(chromosomes) != 0
+    use_chr  = True if str(chromosomes[0]).startswith('chr') else False
+    if not use_chr:
+        return sorted(chromosomes)
     chr2ord = {}
     for i in range(1,23):
         chr2ord[f"chr{i}"] = i
@@ -50,13 +54,14 @@ def has_header(file: str, header_prefix=["CHR", "Chr", "CHROMOSOME", "#ID"]):
 
 # load segment file in BED format with 1-indexed and left-close right-open format
 # CHR\tSTART\tEND\t...
-def load_seg_file(seg_file: str, use_chr_bam: bool):
+def load_seg_file(seg_file: str, use_chr_bam: bool, additional_columns=[]):
+    num_columns = 3 + len(additional_columns)
     if has_header(seg_file):
         seg_df = pd.read_csv(seg_file, sep='\t')
     else:
         seg_df = pd.read_csv(seg_file, sep='\t', header=None,
-                             usecols=range(3),
-                             names=["CHR", "START", "END"])
+                             usecols=range(num_columns),
+                             names=["CHR", "START", "END"] + additional_columns)
 
     seg_df["CHR"] = seg_df["CHR"].astype("str")
     use_chr_seg = use_chr_prefix(seg_df["CHR"].tolist())
@@ -66,8 +71,6 @@ def load_seg_file(seg_file: str, use_chr_bam: bool):
         seg_df["CHR"] = seg_df["CHR"].apply(lambda s: s[3:])
 
     chs = seg_df["CHR"].unique().tolist()
-
-    # threshold_grps = seg_df.groupby(by="CHR", sort=False)
     return seg_df, chs
 
 """
@@ -125,34 +128,42 @@ def init_bb_dataframe():
 
 
 
-def get_array_file_path(dirname: str, ch: str, use_prebuilt_segfile: bool):
-    midfix = "segfile_" if not use_prebuilt_segfile else ""
-    return [os.path.join(dirname, f"{ch}.{midfix}total.gz"), 
-            os.path.join(dirname, f"{ch}.{midfix}threshold.gz")]
+def get_array_file_path(dirname: str, ch: str):
+    return [os.path.join(dirname, f"{ch}.total.gz"), 
+            os.path.join(dirname, f"{ch}.threshold.gz")]
 
 # return all non-exists files
-def check_array_files(dirname: str, chromosomes: list, use_prebuilt_segfile: bool):
+def check_array_files(dirname: str, chromosomes: list):
     expected = [os.path.join(dirname, 'samples.txt')]
     for ch in chromosomes:
-        [ptotal, pthres] = get_array_file_path(dirname, ch, use_prebuilt_segfile)
+        [ptotal, pthres] = get_array_file_path(dirname, ch)
         expected.extend([ptotal, pthres])
     return [a for a in expected if not os.path.isfile(a)]
 
-def expected_count_files(dirname: str, chromosomes: list, sample_names: list, use_region: bool):
-    expected = []
-    sample_suffixes = [".mosdepth.global.dist.txt", 
+def expected_mosdepth_files(dirname: str, sample_names: list, use_region: bool):
+    mosdepth_suffixes = [".mosdepth.global.dist.txt", 
                        ".mosdepth.summary.txt"]
     if use_region:
-        sample_suffixes += [".regions.bed.gz",
+        mosdepth_suffixes += [".regions.bed.gz",
                             ".regions.bed.gz.csi"]
     else:
-        sample_suffixes += [".per-base.bed.gz", 
+        mosdepth_suffixes += [".per-base.bed.gz", 
                             ".per-base.bed.gz.csi"]
+    expected = []
+    for name in sample_names:
+        expected.extend([os.path.join(dirname, f"{name}{sfx}") for sfx in mosdepth_suffixes])
+    return expected
 
+def expected_starts_files(dirname: str, chromosomes: list, sample_names: list):
+    expected = []
     for name in sample_names:
         expected.extend([os.path.join(dirname, f"{name}.{ch}.starts.gz") for ch in chromosomes])
-        expected.extend([os.path.join(dirname, f"{name}{sfx}") for sfx in sample_suffixes])
     return expected
+
+def expected_count_files(dirname: str, chromosomes: list, sample_names: list, use_region=False):
+    expected_starts = expected_starts_files(dirname, chromosomes, sample_names)
+    expected_mosdp = expected_mosdepth_files(dirname, sample_names, use_region)
+    return expected_starts + expected_mosdp
 
 def check_count_files(dirname: str, chromosomes: list, sample_names: list, use_region=False):
     return [a for a in expected_count_files(dirname, chromosomes, sample_names, use_region) if not os.path.isfile(a)]
@@ -210,7 +221,7 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
 
     if len(snps) == 0:
         raise ValueError(
-            sp.error(f'Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})')
+            error(f'Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})')
         )
 
     n_samples = len(all_names)
@@ -272,6 +283,66 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
     assert np.array_equal(all_names, list(snp_counts.columns))   # make sure that sample order is the same
     return np.array(snp_counts.index), np.array(snp_counts), snpsv
 
-def adaptive_binning():
+"""
+load all unique snp positions from baf_file for all chromosomes
+return a 2d SNP arrays, arr[i] represents snp positions for chromosomes[i]
+chromosomes are pre-sorted.
+baf and chromosomes should use same format for chr notation.
+"""
+def load_snps_positions(baf_file: str, chromosomes: str):
+    baf_df = pd.read_csv(baf_file, sep='\t', header=None,
+                             usecols=range(2),
+                             names=["CHR", "POS"])
+    baf_groups = baf_df.groupby("CHR")
+    ret = []
+    for ch in chromosomes:
+        if ch.endswith('X') or ch.endswith('Y'):
+            log(msg=f"Warning, found SNP for sec chromosomes {ch}, ignored")
+            ret.append(None) # append an empty array here
+            continue
+        baf_ch = baf_groups.get_group(ch)
+        baf_ch = baf_ch.drop_duplicates(ignore_index=True)
+        baf_ch = baf_ch.sort_values(by=["POS"], ignore_index=True)
+        ret.append(baf_ch["POS"].to_numpy(dtype=np.uint32))
+    return np.ndarray(ret)
 
-    pass
+"""
+convert segments to thresholds in BED format (segment per row)
+snp_positions: 1D array, 1-based and pre-sorted
+seg_df_df: 0-based and left-close&right-open, possibly unsorted.
+return nx2 thresholds
+"""
+def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, consider_snp=True):
+    # snp_inteverals = np.trunc(np.vstack([snp_positions[:-1], snp_positions[1:]]).mean(axis=0)).astype(np.uint32)
+    seg_df_ch = seg_df_ch.sort_values(by="START", ignore_index=True)
+    segments = seg_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
+    snp_positions = snp_positions - 1 # translate to 0-based index
+    thresholds = None
+    init_thres = False
+    for [sstart, sstop] in segments:
+        # find all snp positions within boundery
+        left_idx = np.argmax(snp_positions >= sstart)
+        if not consider_snp or snp_positions[left_idx] < sstart: 
+            # argmax -> 0, no SNP found with position >= sstart. or ignore SNP positions
+            sub_segments = np.array([[sstart, sstop]])
+        else:
+            right_idx = np.argmax(snp_positions >= sstop)
+            if snp_positions[right_idx] < sstop:
+                # argmax returns 0, no SNP found after sstop, bound left only
+                bounded_snp_positions = snp_positions[left_idx:]
+            else:
+                bounded_snp_positions = snp_positions[left_idx:right_idx]
+            # for every adjacent SNP position, record the midpoint as the interval splitting position.
+            snp_thresholds = np.trunc(np.vstack([bounded_snp_positions[:-1], 
+                                                 bounded_snp_positions[1:]]).mean(axis=0)).astype(np.uint32)
+            if snp_thresholds[0] != sstart:
+                snp_thresholds = np.concatenate([[sstart], snp_thresholds])
+            if snp_thresholds[-1] != sstop:
+                snp_thresholds = np.concatenate([snp_thresholds, [sstop]])
+            sub_segments = np.column_stack((snp_thresholds[:-1], snp_thresholds[1:]))
+        if not init_thres:
+            thresholds = sub_segments
+            init_thres = True
+        else:
+            thresholds = np.concatenate([thresholds, sub_segments], axis=0)
+    return thresholds, init_thres
