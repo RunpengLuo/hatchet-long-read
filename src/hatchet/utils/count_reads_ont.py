@@ -160,7 +160,7 @@ def main(args=None):
         raise ValueError()
     finally:
         p.join()
-        log(msg="All mosdepth finished", level='STEP')
+        log(msg="All mosdepth finished\n", level='STEP')
     
     # 
     # compute count arrays
@@ -183,7 +183,7 @@ def main(args=None):
             raise ValueError()
     finally:
         p.join()
-        log(msg="All count_array finished", level='STEP')
+        log(msg="All count_array finished\n", level='STEP')
 
     
     np.savetxt(os.path.join(outdir, 'samples.txt'), names, fmt='%s')
@@ -246,7 +246,7 @@ def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: st
         for idx, name in enumerate(all_names):
             starts_file = os.path.join(outdir, f"{name}.{chromosome}.starts.gz")
             fd = gzip.open(starts_file, 'r') if starts_file.endswith('.gz') else open(starts_file, 'r')
-            read_starts = np.ndarray([int(a) for a in fd])
+            read_starts = np.array([int(a) for a in fd])
             num_reads = len(read_starts)
             fd.close()
             for sdx, [sstart, sstop] in enumerate(segments):
