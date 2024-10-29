@@ -76,16 +76,17 @@ def main(args=None):
     #
     # compute samtools starts.gz TODO can be optimized
     if any(not os.path.isfile(f) for f in expected_starts_files(outdir, chromosomes, names)):
+        n_tasks_samtools = len(bams) * len(chromosomes)
         samtools_params = zip(
             np.repeat(chromosomes, len(bams)),
-            [outdir] * len(bams) * len(chromosomes),
-            [samtools] * len(bams) * len(chromosomes),
+            [outdir] * n_tasks_samtools,
+            [samtools] * n_tasks_samtools,
             bams * len(chromosomes),
             names * len(chromosomes),
-            [readquality] * len(bams) * len(chromosomes),
+            [readquality] * n_tasks_samtools,
         )
-
-        n_workers_samtools, _ = workload_assignment(processes, len(bams) * len(chromosomes))
+        n_workers_samtools, _ = workload_assignment(processes, n_tasks_samtools)
+        log(msg=f"count_chromosome-num_worker={n_workers_samtools}\tnum_tasks={n_tasks_samtools}\n", level='STEP')
         try:
             with Pool(n_workers_samtools) as p:
                 p.map(count_chromosome_wrapper, samtools_params)
@@ -143,7 +144,10 @@ def main(args=None):
     segment_file = segment_file_gz
 
     # run mosdepth against the global segment file per bam file
-    n_workers_mosdepth, threads_per_task = workload_assignment(processes, len(bams))
+    n_tasks_mosdepth = len(bams)
+    n_workers_mosdepth, threads_per_task = workload_assignment(processes, n_tasks_mosdepth)
+    log(msg=f"mosdepth-num_worker={n_workers_mosdepth}\tnum_tasks={n_tasks_mosdepth}\tthreads_per_task=" + \
+        ','.join(str(s) for s in threads_per_task) + '\n', level='STEP')
     # Note: These function calls are the only section that uses mosdepth
     mosdepth_params = [
         (
@@ -155,7 +159,7 @@ def main(args=None):
             mosdepth,
             readquality,
         )
-        for i in range(len(bams))
+        for i in range(n_tasks_mosdepth)
     ]
     try:
         with Pool(n_workers_mosdepth) as p:
@@ -170,7 +174,9 @@ def main(args=None):
     
     # 
     # compute count arrays
-    n_workers_count_array, _ = workload_assignment(processes, len(chromosomes))
+    n_tasks_count_array = len(chromosomes)
+    n_workers_count_array, _ = workload_assignment(processes, n_tasks_count_array)
+    log(msg=f"count_array-num_worker={n_workers_count_array}\tnum_tasks={n_tasks_count_array}\n", level='STEP')
     count_array_params = [
         (
             outdir,
