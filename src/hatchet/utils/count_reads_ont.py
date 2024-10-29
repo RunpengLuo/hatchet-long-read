@@ -314,7 +314,9 @@ def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str,
                 level='STEP',
             )
         else:
-            msdp_cmd = [mosdepth, 
+            msdp_cmd = [
+                        'time',
+                        mosdepth, 
                         '-t', str(threads), 
                         '-Q', str(readquality),
                         '--by', segment_file,
