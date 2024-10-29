@@ -75,7 +75,7 @@ def main(args=None):
 
     #
     # compute samtools starts.gz TODO can be optimized
-    if any(not os.path.exists(f) for f in expected_starts_files(outdir, chromosomes, names)):
+    if any(not os.path.isfile(f) for f in expected_starts_files(outdir, chromosomes, names)):
         samtools_params = zip(
             np.repeat(chromosomes, len(bams)),
             [outdir] * len(bams) * len(chromosomes),
@@ -104,38 +104,43 @@ def main(args=None):
     snp_positions = load_snps_positions(baffile, chromosomes)
     # global segment file
     segment_file = os.path.join(outdir, "segments.bed")
-    # TODO parallel if need?
-    with open(segment_file, 'w') as rg_fd:
-        # compute segment files per chromosome
-        for i, ch in enumerate(chromosomes):
-            if str.endswith(ch, 'X') or str.endswith(ch, 'Y'):
-                # TODO: do this procedure only for XY
-                log(
-                    msg='Running on sex chromosome -- ignoring SNPs and min SNP reads\n',
-                    level='INFO',
-                )
-                last_start = get_chr_end(outdir, names, ch)
-                snp_positions_ch = np.arange(5000, last_start, 5000)
-            else:
-                log(msg=f"compute region file for {ch}", level='INFO')
-                snp_positions_ch = snp_positions[i]
-            seg_df_ch = seg_df[seg_df["CHR"] == ch]
-            thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
-            if not init_thres:
-                raise ValueError(f"ERROR, {segfile} is invalid/empty for {ch}")
-            if np.any(np.diff(thresholds_ch) < 0):
-                raise ValueError(f'improper negative interval in provided segment file for chromosome {ch}')
-            np.savetxt(rg_fd, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
-            
-            segment_file_ch = os.path.join(outdir, f"{ch}.threshold.gz")
-            np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
-            log(msg=f"#segments for {ch}: {len(thresholds_ch)}", level='INFO')
-        rg_fd.close()
-    
-    ret = sp.run(['gzip', '-6', segment_file])
-    ret.check_returncode()
-    segment_file = segment_file + '.gz'
-    
+    segment_file_gz = f"{segment_file}.gz"
+    if not os.path.isfile(segment_file_gz) or \
+        any(not os.path.isfile(os.path.join(outdir, f"{ch}.threshold.gz")) for ch in chromosomes):
+        # TODO parallel if need?
+        with open(segment_file, 'w') as rg_fd:
+            # compute segment files per chromosome
+            for i, ch in enumerate(chromosomes):
+                if str.endswith(ch, 'X') or str.endswith(ch, 'Y'):
+                    # TODO: do this procedure only for XY
+                    log(
+                        msg='Running on sex chromosome -- ignoring SNPs and min SNP reads\n',
+                        level='INFO',
+                    )
+                    last_start = get_chr_end(outdir, names, ch)
+                    snp_positions_ch = np.arange(5000, last_start, 5000)
+                else:
+                    log(msg=f"compute region file for {ch}", level='INFO')
+                    snp_positions_ch = snp_positions[i]
+                seg_df_ch = seg_df[seg_df["CHR"] == ch]
+                thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
+                if not init_thres:
+                    raise ValueError(f"ERROR, {segfile} is invalid/empty for {ch}")
+                if np.any(np.diff(thresholds_ch) < 0):
+                    raise ValueError(f'improper negative interval in provided segment file for chromosome {ch}')
+                np.savetxt(rg_fd, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
+                
+                segment_file_ch = os.path.join(outdir, f"{ch}.threshold.gz")
+                np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
+                log(msg=f"#segments for {ch}: {len(thresholds_ch)}", level='INFO')
+            rg_fd.close()
+        
+        ret = sp.run(['gzip', '-6', segment_file])
+        ret.check_returncode()
+    else:
+        log(msg="found all segments intermediate files, skip", level='STEP')
+    segment_file = segment_file_gz
+
     # run mosdepth against the global segment file per bam file
     n_workers_mosdepth, threads_per_task = workload_assignment(processes, len(bams))
     # Note: These function calls are the only section that uses mosdepth
