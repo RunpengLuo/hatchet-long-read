@@ -304,7 +304,7 @@ def load_snps_positions(baf_file: str, chromosomes: str):
         baf_ch = baf_ch.drop_duplicates(ignore_index=True)
         baf_ch = baf_ch.sort_values(by=["POS"], ignore_index=True)
         ret.append(baf_ch["POS"].to_numpy(dtype=np.uint32))
-    return np.ndarray(ret)
+    return ret
 
 """
 convert segments to thresholds in BED format (segment per row)
