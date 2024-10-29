@@ -70,7 +70,7 @@ def main(args=None):
     chromosomes = list(set(chromosomes).intersection(seg_chroms))
     if len(chromosomes) == 0:
         raise ValueError(error("No chromosomes present in both BAM file and segment file / refversion"))
-    chromosomes = sort_chroms(sort_chroms)
+    chromosomes = sort_chroms(chromosomes)
 
     #
     # compute samtools starts.gz TODO can be optimized
