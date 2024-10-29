@@ -138,7 +138,7 @@ def main(args=None):
         
         ret = sp.run(['gzip', '-6', segment_file])
         ret.check_returncode()
-        log(msg="computed all segment files", level='STEP')
+        log(msg="computed all segment files\n", level='STEP')
     else:
         log(msg="found all segments intermediate files, skip", level='STEP')
     segment_file = segment_file_gz
