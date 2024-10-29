@@ -28,12 +28,15 @@ from hatchet.utils.additional_features import (
 )
 
 from hatchet.utils.count_reads import count_chromosome_wrapper, get_chr_end
+import time
 
 def main(args=None):
     log(msg='count_reads_ont test version\n', level='STEP')
     log(msg='# Parsing and checking input arguments\n', level='STEP')
     args = parse_count_reads_args(args)
     logArgs(args, 80)
+
+    ts = time.process_time()
 
     bams = args['bams']
     names = args['names']
@@ -237,7 +240,7 @@ def main(args=None):
         for name in names:
             f.write('{}\t{}\n'.format(name, total[name]))
     
-    log(msg='count-reads-ont completed successfully\n', level='STEP')
+    log(msg=f'count-reads-ont completed successfully, processed time: {time.process_time()-ts}sec\n', level='STEP')
     return
 
 """
@@ -316,6 +319,7 @@ def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str,
                         '-Q', str(readquality),
                         '--by', segment_file,
                         '--no-per-base',
+                        '--fast-mode',
                         out_prefix,
                         bam_file]
             err_fd = open(f"{outdir}/run_mosdepth_{sample_name}.err.log", 'w')
