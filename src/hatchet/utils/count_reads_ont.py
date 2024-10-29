@@ -63,7 +63,7 @@ def main(args=None):
     if refversion != None: # segfile == None
         with path(hatchet.data, f'{args["refversion"]}.segments.bed') as p:
             segfile = str(p)
-        log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level='INFO')
+        log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level='STEP')
     
     seg_df, seg_chroms = load_seg_file(segfile, use_chr)
 
@@ -95,7 +95,7 @@ def main(args=None):
             raise ValueError()
         finally:
             p.join()
-            log(msg="All count_chromosome finished", level='STEP')
+            log(msg="All count_chromosome finished\n", level='STEP')
     else:
         log(msg="found all count_chromosome intermediate files, skip", level='STEP')
 
@@ -115,12 +115,12 @@ def main(args=None):
                     # TODO: do this procedure only for XY
                     log(
                         msg='Running on sex chromosome -- ignoring SNPs and min SNP reads\n',
-                        level='INFO',
+                        level='STEP',
                     )
                     last_start = get_chr_end(outdir, names, ch)
                     snp_positions_ch = np.arange(5000, last_start, 5000)
                 else:
-                    log(msg=f"compute region file for {ch}\n", level='INFO')
+                    log(msg=f"compute region file for {ch}\n", level='STEP')
                     snp_positions_ch = snp_positions[i]
                 seg_df_ch = seg_df[seg_df["CHR"] == ch]
                 thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
@@ -132,7 +132,7 @@ def main(args=None):
                 
                 segment_file_ch = os.path.join(outdir, f"{ch}.threshold.gz")
                 np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
-                log(msg=f"#segments for {ch}: {len(thresholds_ch)}", level='INFO')
+                log(msg=f"#segments for {ch}: {len(thresholds_ch)}\n", level='STEP')
             rg_fd.close()
         
         ret = sp.run(['gzip', '-6', segment_file])
@@ -229,6 +229,8 @@ def main(args=None):
     with open(totals_file, 'w') as f:
         for name in names:
             f.write('{}\t{}\n'.format(name, total[name]))
+    
+    log(msg='count-reads-ont completed successfully\n', level='STEP')
     return
 
 """

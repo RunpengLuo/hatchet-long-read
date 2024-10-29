@@ -64,6 +64,8 @@ def genotype_snps(args):
         ]
         process = subprocess.Popen(command)
         process.wait()  # Wait for the process to complete
+    log(msg='genotype-snps-ont completed successfully\n', level='STEP')
+    return
 
 
 def phase_snps(args):
@@ -99,7 +101,8 @@ def phase_snps(args):
     ]
     process = subprocess.Popen(command)
     process.wait()  # Wait for the process to complete
-
+    log(msg='phase-snps-ont completed successfully\n', level='STEP')
+    return
 
 def get_b_count(df):
     # Select REF if FLIP == 1, otherwise select ALT, then sum the selected values

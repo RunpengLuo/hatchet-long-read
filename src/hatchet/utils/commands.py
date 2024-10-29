@@ -1,6 +1,7 @@
 # All supported HATCHet commands
 commands = (
     # temporary options
+    'combine-counts-ont'
     'genotype-snps-ont',
     'phase-snps-ont',
     'count-reads-ont',
