@@ -97,7 +97,7 @@ def main(args=None):
             p.join()
             log(msg="All count_chromosome finished\n", level='STEP')
     else:
-        log(msg="found all count_chromosome intermediate files, skip", level='STEP')
+        log(msg="found all count_chromosome intermediate files, skip\n", level='STEP')
 
     #
     # compute mosdepth with --by BED option
@@ -111,6 +111,7 @@ def main(args=None):
         with open(segment_file, 'w') as rg_fd:
             # compute segment files per chromosome
             for i, ch in enumerate(chromosomes):
+                log(msg=f"compute segment file for {ch}\n", level='STEP')
                 if str.endswith(ch, 'X') or str.endswith(ch, 'Y'):
                     # TODO: do this procedure only for XY
                     log(
@@ -120,7 +121,6 @@ def main(args=None):
                     last_start = get_chr_end(outdir, names, ch)
                     snp_positions_ch = np.arange(5000, last_start, 5000)
                 else:
-                    log(msg=f"compute region file for {ch}\n", level='STEP')
                     snp_positions_ch = snp_positions[i]
                 seg_df_ch = seg_df[seg_df["CHR"] == ch]
                 thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
@@ -137,6 +137,7 @@ def main(args=None):
         
         ret = sp.run(['gzip', '-6', segment_file])
         ret.check_returncode()
+        log(msg="computed all segment files", level='STEP')
     else:
         log(msg="found all segments intermediate files, skip", level='STEP')
     segment_file = segment_file_gz
@@ -238,8 +239,8 @@ run count array per chromosome
 
 Returns: <n> x <2d> np.ndarray
     at ith segment [left_i, right_i), for jth sample
-    entry [i, 2j]=#reads start in region [left_i, right_i)
-    entry [i, 2j + 1]=region mean read depth, given by mosdepth
+    entry [i, 2j]=#reads start in segment [left_i, right_i)
+    entry [i, 2j + 1]=segment mean read depth, given by mosdepth
 """
 def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: str):
     try:
@@ -294,6 +295,7 @@ def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str,
                 f'Run mosdepth (region) for {sample_name}\n',
                 level='STEP',
             )
+        sys.stderr.flush()
 
         out_prefix = os.path.join(outdir, sample_name)
         if os.path.exists(f"{out_prefix}.regions.bed.gz") and \
@@ -302,17 +304,19 @@ def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str,
                 f'Skipping mosdepth on sample {sample_name} ({out_prefix}* exists)\n',
                 level='STEP',
             )
-            return
-        msdp_cmd = [mosdepth, 
-                    '-t', str(threads), 
-                    '-Q', str(readquality),
-                    '--by', segment_file,
-                    '--no-per-base',
-                    out_prefix,
-                    bam_file]
-        with open(f"{outdir}/run_mosdepth_{sample_name}.err.log", 'w') as err, \
-            open(f"{outdir}/run_mosdepth_{sample_name}.out.log", 'w') as out:
-            ret = sp.run(msdp_cmd, stdout=out, stderr=err)
+        else:
+            msdp_cmd = [mosdepth, 
+                        '-t', str(threads), 
+                        '-Q', str(readquality),
+                        '--by', segment_file,
+                        '--no-per-base',
+                        out_prefix,
+                        bam_file]
+            err_fd = open(f"{outdir}/run_mosdepth_{sample_name}.err.log", 'w')
+            out_fd = open(f"{outdir}/run_mosdepth_{sample_name}.out.log", 'w')
+            ret = sp.run(msdp_cmd, stdout=out_fd, stderr=err_fd)
+            err_fd.close()
+            out_fd.close()
             ret.check_returncode()
     except Exception as e:
         log(f"ERROR! mosdepth region exception {e}", level="ERROR")
