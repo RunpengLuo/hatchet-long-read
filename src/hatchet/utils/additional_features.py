@@ -183,6 +183,32 @@ def workload_assignment(nproc: int, ntask: int, max_threads=4):
         threads_per_task = [1] * ntask
     return nworker, threads_per_task
 
+def load_vcf_file(vcf_file: str, read_type="ONT", phased=True):
+    df = pd.read_table(
+            vcf_file,
+            compression='gzip',
+            comment='#',
+            sep='\t',
+            names=["CHR", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "PHASE"],
+            usecols=['CHR', 'POS', 'PHASE'],
+            quoting=3,
+            low_memory=False,
+            dtype={'CHR': object, 'POS': np.uint32},
+        )
+    if phased:
+        if read_type == "ONT":
+            df.PHASE = df.PHASE.astype(str).apply(lambda x: x.split(':')[0]) # assumes first field is GT
+            df["FLIP"] = df.PHASE.str.contains('1|0', regex=False).astype(np.int8)
+            df["NOFLIP"] = df.PHASE.str.contains('0|1', regex=False).astype(np.int8)
+            # Drop entries without phasing output
+            df = df[df.FLIP + df.NOFLIP > 0]
+            # For exact duplicate entries, drop one
+            df = df.drop_duplicates()
+            # For duplicate entries with the same (CHR, POS) but different phase, drop all
+            df = df.drop_duplicates(subset=['CHR', 'POS'], keep=False)
+        else:
+            raise ValueError(f"read_type={read_type} not yet supported")
+    return df
 
 # FIXME to be simplified
 """
@@ -192,17 +218,16 @@ return:
 2. SNP counts in 2D matrix with dim #SNPs * #samples
 3. SNP dataframe
 """
-def read_snps(baf_file, ch, all_names, phasefile=None):
+def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None):
     """
     Read and validate SNP data for this patient (TSV table output from HATCHet deBAF.py).
     """
-    all_names = [
-        name for name in all_names if name != 'normal'
-    ]   # remove normal sample -- not looking for SNP counts from normal
-
+    # remove normal sample -- not looking for SNP counts from normal
+    all_names = [name for name in all_names if name != 'normal']
     # Read in HATCHet BAF table
     all_snps = pd.read_table(
         baf_file,
+        header=None,
         names=['CHR', 'POS', 'SAMPLE', 'REF', 'ALT', 'REFC', 'ALTC'],
         dtype={
             'CHR': object,
@@ -216,72 +241,41 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
     )
 
     # Keep only SNPs on this chromosome
-    snps = all_snps[all_snps.CHR == ch].sort_values(by=['POS', 'SAMPLE'])
-    snps = snps.reset_index(drop=True)
-
+    snps = all_snps[all_snps.CHR == ch].sort_values(by=['POS', 'SAMPLE'], ignore_index=True)
     if len(snps) == 0:
         raise ValueError(
             error(f'Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})')
         )
 
-    n_samples = len(all_names)
-    ensure(n_samples == len(snps.SAMPLE.unique(), 
-                            f'Expected {n_samples} samples, found {len(snps.SAMPLE.unique())} samples in SNPs file.'))
-    ensure(set(all_names) != set(snps.SAMPLE.unique()), 
-                f'Expected sample names did not match sample names in SNPs file.\n\
+    snps_samples = snps.SAMPLE.unique().tolist()
+    if len(all_names) != len(snps_samples) or set(all_names) != set(snps_samples):
+        raise ValueError(
+            error(f'Expected sample names did not match sample names in SNPs file.\n\
                 Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}')
-
+        )
 
     # Add total counts column
-    snpsv = snps.copy()
-    snpsv['TOTAL'] = snpsv.ALT + snpsv.REF
+    snps['TOTAL'] = snps.ALT + snps.REF
 
-    if phasefile is not None:
-        # Read in phasing output
-        phases = pd.read_table(
-            phasefile,
-            compression='gzip',
-            comment='#',
-            names='CHR\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tPHASE'.split(),
-            usecols=['CHR', 'POS', 'PHASE'],
-            quoting=3,
-            low_memory=False,
-            dtype={'CHR': object, 'POS': np.uint32},
-        )
-        # if the last column in phase file has other information,
-        # take the GT part, which is the first elements split by colon
-        # (e.g., GT:AD:DP:GQ:PL). This is needed for ONT data and
-        # does not have any effect on Illumina shapeit phased data
-        phases.PHASE = phases.PHASE.astype(str).apply(lambda x: x.split(":")[0])
-        phases['FLIP'] = phases.PHASE.str.contains('1|0', regex=False).astype(np.int8)  # noqa: W605
-        phases['NOFLIP'] = phases.PHASE.str.contains('0|1', regex=False).astype(np.int8)  # noqa: W605
-
-        # Drop entries without phasing output
-        phases = phases[phases.FLIP + phases.NOFLIP > 0]
-
-        # For exact duplicate entries, drop one
-        phases = phases.drop_duplicates()
-
-        # For duplicate entries with the same (CHR, POS) but different phase, drop all
-        phases = phases.drop_duplicates(subset=['CHR', 'POS'], keep=False)
-
+    if phasefile != None:
+        phased_df = load_vcf_file(phasefile, read_type="ONT", phased=True)
         # Merge tables: keep only those SNPs for which we have phasing output
-        snpsv = pd.merge(snpsv, phases, on=['CHR', 'POS'], how='left')
+        snps = pd.merge(snps, phased_df, on=['CHR', 'POS'], how='left')
 
     # Create counts array and find SNPs that are not present in all samples
-    snp_counts = snpsv.pivot(index='POS', columns='SAMPLE', values='TOTAL')
+    snp_counts = snps.pivot(index='POS', columns='SAMPLE', values='TOTAL')
     missing_pos = snp_counts.isna().any(axis=1)
 
     # Remove SNPs that are absent in any sample
     snp_counts = snp_counts.dropna(axis=0)
-    snpsv = snpsv[~snpsv.POS.isin(missing_pos[missing_pos].index)]
+    snps = snps[~snps.POS.isin(missing_pos[missing_pos].index)]
 
     # Pivot table for dataframe should match counts array and have no missing entries
-    check_pivot = snpsv.pivot(index='POS', columns='SAMPLE', values='TOTAL')
+    check_pivot = snps.pivot(index='POS', columns='SAMPLE', values='TOTAL')
     assert np.array_equal(check_pivot, snp_counts), 'SNP file reading failed'
     assert not np.any(check_pivot.isna()), 'SNP file reading failed'
     assert np.array_equal(all_names, list(snp_counts.columns))   # make sure that sample order is the same
-    return np.array(snp_counts.index), np.array(snp_counts), snpsv
+    return np.array(snp_counts.index), np.array(snp_counts), snps
 
 """
 load all unique snp positions from baf_file for all chromosomes
@@ -289,7 +283,7 @@ return a 2d SNP arrays, arr[i] represents snp positions for chromosomes[i]
 chromosomes are pre-sorted.
 baf and chromosomes should use same format for chr notation.
 """
-def load_snps_positions(baf_file: str, chromosomes: str):
+def load_snps_positions(baf_file: str, chromosomes: list):
     baf_df = pd.read_csv(baf_file, sep='\t', header=None,
                              usecols=range(2),
                              names=["CHR", "POS"])
