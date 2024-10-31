@@ -157,14 +157,15 @@ def main(args):
             if len(starts) == 0:
                 continue
             
-            block_bb = handle_hap_block_bins(ch, all_names, snpsv, 
+            block_bb = handle_hap_block_bins(ch, all_names, snpsv,
+                                             hb_start, hb_stop,
                                              starts, ends, totals, 
                                              rdrs, nonormalFlag)
             big_bb = pd.concat([big_bb, block_bb], ignore_index=True)
         # end
     # end
     log(msg=f"finish adaptive binning\n", level='STEP')
-    print(big_bb) #FIXME
+    print(big_bb["RD"]) #FIXME
 
     if nonormalFlag:
         for sample, df in big_bb.groupby("SAMPLE", sort=False):
@@ -205,7 +206,8 @@ get b-allelic frequency count
 def get_b_count(df: pd.DataFrame):
     return df.apply(lambda row: row.REF if row.FLIP == 1 else row.ALT, axis=1).sum()
 
-def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame, 
+def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
+                          block_start: int, block_stop: int, 
                           starts: list, ends: list, totals: list, rdrs: list,
                           nonormalFlag=False):
     block_bb = init_bb_dataframe()
@@ -233,7 +235,7 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
                 rdr, total_reads, normal_reads,
                 num_snps, b_count, total_snp_reads,
                 "", "", "", "", b_count / total_snp_reads,
-                start, end
+                block_start, block_stop
             ]
 
     for s in block_bb.SAMPLE.unique():
