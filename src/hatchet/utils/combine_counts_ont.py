@@ -275,8 +275,7 @@ def adaptive_bins_segment_ont(
         assert len(snp_thresholds) == len(total_counts), f"#tot_cts={len(total_counts)}\t#thres={len(snp_thresholds)}"
         assert len(snp_positions) == len(snp_counts), f"#snp_pos={len(snp_positions)}\t#snp_cts={len(snp_counts)}"
         assert chromosome[-1] not in ['X', 'Y'], "sex chromosome unsupported yet"
-        assert len(snp_positions) == len(snp_thresholds), f"#snp_pos={len(snp_positions)}\t#thres={len(snp_thresholds)}"
-        assert len(snp_thresholds) == len(snp_positions), f"#threshold={len(snp_thresholds)}\t#snps={len(snp_positions)}" 
+        # assert len(snp_positions) == len(snp_thresholds), f"#snp_pos={len(snp_positions)}\t#thres={len(snp_thresholds)}" 
     except AssertionError:
         log(msg=f"ERROR! {snp_thresholds[0]}\t{snp_thresholds[-1]}\t{snp_positions[0]}\t{snp_positions[-1]}\t{total_counts[0]}\t{total_counts[-1]}\n", level="ERROR")
         log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
@@ -307,11 +306,19 @@ def adaptive_bins_segment_ont(
     # one snp per threshold segment
     start = None
     end = None
+    j = 0 # snp counter
+    n_snps = len(snp_positions)
     for i in range(n_thresholds):
         if start == None:
             start = snp_thresholds[i, 0]
+        cstart = snp_thresholds[i, 0]
         end = snp_thresholds[i, 1]
-        bin_snp += snp_counts[i]
+
+        while j != n_snps and snp_positions[j] < end:
+            if snp_positions[j] >= cstart: # ensure inclusive SNP
+                bin_snp += snp_counts[j]
+            j += 1
+
         if use_averages_rd: # long read case
             bin_total += total_counts[i, odd_index]
             total_cond = np.all(bin_total >= min_total_reads)
