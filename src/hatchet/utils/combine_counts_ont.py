@@ -176,7 +176,6 @@ def main(args):
         for sample in all_names[1:]:
             nreads_sample = rc[rc.SAMPLE == sample].iloc[0]['#READS']
             correction = nreads_normal / nreads_sample
-            print(nreads_normal, nreads_sample, correction)
             big_bb.loc[big_bb.SAMPLE == sample, "RD"] *= correction
     
     if args['gc_correct']:
