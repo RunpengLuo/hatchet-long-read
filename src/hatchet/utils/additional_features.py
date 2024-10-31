@@ -113,27 +113,29 @@ def load_mosdepth_files(sample_names: list, mosdepth_files: list):
 
 # bb/bulk.bb
 def init_bb_dataframe():
-    bb_column_names = [
-        'CHR',
-        'UNIT',
-        'START',
-        'END',
-        'SAMPLE',
-        'RD',
-        'TOTAL_READS',
-        'NORMAL_READS',
-        'SNPS',
-        'BCOUNT',
-        'TOTAL_SNP_READS',
-        'HAPLO',
-        'SNP_POS',
-        'SNP_REF_COUNTS',
-        'SNP_ALT_COUNTS',
-        'BAF',
-        'BLOCK_START',
-        'BLOCK_END',
-    ]
-    return pd.DataFrame(columns=bb_column_names)
+    bb_column_names = {
+        'CHR': 'str',
+        'UNIT': 'str',
+        'START': 'int',
+        'END': 'int',
+        'SAMPLE': 'str',
+        'RD': 'float',
+        'TOTAL_READS': 'int',
+        'NORMAL_READS': 'int',
+        'SNPS': 'int',
+        'BCOUNT': 'int',
+        'TOTAL_SNP_READS': 'int',
+        'HAPLO': 'str',
+        'SNP_POS': 'int',
+        'SNP_REF_COUNTS': 'int',
+        'SNP_ALT_COUNTS': 'int',
+        'BAF': 'float',
+        'BLOCK_START': 'int',
+        'BLOCK_END': 'int'
+    }
+
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in bb_column_names.items()})
+
 
 
 

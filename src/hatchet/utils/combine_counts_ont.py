@@ -164,6 +164,7 @@ def main(args):
         # end
     # end
     log(msg=f"finish adaptive binning\n", level='STEP')
+    print(big_bb) #FIXME
 
     if nonormalFlag:
         for sample, df in big_bb.groupby("SAMPLE", sort=False):
@@ -176,7 +177,7 @@ def main(args):
             nreads_sample = rc[rc.SAMPLE == sample].iloc[0]['#READS']
             correction = nreads_normal / nreads_sample
             sample_idx = big_bb.SAMPLE == sample
-            big_bb.loc[sample_idx, 'RD'] = big_bb[sample_idx, "RD"] * correction
+            big_bb.loc[sample_idx, "RD"] = big_bb[sample_idx, "RD"] * correction
     
     if args['gc_correct']:
         log(
@@ -372,7 +373,7 @@ def adaptive_bins_segment_ont(
                     rdrs_bin = (totals[-2][1:] + totals[-1][1:]) / (totals[-2][0] + totals[-1][0])
                 else:
                     rdrs_bin = totals[-1][1:] / totals[-1][0]
-
+        rdrs_bin = np.array(rdrs_bin, dtype=np.float32)
         if merge_last_bin: # replace the previous bin
             rdrs[-1] = rdrs_bin
         else:
