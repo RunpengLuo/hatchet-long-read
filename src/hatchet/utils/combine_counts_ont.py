@@ -184,11 +184,11 @@ def main(args):
             msg='# In long read sequencing pipeline, GC correction for RD is not recommended\n',
             level='WARN',
         )
-        log(
-            msg='# Performing GC bias correction on read depth signal\n',
-            level='STEP',
-        )
-        big_bb = rd_gccorrect(big_bb, referencefasta)
+        # log(
+        #     msg='# Performing GC bias correction on read depth signal\n',
+        #     level='STEP',
+        # )
+        # big_bb = rd_gccorrect(big_bb, referencefasta)
     
     # convert back to 1-indexed inclusive
     # TODO can make this consistent?
