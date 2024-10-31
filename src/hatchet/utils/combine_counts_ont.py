@@ -210,7 +210,7 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
     for i in range(len(starts)): # per bin
         start, end = starts[i], ends[i]
         df = snpsv[(snpsv.POS >= start) & (snpsv.POS <= end)]
-        df: pd.DataFrame = df.dropna(subset=["FILP"])
+        df: pd.DataFrame = df.dropna(subset=["FLIP"])
         df_groups = df.groupby("SAMPLE")
         if len(df) == 0:
             continue
