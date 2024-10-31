@@ -129,7 +129,7 @@ def main(args):
                 # ignore small block TODO make parameter?
                 continue
 
-            block_snps_idx = np.where((snp_positions >= effect_start) & (snp_positions < effect_stop))[0]
+            block_snps_idx = np.where((snp_positions >= thres1[0]) & (snp_positions < thres2[1]))[0]
             if len(block_snps_idx) == 0:
                 # no SNPs in current block
                 continue
