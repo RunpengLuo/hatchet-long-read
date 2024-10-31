@@ -219,7 +219,7 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
             sample = all_names[s]
             df_sample = df_groups.get_group(sample)
             num_snps = len(df_sample)
-            if len(num_snps) == 0:
+            if num_snps == 0:
                 continue
             total_reads = totals[i][s]
             rdr = rdrs[i][s]
