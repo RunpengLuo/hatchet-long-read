@@ -63,6 +63,8 @@ def main(args=None):
     segfile = args['seg_file']
     refversion = args["refversion"]
 
+    # TODO think about whether we use custom segfile here
+    # since we still need to compute per-snp mean depth.
     if refversion != None: # segfile == None
         with path(hatchet.data, f'{args["refversion"]}.segments.bed') as p:
             segfile = str(p)
@@ -240,7 +242,7 @@ def main(args=None):
         for name in names:
             f.write('{}\t{}\n'.format(name, total[name]))
     
-    log(msg=f'count-reads-ont completed successfully, processed time: {time.process_time()-ts}sec\n', level='STEP')
+    log(msg=f'count-reads-ont completed, processed time (exclude sp): {time.process_time()-ts}sec\n', level='STEP')
     return
 
 """
@@ -254,8 +256,8 @@ Returns: <n> x <2d> np.ndarray
 def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: str):
     try:
         [tot_file, thres_file] = get_array_file_path(outdir, chromosome)
-        reg_df_ch, _ = load_seg_file(thres_file, use_chr, [])
-        segments = reg_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
+        seg_df_ch, _ = load_seg_file(thres_file, use_chr, [])
+        segments = seg_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
         num_segments = len(segments)
 
         arr = np.zeros((num_segments, len(all_names) * 2))

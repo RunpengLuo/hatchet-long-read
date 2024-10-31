@@ -318,7 +318,7 @@ def combine_counts(args, haplotype_file, mosdepth_files):
                         # rd cannot be computed since there are no reads in tumor or normal
                         continue
                     tot_reads = round(min(20*totals[i][0],totals[i][1]))
-                    rd = int(min(20, rdrs[i][0]))
+                    rd = int(min(20, rdrs[i][0])) #FIXME it doesn't scale?
                     nor_reads = int(totals[i][0])
                     bin_row = [
                         ch,
@@ -366,7 +366,7 @@ def combine_counts(args, haplotype_file, mosdepth_files):
     normal_name = all_names[0]
     nreads_normal = rc[rc.SAMPLE == normal_name].iloc[0]['#READS']
     if nonormalFlag:
-        for sample, df in big_bb.groupby('SAMPLE'):
+        for sample, df in big_bb.groupby('SAMPLE'): #FIXME bug, groupby cause sorting
             mean_rd = np.mean(df['RD'])
             big_bb.loc[big_bb.SAMPLE == sample, 'RD'] = df['RD'] / mean_rd
     else:

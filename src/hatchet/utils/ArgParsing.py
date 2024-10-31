@@ -744,6 +744,21 @@ def parse_combine_counts_args(args=None):
         help='VCF file containing phasing for heterozygous germline SNPs',
     )
     parser.add_argument(
+        '--gtf',
+        required=False,
+        default=None,
+        type=str,
+        help='Haplotype block GTF file (ONT) testing',
+    )
+    parser.add_argument(
+        '--mos_rgs',
+        required=False,
+        nargs='+',
+        type=str,
+        default=[],
+        help='Mosdepth 1k file per sample, same order as listed in rdr/samples.txt (ONT) testing',
+    )
+    parser.add_argument(
         '-s',
         '--max_blocksize',
         required=False,
@@ -832,6 +847,15 @@ def parse_combine_counts_args(args=None):
         (args.phase is None) or isfile(args.phase),
         'The specified phasing file does not exist!',
     )
+    ensure(
+        (args.gtf is None) or isfile(args.gtf),
+        'The specified haplotype GTF file does not exist!',
+    )
+    mos_rg_files = args.mos_rgs
+    if len(mos_rg_files) != 0:
+        for mos_file in mos_rg_files:
+            ensure(isfile(mos_file), "The specified mosdepth region file does not exists")
+
     ensure(args.max_blocksize > 0, 'The max_blocksize argument must be positive.')
     ensure(args.max_spb > 0, 'The max_snps_per_bin argument must be positive.')
     ensure(
@@ -846,7 +870,7 @@ def parse_combine_counts_args(args=None):
     namesfile = os.path.join(args.array, 'samples.txt')
     ensure(
         os.path.exists(namesfile),
-        'Missing file containing sample names (1 per line): {namesfile}',
+        f'Missing file containing sample names (1 per line): {namesfile}',
     )
     names = open(namesfile).read().split()
 
@@ -922,6 +946,8 @@ def parse_combine_counts_args(args=None):
         'array': args.array,
         'totalcounts': args.totalcounts,
         'phase': args.phase,
+        'gtf': args.gtf,
+        "mos_rg_files": mos_rg_files,
         'blocksize': args.max_blocksize,
         'max_snps_per_block': args.max_spb,
         'test_alpha': args.alpha,

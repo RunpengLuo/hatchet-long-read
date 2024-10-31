@@ -92,6 +92,15 @@ def load_gtf_file(gtf_file: str):
         ],
     )
 
+# only load bed format dataframe
+# original gtf format use 1-based inclusive indexing
+# convert to 0-indexing left-open right-close format
+# https://genome.ucsc.edu/FAQ/FAQformat.html#format4
+def load_gtf_file_bed(gtf_file: str):
+    df = load_gtf_file(gtf_file)[["CHR", "START", "END"]]
+    df.loc[:, "START"] = df.START - 1
+    return df[["CHR", "START", "END"]]
+
 def load_mosdepth_files(sample_names: list, mosdepth_files: list):
     bed_mosdepths = []
     for sname, sbed_file in zip(sample_names, mosdepth_files):
@@ -215,7 +224,7 @@ def load_vcf_file(vcf_file: str, read_type="ONT", phased=True):
 # TODO move it to separate file since it is commonly used by two module
 return:
 1. SNP absolute positions
-2. SNP counts in 2D matrix with dim #SNPs * #samples
+2. SNP total counts in 2D matrix with dim #SNPs * #samples
 3. SNP dataframe
 """
 def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None):
@@ -307,25 +316,24 @@ seg_df_df: 0-based and left-close&right-open, possibly unsorted.
 return nx2 thresholds
 """
 def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, consider_snp=True):
-    # snp_inteverals = np.trunc(np.vstack([snp_positions[:-1], snp_positions[1:]]).mean(axis=0)).astype(np.uint32)
     seg_df_ch = seg_df_ch.sort_values(by="START", ignore_index=True)
     segments = seg_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
-    snp_positions = snp_positions - 1 # translate to 0-based index
+    snp_positions_1 = snp_positions - 1 # translate to 0-based index
     thresholds = None
     init_thres = False
     for [sstart, sstop] in segments:
         # find all snp positions within boundery
-        left_idx = np.argmax(snp_positions >= sstart)
-        if not consider_snp or snp_positions[left_idx] < sstart: 
+        left_idx = np.argmax(snp_positions_1 >= sstart)
+        if not consider_snp or snp_positions_1[left_idx] < sstart: 
             # argmax -> 0, no SNP found with position >= sstart. or ignore SNP positions
             sub_segments = np.array([[sstart, sstop]])
         else:
-            right_idx = np.argmax(snp_positions >= sstop)
-            if snp_positions[right_idx] < sstop:
+            right_idx = np.argmax(snp_positions_1 >= sstop)
+            if snp_positions_1[right_idx] < sstop:
                 # argmax returns 0, no SNP found after sstop, bound left only
-                bounded_snp_positions = snp_positions[left_idx:]
+                bounded_snp_positions = snp_positions_1[left_idx:]
             else:
-                bounded_snp_positions = snp_positions[left_idx:right_idx]
+                bounded_snp_positions = snp_positions_1[left_idx:right_idx]
             # for every adjacent SNP position, record the midpoint as the interval splitting position.
             snp_thresholds = np.trunc(np.vstack([bounded_snp_positions[:-1], 
                                                  bounded_snp_positions[1:]]).mean(axis=0)).astype(np.uint32)
