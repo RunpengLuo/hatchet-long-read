@@ -165,7 +165,6 @@ def main(args):
         # end
     # end
     log(msg=f"finish adaptive binning\n", level='STEP')
-    print(big_bb["RD"]) #FIXME
 
     if nonormalFlag:
         for sample, df in big_bb.groupby("SAMPLE", sort=False):
@@ -177,8 +176,8 @@ def main(args):
         for sample in all_names[1:]:
             nreads_sample = rc[rc.SAMPLE == sample].iloc[0]['#READS']
             correction = nreads_normal / nreads_sample
-            sample_idx = big_bb.SAMPLE == sample
-            big_bb.loc[sample_idx, "RD"] = big_bb[sample_idx, "RD"] * correction
+            print(nreads_normal, nreads_sample, correction)
+            big_bb.loc[big_bb.SAMPLE == sample, "RD"] *= correction
     
     if args['gc_correct']:
         log(
