@@ -281,7 +281,7 @@ def adaptive_bins_segment_ont(
         log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
         sys.exit(1)
     
-    log(msg=f"adaptive binning {ch}:{snp_thresholds[0]}-{snp_thresholds[1]} #seg={len(snp_thresholds)} and #snps={snp_positions}\n", level="STEP")
+    log(msg=f"adaptive binning {ch}:{snp_thresholds[0]}-{snp_thresholds[-1]} #seg={len(snp_thresholds)} and #snps={len(snp_positions)}\n", level="STEP")
 
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
