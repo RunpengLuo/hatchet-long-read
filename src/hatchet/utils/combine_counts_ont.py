@@ -129,7 +129,7 @@ def main(args):
                 # ignore small block TODO make parameter?
                 continue
 
-            block_snps_idx = np.where((snp_positions >= effect_start) & (snp_positions <= effect_stop))[0]
+            block_snps_idx = np.where((snp_positions >= effect_start) & (snp_positions < effect_stop))[0]
             if len(block_snps_idx) == 0:
                 # no SNPs in current block
                 continue
@@ -137,7 +137,7 @@ def main(args):
             block_snp_pos = snp_positions[block_snps_idx]
             block_snp_total = snp_totals[block_snps_idx]
 
-            block_thres = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
+            block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
             block_totals = tot_arr_ch[tidx1:tidx2 + 1, ]  # n-by-4
 
             block_mos = [(n, mos[(mos.START > hb_start - 1000) & (mos.END < hb_stop + 1000)]) 
