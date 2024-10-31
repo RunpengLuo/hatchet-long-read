@@ -172,7 +172,7 @@ def main(args):
     else:
         rc = pd.read_table(args['totalcounts'], header=None, names=['SAMPLE', '#READS'])
         nreads_normal = rc[rc.SAMPLE == all_names[0]].iloc[0]['#READS']
-        for sample in all_names[1]:
+        for sample in all_names[1:]:
             nreads_sample = rc[rc.SAMPLE == sample].iloc[0]['#READS']
             correction = nreads_normal / nreads_sample
             sample_idx = big_bb.SAMPLE == sample
