@@ -148,7 +148,7 @@ def main(args):
                 total_counts=block_totals,
                 snp_positions=block_snp_pos,
                 snp_counts=block_snp_total,
-                chromosome=ch,
+                ch=ch,
                 min_snp_reads=msr,
                 min_total_reads=mtr,
                 nonormalFlag=nonormalFlag,
