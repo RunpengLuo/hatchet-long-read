@@ -279,6 +279,7 @@ def adaptive_bins_segment_ont(
         assert len(snp_thresholds) == len(snp_positions), f"#threshold={len(snp_thresholds)}\t#snps={len(snp_positions)}" 
     except AssertionError:
         log(msg=f"ERROR! {snp_thresholds[0]}\t{snp_thresholds[-1]}\t{snp_positions[0]}\t{snp_positions[-1]}\t{total_counts[0]}\t{total_counts[-1]}\n", level="ERROR")
+        log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
         sys.exit(1)
 
     n_samples = total_counts.shape[1] // 2
@@ -375,7 +376,7 @@ def adaptive_bins_segment_ont(
         bin_snp[:] = 0
         bin_sep_idx.append(i) # add bin separator
     
-    log(msg=f"hblock {start}-{end} has {len(starts)} bins", level="STEP")
+    log(msg=f"hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
     # TODO bss may also be useful?
     return starts, ends, totals, rdrs
     
