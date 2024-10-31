@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import gzip
 import time
@@ -270,11 +271,15 @@ def adaptive_bins_segment_ont(
     Compute adaptive bins for a single haplotype block.
     Parameters: TBD
     """
-    assert len(snp_thresholds) == len(total_counts)
-    assert len(snp_positions) == len(snp_counts)
-    assert chromosome[-1] not in ['X', 'Y'], "sex chromosome unsupported yet"
-    assert len(snp_positions) == len(snp_thresholds)
-    assert len(snp_thresholds) == len(snp_positions), f"#threshold={len(snp_thresholds)} != #snps={len(snp_positions)}" 
+    try:
+        assert len(snp_thresholds) == len(total_counts), f"#tot_cts={len(total_counts)}\t#thres={len(snp_thresholds)}"
+        assert len(snp_positions) == len(snp_counts), f"#snp_pos={len(snp_positions)}\t#snp_cts={len(snp_counts)}"
+        assert chromosome[-1] not in ['X', 'Y'], "sex chromosome unsupported yet"
+        assert len(snp_positions) == len(snp_thresholds), f"#snp_pos={len(snp_positions)}\t#thres={len(snp_thresholds)}"
+        assert len(snp_thresholds) == len(snp_positions), f"#threshold={len(snp_thresholds)}\t#snps={len(snp_positions)}" 
+    except AssertionError:
+        log(msg=f"ERROR! {snp_thresholds[0]}\t{snp_thresholds[-1]}\t{snp_positions[0]}\t{snp_positions[-1]}\t{total_counts[0]}\t{total_counts[-1]}\n", level="ERROR")
+        sys.exit(1)
 
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
