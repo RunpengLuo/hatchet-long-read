@@ -282,7 +282,7 @@ def adaptive_bins_segment_ont(
         log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
         sys.exit(1)
     
-    log(msg=f"adaptive binning {ch}:{snp_thresholds[0]}-{snp_thresholds[-1]} #seg={len(snp_thresholds)} and #snps={len(snp_positions)}\n", level="STEP")
+    print(f"adaptive binning {ch}:{snp_thresholds[0]}-{snp_thresholds[-1]} #seg={len(snp_thresholds)} and #snps={len(snp_positions)}\n")
 
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
@@ -368,7 +368,7 @@ def adaptive_bins_segment_ont(
                 rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) for (_, _mos_int) in mos_intersect]
             else:
                 norm = np.mean(mos_intersect[0][1]['AVG_DEPTH'])
-                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect]
+                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect[1:]]
         else:
             if nonormalFlag:
                 rdrs_bin = totals[0:] / totals[0:]
