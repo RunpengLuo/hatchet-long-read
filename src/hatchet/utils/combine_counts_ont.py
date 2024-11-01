@@ -301,10 +301,8 @@ def adaptive_bins_segment_ont(
 
     # per-threshold bin counts
     bin_total = np.zeros(n_samples, dtype=np.uint32)
-    if nonormalFlag:
-        bin_snp = np.zeros(n_samples, dtype=np.uint32)
-    else: # ignore the normal sample
-        bin_snp = np.zeros(n_samples - 1, dtype=np.uint32)
+    bin_snp_size = n_samples if nonormalFlag else n_samples - 1
+    bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
     
     # one snp per threshold segment
     start = None
@@ -382,8 +380,8 @@ def adaptive_bins_segment_ont(
         # init next round
         start = None
         end = None
-        bin_total[:] = 0
-        bin_snp[:] = 0
+        bin_total[:] = np.zeros(n_samples, dtype=np.uint32)
+        bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
         bin_sep_idx.append(i) # add bin separator
     
     log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
