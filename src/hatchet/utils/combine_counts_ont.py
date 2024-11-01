@@ -380,7 +380,7 @@ def adaptive_bins_segment_ont(
         # init next round
         start = None
         end = None
-        bin_total[:] = np.zeros(n_samples, dtype=np.uint32)
+        bin_total = np.zeros(n_samples, dtype=np.uint32)
         bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
         bin_sep_idx.append(i) # add bin separator
     
