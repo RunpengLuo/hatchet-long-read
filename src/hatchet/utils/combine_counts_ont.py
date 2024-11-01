@@ -337,7 +337,13 @@ def adaptive_bins_segment_ont(
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
         
+        print(i, j)
+        print("bin_snp: ", bin_snp)
+        print("bin_total: ", bin_total)
+        
         if not use_averages_rd and i + 1 < n_thresholds:
+            print("next threshold: ", total_counts[i + 1])
+            assert any(bin_total > total_counts[i + 1, odd_index])
             bin_total -= total_counts[i + 1, odd_index]
 
         if merge_last_bin:
