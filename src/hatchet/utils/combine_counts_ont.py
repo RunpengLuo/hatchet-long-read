@@ -484,6 +484,8 @@ def adaptive_bins_segment_ont_ver2(
                 print(f"tot_counts:{total_counts}")
                 print(f"bin_total:{bin_total}")
                 print(f"i:{i}\tstarts: {starts}\tends: {ends}\tlast={merge_last_bin}")
+                print(f"merged_depth:{merged_depth}\tmin_total_reads:{min_total_reads}")
+                print(f"bin_snp:{bin_snp}\tmin_snp_reads:{min_snp_reads}")
                 raise AssertionError
             rdrs_bin = np.array(totals[-1][:] / totals[-1][0], dtype=np.float32)
         if merge_last_bin: # replace the previous bin
