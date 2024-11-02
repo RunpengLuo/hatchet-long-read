@@ -467,6 +467,8 @@ def adaptive_bins_segment_ont_ver2(
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
         if merge_last_bin:
+            acc_bases = totals[-1] * (ends[-1] - starts[-1]) + bin_total
+            acc_length = end - starts[-1]
             totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
             ends[-1] = end
             bss[-1] += bin_snp
@@ -480,6 +482,7 @@ def adaptive_bins_segment_ont_ver2(
             print(f"thres:{snp_thresholds}\t{n_thresholds}")
             print(f"tot_counts:{total_counts}")
             print(f"totals:{totals}")
+            print(f"acc_bases:{acc_bases}\tacc_length:{acc_length}")
             print(f"bin_total:{bin_total}")
             print(f"i:{i}\tstarts: {starts}\tends: {ends}\tlast={merge_last_bin}")
             print(f"merged_depth:{merged_depth}\t{end - start}\tmin_total_reads:{min_total_reads}")
