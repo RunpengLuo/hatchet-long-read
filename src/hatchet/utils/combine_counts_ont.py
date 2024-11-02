@@ -425,7 +425,7 @@ def adaptive_bins_segment_ont_ver2(
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
 
-    # mean read depth for ith sample
+    # mean read depth for ith sample, ignore starts count!
     odd_index = np.array([i * 2 + 1 for i in range(n_samples)], dtype=np.int8)
 
     starts = []
@@ -479,7 +479,12 @@ def adaptive_bins_segment_ont_ver2(
         if nonormalFlag:
             rdrs_bin = np.array(totals[0:] / totals[0:], dtype=np.float32)
         else:
-            assert totals[-1][0] != 0, f"tot: {totals}\t{i}\tstarts: {starts}\tends: {ends}\tlast={merge_last_bin}\n"
+            if totals[-1][0] == 0:
+                print(f"thres:{snp_thresholds}\t{n_thresholds}")
+                print(f"tot_counts:{total_counts}")
+                print(f"bin_total:{bin_total}")
+                print(f"i:{i}\tstarts: {starts}\tends: {ends}\tlast={merge_last_bin}")
+                raise AssertionError
             rdrs_bin = np.array(totals[-1][:] / totals[-1][0], dtype=np.float32)
         if merge_last_bin: # replace the previous bin
             rdrs[-1] = rdrs_bin
