@@ -209,11 +209,6 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
                           block_start: int, block_stop: int, 
                           starts: list, ends: list, totals: list, rdrs: list,
                           nonormalFlag=False):
-    print(ch, all_names, block_start, block_stop)
-    print(totals)
-    print(rdrs)
-    print(starts)
-    print(ends)
     block_bb = init_bb_dataframe()
     for i in range(len(starts)): # per bin
         start, end = starts[i], ends[i]
@@ -472,11 +467,11 @@ def adaptive_bins_segment_ont_ver2(
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
         if merge_last_bin:
-            totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) / (end - starts[-1])
+            totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
             ends[-1] = end
             bss[-1] += bin_snp
         else:
-            totals.append(bin_total / (end - start))
+            totals.append(bin_total // (end - start))
             starts.append(start)
             ends.append(end)
             bss.append(bin_snp)

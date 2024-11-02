@@ -162,7 +162,7 @@ def read_bb(bbfile, subset=None):
             # print(ch, gaps)
 
             if len(gaps) > 0:
-                if len(gaps) == 1:
+                if len(gaps) > 1:
                     sp.log('Found a chromosome with >1 gaps between bins. Taking the largest'
                            'gap as the centromere', level='WARN')
                 largest_gap_index = np.argmax([df.iloc[gaps[i] + 1].START - df.iloc[gaps[i]].END for i in range(len(gaps))])
