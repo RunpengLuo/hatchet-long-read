@@ -217,8 +217,6 @@ def hmm_model_select(tracks, minK=20, maxK=50, tau=10e-6, tmat='diag', decode_al
     print(X)
     for i, track in enumerate(tracks):
         print(i, track)
-        if not all(np.isfinite(track)):
-            raise ValueError("Infinite")
 
     best_K = 0
     best_score = np.inf # BIC is always negative
