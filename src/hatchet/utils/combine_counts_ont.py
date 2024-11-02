@@ -473,7 +473,7 @@ def adaptive_bins_segment_ont_ver2(
         print("bin_total: ", bin_total)
 
         if merge_last_bin:
-            totals[-1] = (totals[-1] * (end[-1] - start[-1]) + bin_total) / (end - start[-1])
+            totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) / (end - starts[-1])
             ends[-1] = end
             bss[-1] += bin_snp
         else:
