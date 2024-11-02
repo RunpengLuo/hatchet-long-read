@@ -209,6 +209,11 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
                           block_start: int, block_stop: int, 
                           starts: list, ends: list, totals: list, rdrs: list,
                           nonormalFlag=False):
+    print(ch, all_names, block_start, block_stop)
+    print(totals)
+    print(rdrs)
+    print(starts)
+    print(ends)
     block_bb = init_bb_dataframe()
     for i in range(len(starts)): # per bin
         start, end = starts[i], ends[i]
@@ -433,7 +438,6 @@ def adaptive_bins_segment_ont_ver2(
     rdrs = []
     totals = []
     bss = []
-    bin_sep_idx = []
 
     # per-threshold total aligned bases
     bin_total = np.zeros(n_samples, dtype=np.uint32)
@@ -467,11 +471,6 @@ def adaptive_bins_segment_ont_ver2(
                 continue
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
-        
-        print(i, j)
-        print("bin_snp: ", bin_snp)
-        print("bin_total: ", bin_total)
-
         if merge_last_bin:
             totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) / (end - starts[-1])
             ends[-1] = end
@@ -482,12 +481,10 @@ def adaptive_bins_segment_ont_ver2(
             ends.append(end)
             bss.append(bin_snp)
 
-        rdrs_bin = []
         if nonormalFlag:
-            rdrs_bin = totals[0:] / totals[0:]
+            rdrs_bin = np.array(totals[0:] / totals[0:], dtype=np.float32)
         else:
-            rdrs_bin = totals[-1][1:] / totals[-1][0]
-        rdrs_bin = np.array(rdrs_bin, dtype=np.float32)
+            rdrs_bin = np.array(totals[-1][1:] / totals[-1][0], dtype=np.float32)
         if merge_last_bin: # replace the previous bin
             rdrs[-1] = rdrs_bin
         else:
@@ -498,7 +495,6 @@ def adaptive_bins_segment_ont_ver2(
         end = None
         bin_total = np.zeros(n_samples, dtype=np.uint32)
         bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
-        bin_sep_idx.append(i) # add bin separator
     
     log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
     # TODO bss may also be useful?
