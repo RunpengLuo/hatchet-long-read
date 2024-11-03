@@ -102,19 +102,19 @@ def main(args):
         tot_arr_ch = np.loadtxt(tot_file, dtype=np.uint32)
 
         # filter by normal read depth
-        tot_keep_idx = np.where(tot_arr_ch[:, 1] >= min_normal_reads)
-        tot_arr_ch = tot_arr_ch[tot_keep_idx]
+        # tot_keep_idx = np.where(tot_arr_ch[:, 1] >= min_normal_reads)
+        # tot_arr_ch = tot_arr_ch[tot_keep_idx]
 
         thres_df_ch, _ = load_seg_file(thres_file, use_chr)
         log(msg=f"{ch}\t#thresholds (raw)={len(thres_df_ch)}\n", level="STEP")
-        thres_df_ch = thres_df_ch.iloc[tot_keep_idx]
-        log(msg=f"{ch}\t#thresholds (filtered)={len(thres_df_ch)}\n", level="STEP")
+        # thres_df_ch = thres_df_ch.iloc[tot_keep_idx]
+        # log(msg=f"{ch}\t#thresholds (filtered)={len(thres_df_ch)}\n", level="STEP")
         thres_arr_ch = thres_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
 
         hap_blocks_ch = corr_hap_blocks[corr_hap_blocks.CHR == ch]
         log(msg=f"{ch}\t#hap blocks (raw)={len(hap_blocks_ch)}\n", level="STEP")
-        hap_blocks_ch = intersect_segments(thres_df_ch, hap_blocks_ch, raise_err=True)
-        log(msg=f"{ch}\t#hap blocks (filtered)={len(hap_blocks_ch)}\n", level="STEP")
+        # hap_blocks_ch = intersect_segments(thres_df_ch, hap_blocks_ch, raise_err=True)
+        # log(msg=f"{ch}\t#hap blocks (filtered)={len(hap_blocks_ch)}\n", level="STEP")
 
         # TODO parallel this step
         for _, row in hap_blocks_ch.iterrows():
@@ -135,12 +135,8 @@ def main(args):
             if tidx1 > tidx2:
                 continue
 
-            effect_start = max(thres1[0], hb_start)
-            effect_stop = min(thres2[1], hb_stop)
-
-            if effect_start < 1000 or effect_stop - effect_start < 1000:
-                # ignore small block TODO make parameter?
-                continue
+            # effect_start = max(thres1[0], hb_start)
+            # effect_stop = min(thres2[1], hb_stop)
 
             block_snps_idx = np.where((snp_positions >= thres1[0]) & (snp_positions < thres2[1]))[0]
             if len(block_snps_idx) == 0:
