@@ -100,8 +100,8 @@ def main(args):
         tot_file, thres_file = get_array_file_path(rdr_dir, ch)
         tot_arr_ch = np.loadtxt(tot_file, dtype=np.uint32)
 
-        # filter by normal read counts
-        tot_keep_idx = np.where(tot_arr_ch[:, 0] >= min_normal_reads)
+        # filter by normal read depth
+        tot_keep_idx = np.where(tot_arr_ch[:, 1] >= min_normal_reads)
         tot_arr_ch = tot_arr_ch[tot_keep_idx]
         thres_df_ch, _ = load_seg_file(thres_file, use_chr)
         thres_df_ch = thres_df_ch.iloc[tot_keep_idx]
