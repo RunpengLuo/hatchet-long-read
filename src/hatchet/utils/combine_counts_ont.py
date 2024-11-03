@@ -149,8 +149,7 @@ def main(args):
             block_mos = [(n, mos[(mos.START > hb_start - 1000) & (mos.END < hb_stop + 1000)]) 
                 for n, mos in mosdepth_ch]
             
-            (starts, ends, totals, rdrs) = adaptive_bins_segment_ont_ver2(
-            # (starts, ends, totals, rdrs) = adaptive_bins_segment_ont(
+            (starts, ends, totals, bss, rdrs) = adaptive_bins_segment_ont_ver2(
                 snp_thresholds=block_thres,
                 total_counts=block_totals,
                 snp_positions=block_snp_pos,
@@ -432,16 +431,6 @@ def adaptive_bins_segment_ont_ver2(
     Compute adaptive bins for a single haplotype block.
     Parameters: TBD
     """
-    try:
-        assert len(snp_thresholds) == len(total_counts), f"#tot_cts={len(total_counts)}\t#thres={len(snp_thresholds)}"
-        assert len(snp_positions) == len(snp_counts), f"#snp_pos={len(snp_positions)}\t#snp_cts={len(snp_counts)}"
-        assert ch[-1] not in ['X', 'Y'], "sex chromosome unsupported yet"
-        # assert len(snp_positions) == len(snp_thresholds), f"#snp_pos={len(snp_positions)}\t#thres={len(snp_thresholds)}" 
-    except AssertionError:
-        log(msg=f"ERROR! {snp_thresholds[0]}\t{snp_thresholds[-1]}\t{snp_positions[0]}\t{snp_positions[-1]}\t{total_counts[0]}\t{total_counts[-1]}\n", level="ERROR")
-        log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
-        sys.exit(1)
-
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
 
@@ -487,29 +476,41 @@ def adaptive_bins_segment_ont_ver2(
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
         if merge_last_bin:
-            totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
-            ends[-1] = end
-            bss[-1] += bin_snp
+            last_total = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
         else:
-            totals.append(bin_total // (end - start))
-            starts.append(start)
-            ends.append(end)
-            bss.append(bin_snp)
+            last_total = bin_total // (end - start)
+        # if merge_last_bin:
+        #     totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
+        #     ends[-1] = end
+        #     bss[-1] += bin_snp
+        # else:
+        #     totals.append(bin_total // (end - start))
+        #     starts.append(start)
+        #     ends.append(end)
+        #     bss.append(bin_snp)
 
         if nonormalFlag:
-            rdrs_bin = np.array(totals[-1] / totals[-1], dtype=np.float32)
+            rdrs_bin = np.array(last_total / last_total, dtype=np.float32)
         else:
-            if totals[-1][0] == 0:
-                log(msg=f"WARN! zero normal reads found in bin {ch}:{starts[-1]}-{ends[-1]} in block {snp_thresholds[0, 0]}:{snp_thresholds[-1, 1]}\n",
-                    level="STEP")
-                rdrs_bin = np.zeros(n_samples, dtype=np.float32)
+            if last_total[0] == 0:
+                rdrs_bin = np.zeros(n_samples, dtype=np.float32) # avoid div0 error, propogate.
             else:
-                rdrs_bin = np.array(totals[-1] / max(totals[-1][0], 0), dtype=np.float32)
+                rdrs_bin = np.array(last_total / last_total[0], dtype=np.float32)
 
-        if merge_last_bin: # replace the previous bin
-            rdrs[-1] = rdrs_bin
+        if all(rdrs_bin[:] > 0):
+            if merge_last_bin: # replace the previous bin
+                totals[-1] = last_total
+                ends[-1] = end
+                bss[-1] += bin_snp
+                rdrs[-1] = rdrs_bin
+            else:
+                totals.append(last_total)
+                starts.append(start)
+                ends.append(end)
+                bss.append(bin_snp)
+                rdrs.append(rdrs_bin)
         else:
-            rdrs.append(rdrs_bin)
+            log(msg=f"WARN! RDR=0 found for any sample in current bin {ch}:{start}-{end} in block, skip merge/append\n", level="STEP")
         
         # init next round
         start = None
@@ -519,7 +520,7 @@ def adaptive_bins_segment_ont_ver2(
     
     # log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
     # TODO bss may also be useful?
-    return starts, ends, totals, rdrs
+    return starts, ends, totals, bss, rdrs
 
 if __name__ == '__main__':
     main()
