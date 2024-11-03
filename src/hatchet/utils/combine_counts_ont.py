@@ -162,7 +162,7 @@ def main(args):
                 mos_block=block_mos
             )
 
-            summary_df[len(summary_df)] = [
+            summary_df.loc[len(summary_df)] = [
                 ch,
                 hb_start,
                 hb_stop,
