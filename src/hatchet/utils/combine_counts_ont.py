@@ -466,7 +466,7 @@ def adaptive_bins_segment_ont_ver2(
 
         merge_last_bin = False
         if not nonormalFlag and total_counts[i, 1] == 0:
-            log(msg=f"WARN! normal depth = 0 for current bin {ch}:{start}-{end} in block\n", level="STEP")
+            log(msg=f"WARN! normal depth = 0 for current bin {ch}:{cstart}-{end} in block\n", level="STEP")
             if all(bin_total == 0) or i <= 0: # no previous bins
                 log(msg=f"no previous bin, skip\n", level="STEP")
                 continue
