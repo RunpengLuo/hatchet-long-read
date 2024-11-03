@@ -136,6 +136,20 @@ def init_bb_dataframe():
 
     return pd.DataFrame({c: pd.Series(dtype=t) for c, t in bb_column_names.items()})
 
+def init_summary_dataframe():
+    bb_column_names = {
+        'CHR': 'str',
+        'BLOCK_START': 'int',
+        'BLOCK_END': 'int',
+        'BLOCK_LEN': 'int',
+        'REAL_START': 'int',
+        'REAL_END': 'int',
+        'NUM_THRESHOLDS': 'int',
+        'NUM_SNPS': 'int',
+        'NUM_BIN': 'int'
+    }
+
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in bb_column_names.items()})
 
 
 

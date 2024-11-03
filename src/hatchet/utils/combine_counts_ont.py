@@ -26,6 +26,7 @@ from hatchet.utils.additional_features import (
     load_seg_file,
     load_mosdepth_files,
     init_bb_dataframe,
+    init_summary_dataframe,
     get_array_file_path
 )
 from hatchet.utils.handle_segments import (
@@ -91,11 +92,13 @@ def main(args):
     log(msg=f"#total hap blocks(filtered)={len(corr_hap_blocks)}\n", level='STEP')
     # This step make sure that any haplotype blocks outside segments region are shrinked, such as centromere regions
 
+    summary_df = init_summary_dataframe()
     big_bb = init_bb_dataframe()
     for ch in chromosomes:
         log(msg=f"adaptive binning {ch}\n", level='STEP')
         # TODO can be optimized
         snp_positions, snp_totals, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
+        snp_positions = snp_positions - 1 # translate to 0-based index
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
         # load total and threshold file from count-reads, one SNP per segment
@@ -128,8 +131,8 @@ def main(args):
             if tidx1 > tidx2:
                 continue
 
-            # effect_start = max(thres1[0], hb_start)
-            # effect_stop = min(thres2[1], hb_stop)
+            effect_start = max(thres1[0], hb_start)
+            effect_stop = min(thres2[1], hb_stop)
 
             block_snps_idx = np.where((snp_positions >= thres1[0]) & (snp_positions < thres2[1]))[0]
             if len(block_snps_idx) == 0:
@@ -142,16 +145,6 @@ def main(args):
 
             block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
             block_totals = tot_arr_ch[tidx1:tidx2 + 1, ]  # n-by-4
-
-            if len(block_snp_pos) != len(block_thres):
-                print(f"hb:{hb_start}-{hb_stop}")
-                print(f"snp position:{block_snp_pos[0]}\t...\t{block_snp_pos[-1]}")
-                print(f"snp total:{block_snp_total[0]}\t...\t{block_snp_total[-1]}")
-                np.savetxt(f"{outdir}/tmp_{ch}_thresholds_{hb_start}_{hb_stop}.txt", block_thres, fmt=str(ch)+"\t%d\t%d")
-                np.savetxt(f"{outdir}/tmp_{ch}_totals_{hb_start}_{hb_stop}.txt", block_totals, fmt='%d')
-                np.savetxt(f"{outdir}/tmp_{ch}_snp_pos.txt", block_snp_pos, fmt='%d')
-                np.savetxt(f"{outdir}/tmp_{ch}_snp_total.txt", block_snp_total, fmt='%d')
-                raise AssertionError
 
             block_mos = [(n, mos[(mos.START > hb_start - 1000) & (mos.END < hb_stop + 1000)]) 
                 for n, mos in mosdepth_ch]
@@ -166,8 +159,21 @@ def main(args):
                 min_snp_reads=msr,
                 min_total_reads=mtr,
                 nonormalFlag=nonormalFlag,
-                # mos_block=block_mos
+                mos_block=block_mos
             )
+
+            summary_df[len(summary_df)] = [
+                ch,
+                hb_start,
+                hb_stop,
+                hb_stop - hb_start,
+                effect_start,
+                effect_stop,
+                len(block_thres),
+                len(block_snp_pos),
+                len(starts)
+            ]
+
             if len(starts) == 0:
                 continue
             
@@ -207,6 +213,7 @@ def main(args):
     # TODO can make this consistent?
     big_bb.loc[:, "START"] = big_bb.START + 1
     big_bb.to_csv(outfile, index=False, sep='\t')
+    summary_df.to_csv(f"{outdir}/summary.tsv", index=False, header=True, sep='\t')
     log(msg=f'combine-counts-ont completed, processed time (exclude sp): {time.process_time()-ts}sec\n', level='STEP')
     return
 
@@ -418,7 +425,8 @@ def adaptive_bins_segment_ont_ver2(
     ch: str,
     min_snp_reads=2000,
     min_total_reads=5000,
-    nonormalFlag=False
+    nonormalFlag=False,
+    mos_block=None
 ):
     """
     Compute adaptive bins for a single haplotype block.
