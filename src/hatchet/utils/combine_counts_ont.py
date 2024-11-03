@@ -457,7 +457,6 @@ def adaptive_bins_segment_ont_ver2(
             start = snp_thresholds[i, 0]
         cstart = snp_thresholds[i, 0]
         end = snp_thresholds[i, 1]
-        bs = end - snp_thresholds[i, 0]
 
         while j != n_snps and snp_positions[j] < end:
             if snp_positions[j] >= cstart: # ensure inclusive SNP
@@ -469,12 +468,13 @@ def adaptive_bins_segment_ont_ver2(
             log(msg=f"WARN! normal depth = 0 for current bin {ch}:{cstart}-{end} in block\n", level="STEP")
             if all(bin_total == 0) or i <= 0: # no previous bins
                 log(msg=f"no previous bin, skip\n", level="STEP")
+                start = None
                 continue
             end = snp_thresholds[i - 1, 1] # previous bin endpoint
             log(msg=f"merge previous bin:{start}-{end} (ignore condition)\n", level="STEP")
             last_total = bin_total // (end - start)
         else:
-            bin_total += total_counts[i, odd_index] * bs # sum up total aligned bases
+            bin_total += total_counts[i, odd_index] * (end - snp_thresholds[i, 0]) # sum up total aligned bases
             merged_depth = bin_total / (end - start)
 
             if np.any(bin_snp < min_snp_reads) or np.any(merged_depth < min_total_reads):
@@ -484,13 +484,25 @@ def adaptive_bins_segment_ont_ver2(
 
             if merge_last_bin:
                 last_total = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
+                start = starts[-1]
             else:
                 last_total = bin_total // (end - start)
         
-        if nonormalFlag:
-            rdrs_bin = np.array(last_total / last_total, dtype=np.float32)
+        # start and end has updated bin information
+        rdrs_bin = []
+        if mos_block != None:
+            mos_intersect = [(n, mos[(mos.START > start - 1000) & (mos.END < end + 1000)]) 
+                for n, mos in mos_block]
+            if nonormalFlag:
+                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) for (_, _mos_int) in mos_intersect]
+            else:
+                norm = np.mean(mos_intersect[0][1]['AVG_DEPTH'])
+                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect[1:]]
         else:
-            rdrs_bin = np.array(last_total / last_total[0], dtype=np.float32)
+            if nonormalFlag:
+                rdrs_bin = np.array(last_total / last_total, dtype=np.float32)
+            else:
+                rdrs_bin = np.array(last_total / last_total[0], dtype=np.float32)
 
         if merge_last_bin: # replace the previous bin
             totals[-1] = last_total
