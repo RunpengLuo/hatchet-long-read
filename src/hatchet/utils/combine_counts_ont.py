@@ -385,7 +385,7 @@ def adaptive_bins_segment_ont(
                 rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) for (_, _mos_int) in mos_intersect]
             else:
                 norm = np.mean(mos_intersect[0][1]['AVG_DEPTH'])
-                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect[1:]]
+                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect]
         else:
             if nonormalFlag:
                 rdrs_bin = totals[0:] / totals[0:]
@@ -497,7 +497,7 @@ def adaptive_bins_segment_ont_ver2(
                 rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) for (_, _mos_int) in mos_intersect]
             else:
                 norm = np.mean(mos_intersect[0][1]['AVG_DEPTH'])
-                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect[1:]]
+                rdrs_bin = [np.mean(_mos_int['AVG_DEPTH']) / norm for (_, _mos_int) in mos_intersect]
         else:
             if nonormalFlag:
                 rdrs_bin = np.array(last_total / last_total, dtype=np.float32)
