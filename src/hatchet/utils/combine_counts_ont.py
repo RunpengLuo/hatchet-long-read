@@ -84,12 +84,13 @@ def main(args):
     bed_mosdepths = load_mosdepth_files(all_names, mosdepth_files)
     haplotype_blocks = load_gtf_file_bed(haplotype_file)
 
-    log(msg="Correct Haplotype blocks by segment file\n", level='STEP')
+    log(msg=f"Correct Haplotype blocks by segment file, #total hap blocks(raw)={len(haplotype_blocks)}\n", level='STEP')
     corr_hap_blocks = intersect_segments(seg_df, haplotype_blocks, raise_err=True)
+    log(msg=f"#total hap blocks(filtered)={len(corr_hap_blocks)}\n", level='STEP')
     # This step make sure that any haplotype blocks outside segments region are shrinked, such as centromere regions
 
     big_bb = init_bb_dataframe()
-    min_normal_reads = 3
+    min_normal_reads = 1
     for ch in chromosomes:
         log(msg=f"adaptive binning {ch}\n", level='STEP')
         # TODO can be optimized
@@ -103,11 +104,17 @@ def main(args):
         # filter by normal read depth
         tot_keep_idx = np.where(tot_arr_ch[:, 1] >= min_normal_reads)
         tot_arr_ch = tot_arr_ch[tot_keep_idx]
+
         thres_df_ch, _ = load_seg_file(thres_file, use_chr)
+        log(msg=f"{ch}\t#thresholds (raw)={len(thres_df_ch)}\n", level="STEP")
         thres_df_ch = thres_df_ch.iloc[tot_keep_idx]
+        log(msg=f"{ch}\t#thresholds (filtered)={len(thres_df_ch)}\n", level="STEP")
         thres_arr_ch = thres_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
 
-        hap_blocks_ch = intersect_segments(thres_df_ch, corr_hap_blocks[corr_hap_blocks.CHR == ch], raise_err=True)
+        hap_blocks_ch = corr_hap_blocks[corr_hap_blocks.CHR == ch]
+        log(msg=f"{ch}\t#hap blocks (raw)={len(hap_blocks_ch)}\n", level="STEP")
+        hap_blocks_ch = intersect_segments(thres_df_ch, hap_blocks_ch, raise_err=True)
+        log(msg=f"{ch}\t#hap blocks (filtered)={len(hap_blocks_ch)}\n", level="STEP")
 
         # TODO parallel this step
         for _, row in hap_blocks_ch.iterrows():
@@ -228,10 +235,11 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
             sample = all_names[s]
             df_sample = df_groups.get_group(sample)
             num_snps = len(df_sample)
-            if num_snps == 0:
-                continue
             total_reads = totals[i][s]
             rdr = rdrs[i][s]
+            if num_snps <= 0 or total_reads <= 0 or rdr <= 0:
+                continue
+
             total_snp_reads = df_sample.TOTAL.sum()
             assert total_snp_reads > 0, f"ERROR! total_snp_reads is 0 for {sample}:{start}-{end}"
             b_count = get_b_count(df_sample)
@@ -343,11 +351,7 @@ def adaptive_bins_segment_ont(
                 continue
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
-        
-        print(i, j)
-        print("bin_snp: ", bin_snp)
-        print("bin_total: ", bin_total)
-        
+
         if not use_averages_rd and i + 1 < n_thresholds:
             print("next threshold: ", total_counts[i + 1])
             assert any(bin_total > total_counts[i + 1, odd_index])
@@ -429,8 +433,6 @@ def adaptive_bins_segment_ont_ver2(
         log(msg=f"ERROR! {snp_thresholds[0]}\t{snp_thresholds[-1]}\t{snp_positions[0]}\t{snp_positions[-1]}\t{total_counts[0]}\t{total_counts[-1]}\n", level="ERROR")
         log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
         sys.exit(1)
-    
-    print(f"adaptive binning {ch}:{snp_thresholds[0]}-{snp_thresholds[-1]} #seg={len(snp_thresholds)} and #snps={len(snp_positions)}\n")
 
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
@@ -477,8 +479,6 @@ def adaptive_bins_segment_ont_ver2(
             # last bin now, merge if there is one previous bin, create new bin otherwise
             merge_last_bin = len(starts) != 0
         if merge_last_bin:
-            acc_bases = totals[-1] * (ends[-1] - starts[-1]) + bin_total
-            acc_length = end - starts[-1]
             totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
             ends[-1] = end
             bss[-1] += bin_snp
@@ -487,22 +487,16 @@ def adaptive_bins_segment_ont_ver2(
             starts.append(start)
             ends.append(end)
             bss.append(bin_snp)
-        
-        if totals[-1][0] == 0:
-            print(f"thres:{snp_thresholds}\t{n_thresholds}")
-            print(f"tot_counts:{total_counts}")
-            print(f"totals:{totals}")
-            print(f"acc_bases:{acc_bases}\tacc_length:{acc_length}")
-            print(f"bin_total:{bin_total}")
-            print(f"i:{i}\tstarts: {starts}\tends: {ends}\tlast={merge_last_bin}")
-            print(f"merged_depth:{merged_depth}\t{end - start}\tmin_total_reads:{min_total_reads}")
-            print(f"bin_snp:{bin_snp}\tmin_snp_reads:{min_snp_reads}")
-            raise AssertionError
 
         if nonormalFlag:
             rdrs_bin = np.array(totals[-1] / totals[-1], dtype=np.float32)
         else:
-            rdrs_bin = np.array(totals[-1] / totals[-1][0], dtype=np.float32)
+            if totals[-1][0] == 0:
+                log(msg=f"WARN! zero normal reads found in bin {ch}:{starts[-1]}-{ends[-1]} in block {snp_thresholds[0, 0]}:{snp_thresholds[-1, 1]}\n",
+                    level="STEP")
+                rdrs_bin = np.zeros(n_samples, dtype=np.float32)
+            else:
+                rdrs_bin = np.array(totals[-1] / max(totals[-1][0], 0), dtype=np.float32)
 
         if merge_last_bin: # replace the previous bin
             rdrs[-1] = rdrs_bin
@@ -515,7 +509,7 @@ def adaptive_bins_segment_ont_ver2(
         bin_total = np.zeros(n_samples, dtype=np.uint32)
         bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
     
-    log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
+    # log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
     # TODO bss may also be useful?
     return starts, ends, totals, rdrs
 
