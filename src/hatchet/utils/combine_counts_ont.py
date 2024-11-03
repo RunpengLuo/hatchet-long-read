@@ -447,8 +447,7 @@ def adaptive_bins_segment_ont_ver2(
     bin_total = np.zeros(n_samples, dtype=np.uint32)
     bin_snp_size = n_samples if nonormalFlag else n_samples - 1
     bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
-    
-    # FIXME one snp per threshold segment
+
     start = None
     end = None
     j = 0 # snp counter
@@ -465,52 +464,42 @@ def adaptive_bins_segment_ont_ver2(
                 bin_snp += snp_counts[j]
             j += 1
 
-        bin_total += total_counts[i, odd_index] * bs # sum up total aligned bases
-        merged_depth = bin_total / (end - start)
-        total_cond = np.all(merged_depth >= min_total_reads)
-        
         merge_last_bin = False
-        if np.any(bin_snp < min_snp_reads) or total_cond == False:
-            if i + 1 < n_thresholds: # hope next one
+        if not nonormalFlag and total_counts[i, 1] == 0:
+            log(msg=f"WARN! normal depth = 0 for current bin {ch}:{start}-{end} in block, merge all previous bins (if exists)\n", level="STEP")
+            if all(bin_total == 0): # no previous bins
                 continue
-            # last bin now, merge if there is one previous bin, create new bin otherwise
-            merge_last_bin = len(starts) != 0
-        if merge_last_bin:
-            last_total = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
-        else:
             last_total = bin_total // (end - start)
-        # if merge_last_bin:
-        #     totals[-1] = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
-        #     ends[-1] = end
-        #     bss[-1] += bin_snp
-        # else:
-        #     totals.append(bin_total // (end - start))
-        #     starts.append(start)
-        #     ends.append(end)
-        #     bss.append(bin_snp)
+        else:
+            bin_total += total_counts[i, odd_index] * bs # sum up total aligned bases
+            merged_depth = bin_total / (end - start)
 
+            if np.any(bin_snp < min_snp_reads) or np.any(merged_depth < min_total_reads):
+                if i + 1 < n_thresholds: # hope next one
+                    continue 
+                merge_last_bin = len(starts) != 0
+
+            if merge_last_bin:
+                last_total = (totals[-1] * (ends[-1] - starts[-1]) + bin_total) // (end - starts[-1])
+            else:
+                last_total = bin_total // (end - start)
+        
         if nonormalFlag:
             rdrs_bin = np.array(last_total / last_total, dtype=np.float32)
         else:
-            if last_total[0] == 0:
-                rdrs_bin = np.zeros(n_samples, dtype=np.float32) # avoid div0 error, propogate.
-            else:
-                rdrs_bin = np.array(last_total / last_total[0], dtype=np.float32)
+            rdrs_bin = np.array(last_total / last_total[0], dtype=np.float32)
 
-        if all(rdrs_bin[:] > 0):
-            if merge_last_bin: # replace the previous bin
-                totals[-1] = last_total
-                ends[-1] = end
-                bss[-1] += bin_snp
-                rdrs[-1] = rdrs_bin
-            else:
-                totals.append(last_total)
-                starts.append(start)
-                ends.append(end)
-                bss.append(bin_snp)
-                rdrs.append(rdrs_bin)
+        if merge_last_bin: # replace the previous bin
+            totals[-1] = last_total
+            ends[-1] = end
+            bss[-1] += bin_snp
+            rdrs[-1] = rdrs_bin
         else:
-            log(msg=f"WARN! RDR=0 found for any sample in current bin {ch}:{start}-{end} in block, skip merge/append\n", level="STEP")
+            totals.append(last_total)
+            starts.append(start)
+            ends.append(end)
+            bss.append(bin_snp)
+            rdrs.append(rdrs_bin)
         
         # init next round
         start = None
