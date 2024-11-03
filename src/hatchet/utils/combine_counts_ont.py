@@ -85,23 +85,29 @@ def main(args):
     haplotype_blocks = load_gtf_file_bed(haplotype_file)
 
     log(msg="Correct Haplotype blocks by segment file\n", level='STEP')
-    corr_hap_blocks = intersect_segments(seg_df, haplotype_blocks, raise_err=False)
+    corr_hap_blocks = intersect_segments(seg_df, haplotype_blocks, raise_err=True)
     # This step make sure that any haplotype blocks outside segments region are shrinked, such as centromere regions
 
     big_bb = init_bb_dataframe()
+    min_normal_reads = 3
     for ch in chromosomes:
         log(msg=f"adaptive binning {ch}\n", level='STEP')
         # TODO can be optimized
         snp_positions, snp_totals, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
-        # load total and threshold file from count-reads, one SNP per segment
-        tot_file, thres_file = get_array_file_path(rdr_dir, ch)
-        hap_blocks_ch = corr_hap_blocks[corr_hap_blocks.CHR == ch]
-
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
-        thres_df_ch, _ = load_seg_file(thres_file, use_chr)
-        thres_arr_ch = thres_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
+        # load total and threshold file from count-reads, one SNP per segment
+        tot_file, thres_file = get_array_file_path(rdr_dir, ch)
         tot_arr_ch = np.loadtxt(tot_file, dtype=np.uint32)
+
+        # filter by normal read counts
+        tot_keep_idx = np.where(tot_arr_ch[:, 0] >= min_normal_reads)
+        tot_arr_ch = tot_arr_ch[tot_keep_idx]
+        thres_df_ch, _ = load_seg_file(thres_file, use_chr)
+        thres_df_ch = thres_df_ch.iloc[tot_keep_idx]
+        thres_arr_ch = thres_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
+
+        hap_blocks_ch = intersect_segments(thres_df_ch, corr_hap_blocks[corr_hap_blocks.CHR == ch], raise_err=True)
 
         # TODO parallel this step
         for _, row in hap_blocks_ch.iterrows():
@@ -396,6 +402,10 @@ def adaptive_bins_segment_ont(
     return starts, ends, totals, rdrs
     
 
+"""
+Given a group of consecutive bins, merge bins from left to right
+
+"""
 def adaptive_bins_segment_ont_ver2(
     snp_thresholds: np.ndarray,
     total_counts: np.ndarray,
@@ -439,7 +449,7 @@ def adaptive_bins_segment_ont_ver2(
     bin_snp_size = n_samples if nonormalFlag else n_samples - 1
     bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
     
-    # one snp per threshold segment
+    # FIXME one snp per threshold segment
     start = None
     end = None
     j = 0 # snp counter
@@ -456,7 +466,7 @@ def adaptive_bins_segment_ont_ver2(
                 bin_snp += snp_counts[j]
             j += 1
 
-        bin_total += total_counts[i, odd_index] * bs
+        bin_total += total_counts[i, odd_index] * bs # sum up total aligned bases
         merged_depth = bin_total / (end - start)
         total_cond = np.all(merged_depth >= min_total_reads)
         
@@ -490,9 +500,10 @@ def adaptive_bins_segment_ont_ver2(
             raise AssertionError
 
         if nonormalFlag:
-            rdrs_bin = np.array(totals[0:] / totals[0:], dtype=np.float32)
+            rdrs_bin = np.array(totals[-1] / totals[-1], dtype=np.float32)
         else:
-            rdrs_bin = np.array(totals[-1][:] / totals[-1][0], dtype=np.float32)
+            rdrs_bin = np.array(totals[-1][1:] / totals[-1][0], dtype=np.float32)
+
         if merge_last_bin: # replace the previous bin
             rdrs[-1] = rdrs_bin
         else:
