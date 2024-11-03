@@ -63,7 +63,7 @@ def main(args):
     segfile = args['segfile']
     refversion = args["refversion"]
 
-    outdir = outfile[:str.rindex('/')]
+    outdir = outfile[:str.rindex(outfile, '/')]
 
     if refversion != None:
         with path(hatchet.data, f'{args["refversion"]}.segments.bed') as p:
