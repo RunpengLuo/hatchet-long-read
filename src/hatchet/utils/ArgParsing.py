@@ -834,6 +834,12 @@ def parse_combine_counts_args(args=None):
         help='sex chromosome equals to XX or not for the sample: '
         'either True, False, or auto (automatic inference). Default: auto',
     )
+    parser.add_argument(
+        '--chromosomes',
+        required=False,
+        nargs='*',
+        help='One or more chromosomes to process (default: blank to process all chromosomes)',
+    )
     args = parser.parse_args(args)
 
     ensure(os.path.exists(args.baffile), f'BAF file not found: {args.baffile}')
@@ -894,13 +900,12 @@ def parse_combine_counts_args(args=None):
     nonormalFlag = 'normal' not in names
 
     chromosomes = []
-    # if segfile != None:
-    #     thresh_name, tot_name = 'segfile_thresholds', 'segfile_total'
-    # else:
-    #     thresh_name, tot_name = 'thresholds', 'total'
-    for basename in os.listdir(args.array):
-        if str(basename).endswith(f"total.gz"):
-            chromosomes.append(str(basename).split('.')[0])
+    if args.chromosomes:
+        chromosomes = list(args.chromosomes)
+    else:
+        for basename in os.listdir(args.array):
+            if str(basename).endswith(f"total.gz"):
+                chromosomes.append(str(basename).split('.')[0])
     chromosomes = sort_chroms(chromosomes)
 
     for ch in chromosomes:
