@@ -63,6 +63,8 @@ def main(args):
     segfile = args['segfile']
     refversion = args["refversion"]
 
+    outdir = outfile[:str.rindex('/')]
+
     if refversion != None:
         with path(hatchet.data, f'{args["refversion"]}.segments.bed') as p:
             segfile = str(p)
@@ -140,6 +142,14 @@ def main(args):
 
             block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
             block_totals = tot_arr_ch[tidx1:tidx2 + 1, ]  # n-by-4
+
+            if len(block_snp_pos) != len(block_thres):
+                print(f"hb:{hb_start}-{hb_stop}")
+                print(f"snp position:{block_snp_pos[0]}\t...\t{block_snp_pos[-1]}")
+                print(f"snp total:{block_snp_total[0]}\t...\t{block_snp_total[-1]}")
+                np.savetxt(f"{outdir}/tmp_{ch}_thresholds_{hb_start}_{hb_stop}.txt", block_thres, fmt=str(ch)+"\t%d\t%d")
+                np.savetxt(f"{outdir}/tmp_{ch}_totals_{hb_start}_{hb_stop}.txt", block_totals, fmt='%d')
+                raise AssertionError
 
             block_mos = [(n, mos[(mos.START > hb_start - 1000) & (mos.END < hb_stop + 1000)]) 
                 for n, mos in mosdepth_ch]
