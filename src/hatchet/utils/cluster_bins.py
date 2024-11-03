@@ -213,10 +213,6 @@ def hmm_model_select(tracks, minK=20, maxK=50, tau=10e-6, tmat='diag', decode_al
     else:
         X = tracks[0].T
         lengths = [tracks[0].shape[1]]
-    
-    print(X)
-    for i, track in enumerate(tracks):
-        print(i, track)
 
     best_K = 0
     best_score = np.inf # BIC is always negative
