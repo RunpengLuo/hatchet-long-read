@@ -90,7 +90,6 @@ def main(args):
     # This step make sure that any haplotype blocks outside segments region are shrinked, such as centromere regions
 
     big_bb = init_bb_dataframe()
-    min_normal_reads = 1
     for ch in chromosomes:
         log(msg=f"adaptive binning {ch}\n", level='STEP')
         # TODO can be optimized
@@ -101,20 +100,12 @@ def main(args):
         tot_file, thres_file = get_array_file_path(rdr_dir, ch)
         tot_arr_ch = np.loadtxt(tot_file, dtype=np.uint32)
 
-        # filter by normal read depth
-        # tot_keep_idx = np.where(tot_arr_ch[:, 1] >= min_normal_reads)
-        # tot_arr_ch = tot_arr_ch[tot_keep_idx]
-
         thres_df_ch, _ = load_seg_file(thres_file, use_chr)
         log(msg=f"{ch}\t#thresholds (raw)={len(thres_df_ch)}\n", level="STEP")
-        # thres_df_ch = thres_df_ch.iloc[tot_keep_idx]
-        # log(msg=f"{ch}\t#thresholds (filtered)={len(thres_df_ch)}\n", level="STEP")
         thres_arr_ch = thres_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
 
         hap_blocks_ch = corr_hap_blocks[corr_hap_blocks.CHR == ch]
         log(msg=f"{ch}\t#hap blocks (raw)={len(hap_blocks_ch)}\n", level="STEP")
-        # hap_blocks_ch = intersect_segments(thres_df_ch, hap_blocks_ch, raise_err=True)
-        # log(msg=f"{ch}\t#hap blocks (filtered)={len(hap_blocks_ch)}\n", level="STEP")
 
         # TODO parallel this step
         for _, row in hap_blocks_ch.iterrows():
@@ -145,6 +136,7 @@ def main(args):
             # extract snp snp_positions within the haplotype block region
             block_snp_pos = snp_positions[block_snps_idx]
             block_snp_total = snp_totals[block_snps_idx]
+
 
             block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
             block_totals = tot_arr_ch[tidx1:tidx2 + 1, ]  # n-by-4

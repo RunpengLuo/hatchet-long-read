@@ -299,7 +299,7 @@ def load_snps_positions(baf_file: str, chromosomes: list):
                              usecols=range(2),
                              names=["CHR", "POS"])
     baf_groups = baf_df.groupby("CHR")
-    ret = []
+    ret = {}
     for ch in chromosomes:
         if ch.endswith('X') or ch.endswith('Y'):
             log(msg=f"Warning, found SNP for sec chromosomes {ch}, ignored")
@@ -308,7 +308,7 @@ def load_snps_positions(baf_file: str, chromosomes: list):
         baf_ch = baf_groups.get_group(ch)
         baf_ch = baf_ch.drop_duplicates(ignore_index=True)
         baf_ch = baf_ch.sort_values(by=["POS"], ignore_index=True)
-        ret.append(baf_ch["POS"].to_numpy(dtype=np.uint32))
+        ret[ch] = baf_ch["POS"].to_numpy(dtype=np.uint32)
     return ret
 
 """

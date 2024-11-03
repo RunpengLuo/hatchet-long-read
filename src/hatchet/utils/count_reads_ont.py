@@ -116,7 +116,7 @@ def main(args=None):
         # TODO parallel if need?
         with open(segment_file, 'w') as rg_fd:
             # compute segment files per chromosome
-            for i, ch in enumerate(chromosomes):
+            for ch in chromosomes:
                 log(msg=f"compute segment file for {ch}\n", level='STEP')
                 if str.endswith(ch, 'X') or str.endswith(ch, 'Y'):
                     # TODO: do this procedure only for XY
@@ -127,7 +127,7 @@ def main(args=None):
                     last_start = get_chr_end(outdir, names, ch)
                     snp_positions_ch = np.arange(5000, last_start, 5000)
                 else:
-                    snp_positions_ch = snp_positions[i]
+                    snp_positions_ch = snp_positions[ch]
                 seg_df_ch = seg_df[seg_df["CHR"] == ch]
                 thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
                 if not init_thres:
