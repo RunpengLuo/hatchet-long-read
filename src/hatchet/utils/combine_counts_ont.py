@@ -502,7 +502,7 @@ def adaptive_bins_segment_ont_ver2(
         if nonormalFlag:
             rdrs_bin = np.array(totals[-1] / totals[-1], dtype=np.float32)
         else:
-            rdrs_bin = np.array(totals[-1][1:] / totals[-1][0], dtype=np.float32)
+            rdrs_bin = np.array(totals[-1] / totals[-1][0], dtype=np.float32)
 
         if merge_last_bin: # replace the previous bin
             rdrs[-1] = rdrs_bin
