@@ -142,8 +142,8 @@ def init_summary_dataframe():
         'BLOCK_START': 'int',
         'BLOCK_END': 'int',
         'BLOCK_LEN': 'int',
-        'REAL_START': 'int',
-        'REAL_END': 'int',
+        'THRES_START': 'int',
+        'THRES_END': 'int',
         'NUM_THRESHOLDS': 'int',
         'NUM_SNPS': 'int',
         'NUM_BIN': 'int'

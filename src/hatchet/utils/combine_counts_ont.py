@@ -131,8 +131,8 @@ def main(args):
             if tidx1 > tidx2:
                 continue
 
-            effect_start = max(thres1[0], hb_start)
-            effect_stop = min(thres2[1], hb_stop)
+            # effect_start = max(thres1[0], hb_start)
+            # effect_stop = min(thres2[1], hb_stop)
 
             block_snps_idx = np.where((snp_positions >= thres1[0]) & (snp_positions < thres2[1]))[0]
             if len(block_snps_idx) == 0:
@@ -167,8 +167,8 @@ def main(args):
                 hb_start,
                 hb_stop,
                 hb_stop - hb_start,
-                effect_start,
-                effect_stop,
+                block_thres[0, 0],
+                block_thres[-1,1],
                 len(block_thres),
                 len(block_snp_pos),
                 len(starts)
