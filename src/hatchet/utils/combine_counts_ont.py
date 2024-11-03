@@ -149,6 +149,8 @@ def main(args):
                 print(f"snp total:{block_snp_total[0]}\t...\t{block_snp_total[-1]}")
                 np.savetxt(f"{outdir}/tmp_{ch}_thresholds_{hb_start}_{hb_stop}.txt", block_thres, fmt=str(ch)+"\t%d\t%d")
                 np.savetxt(f"{outdir}/tmp_{ch}_totals_{hb_start}_{hb_stop}.txt", block_totals, fmt='%d')
+                np.savetxt(f"{outdir}/tmp_{ch}_snp_pos.txt", block_snp_pos, fmt='%d')
+                np.savetxt(f"{outdir}/tmp_{ch}_snp_total.txt", block_snp_total, fmt='%d')
                 raise AssertionError
 
             block_mos = [(n, mos[(mos.START > hb_start - 1000) & (mos.END < hb_stop + 1000)]) 
