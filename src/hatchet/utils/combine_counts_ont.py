@@ -466,9 +466,11 @@ def adaptive_bins_segment_ont_ver2(
 
         merge_last_bin = False
         if not nonormalFlag and total_counts[i, 1] == 0:
-            log(msg=f"WARN! normal depth = 0 for current bin {ch}:{start}-{end} in block, merge all previous bins (if exists)\n", level="STEP")
-            if all(bin_total == 0): # no previous bins
+            log(msg=f"WARN! normal depth = 0 for current bin {ch}:{start}-{end} in block\n", level="STEP")
+            if all(bin_total == 0) or i <= 0: # no previous bins
                 continue
+            end = snp_thresholds[i - 1, 1] # previous bin endpoint
+            log(msg=f"merge previous bin:{start}-{end} (ignore condition)\n", level="STEP")
             last_total = bin_total // (end - start)
         else:
             bin_total += total_counts[i, odd_index] * bs # sum up total aligned bases
