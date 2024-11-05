@@ -59,7 +59,8 @@ def main(args=None):
     bb['CLUSTER'] = np.repeat(best_labels, len(sample_labels))
 
     sp.log(msg='# Checking consistency of results\n', level='STEP')
-    pivot_check = bb.pivot(index=['#CHR', 'START', 'END'], columns='SAMPLE', values='CLUSTER')
+    # pivot_check = bb.pivot(index=['#CHR', 'START', 'END'], columns='SAMPLE', values='CLUSTER')
+    pivot_check = bb.pivot_table(index=['#CHR', 'START', 'END'], columns='SAMPLE', values='CLUSTER')
     # # Verify that the array lengths and order match the bins in the BB file
     # chr_idx = 0
     # bin_indices = pivot_check.index.to_numpy()
