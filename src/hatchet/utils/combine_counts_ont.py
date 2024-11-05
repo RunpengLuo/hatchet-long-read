@@ -184,7 +184,11 @@ def main(args):
         # end
     # end
     log(msg=f"finish adaptive binning\n", level='STEP')
+    
+    # check unscaled version
+    big_bb.to_csv(f"{outdir}/bulk.raw.bb", index=False, sep='\t')
 
+    # correct RD by total normal / sample counts
     if nonormalFlag:
         for sample, df in big_bb.groupby("SAMPLE", sort=False):
             mead_rdr = max(df.RD.mean(), 1) # avoid div0
