@@ -353,8 +353,15 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
             # for every adjacent SNP position, record the midpoint as the interval splitting position.
             snp_thresholds = np.trunc(np.vstack([bounded_snp_positions[:-1], 
                                                  bounded_snp_positions[1:]]).mean(axis=0)).astype(np.uint32)
-            if snp_thresholds[0] != sstart:
-                snp_thresholds = np.concatenate([[sstart], snp_thresholds])
+            try:
+                if snp_thresholds[0] != sstart:
+                    snp_thresholds = np.concatenate([[sstart], snp_thresholds])
+            except IndexError:
+                print("ERROR")
+                print(left_idx, right_idx, bounded_snp_positions)
+                print(snp_thresholds)
+                raise IndexError
+
             if snp_thresholds[-1] != sstop:
                 snp_thresholds = np.concatenate([snp_thresholds, [sstop]])
             sub_segments = np.column_stack((snp_thresholds[:-1], snp_thresholds[1:]))
