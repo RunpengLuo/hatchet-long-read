@@ -351,7 +351,7 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
             else:
                 bounded_snp_positions = snp_positions_1[left_idx:right_idx]
             
-            if len(bounded_snp_positions) == 0: # only one SNP found, use segment boundary
+            if len(bounded_snp_positions) < 2: # only one SNP found, use segment boundary
                 sub_segments = np.array([[sstart, sstop]])
             else:
                 # for every adjacent SNP position, record the midpoint as the interval splitting position.
