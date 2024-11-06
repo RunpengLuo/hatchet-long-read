@@ -1383,7 +1383,7 @@ def execute(args, basecmd, n, outprefix):
                 error(
                     (
                         'Failed to parse the output of the following command because the final objective was not '
-                        'found: \n\t\t{cmd}\n'
+                        f'found: \n\t\t{cmd}\n'
                     )
                 )
             )
