@@ -612,7 +612,7 @@ def parse_count_reads_args(args=None):
     use_chr = use_chr_prefix(chromosomes)
 
     segfile = None
-    if args.segfile != 'None':
+    if args.segfile and args.segfile != 'None':
         ensure(isfile(args.segfile), 'The specified segfile does not exist')
         segfile = args.segfile
 
@@ -815,9 +815,8 @@ def parse_combine_counts_args(args=None):
         type=str,
         help='Version of reference genome used in BAM files, exclusive to --segfile',
     )
-    # FIXME
+
     parser.add_argument(
-        '-f',
         '--segfile',
         required=False,
         type=str,
@@ -881,7 +880,7 @@ def parse_combine_counts_args(args=None):
     names = open(namesfile).read().split()
 
     segfile = None
-    if args.segfile != 'None':
+    if args.segfile and args.segfile != 'None':
         ensure(isfile(args.segfile), 'The specified segfile does not exist')
         segfile = args.segfile
 

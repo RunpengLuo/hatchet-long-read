@@ -177,7 +177,7 @@ def main(args=None):
 
         ref_ver = ['-V', config.genotype_snps.reference_version]
         if config.count_reads.segfile != "" and config.count_reads.segfile != "None":
-            ref_ver = ['-f', config.count_reads.segfile] # override refversion
+            ref_ver = ['--segfile', config.count_reads.segfile] # override refversion
 
         params = [
             '-A',
