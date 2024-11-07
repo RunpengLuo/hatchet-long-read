@@ -5,6 +5,7 @@ commands = (
     'genotype-snps-ont',
     'phase-snps-ont',
     'count-reads-ont',
+    'run-lr',
 
     'count-reads',
     'count-reads-fw',

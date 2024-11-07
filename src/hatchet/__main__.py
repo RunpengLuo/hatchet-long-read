@@ -10,6 +10,7 @@ import hatchet
 from hatchet.utils.commands import commands, command_aliases
 
 # temporary options for ONT testing
+from hatchet.utils.run_lr import main as run_lr  # noqa: F401
 from hatchet.utils.count_reads_ont import main as count_reads_ont # noqa: F401
 from hatchet.utils.combine_counts_ont import main as combine_counts_ont # noqa: F401
 from hatchet.utils.lr_functions import genotype_snps as genotype_snps_ont # noqa: F401
@@ -30,7 +31,7 @@ from hatchet.utils.plot_cn import main as plot_cn  # noqa: F401
 from hatchet.utils.plot_cn_1d2d import main as plot_cn_1d2d  # noqa: F401
 
 from hatchet.utils.run import main as run  # noqa: F401
-from hatchet.utils.run_lr import main as run_ont  # noqa: F401
+from hatchet.utils.run_ont import main as run_ont  # noqa: F401
 from hatchet.utils.download_panel import main as download_panel  # noqa: F401
 from hatchet.utils.phase_snps import main as phase_snps  # noqa: F401
 
