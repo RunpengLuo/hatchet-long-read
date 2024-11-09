@@ -66,7 +66,7 @@ def main(args=None):
     # TODO think about whether we use custom segfile here
     # since we still need to compute per-snp mean depth.
     if refversion != None: # segfile == None
-        with path(hatchet.data, f"{args["refversion"]}.segments.bed") as p:
+        with path(hatchet.data, f"{refversion}.segments.bed") as p:
             segfile = str(p)
         log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level="STEP")
     
