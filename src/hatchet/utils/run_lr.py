@@ -132,7 +132,7 @@ def main(args=None):
     # Variable-width/adaptive binning
     if config.run.count_reads:
         ref_ver = ["-V", config.genotype_snps.reference_version]
-        if config.count_reads.segfile != "" and config.count_reads.segfile != "None":
+        if config.count_reads.segfile != None:
             ref_ver = ["--segfile", config.count_reads.segfile] # override refversion
         
         sample_bams = config.run.bams.split()
@@ -178,7 +178,7 @@ def main(args=None):
             )
 
         ref_ver = ["-V", config.genotype_snps.reference_version]
-        if config.count_reads.segfile != "" and config.count_reads.segfile != "None":
+        if config.count_reads.segfile != None:
             ref_ver = ["--segfile", config.count_reads.segfile] # override refversion
 
         params = [
