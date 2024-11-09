@@ -13,6 +13,11 @@ from hatchet.utils.Supporting import (
     bcolors,
     numericOrder,
 )
+from hatchet.utils.additional_features import (
+    use_chr_prefix,
+    sort_chroms,
+    get_array_file_path
+)
 from hatchet import config, __version__
 
 
@@ -372,7 +377,7 @@ def parse_cluster_bins_args(args=None):
         action="store_true",
         required=False,
         default=config.cluster_bins.allow_gaps,
-        help='Set this flag to allow gaps in chromosomes (each contiguous region is considered a separate "arm").',
+        help="Set this flag to allow gaps in chromosomes (each contiguous region is considered a separate 'arm').",
     )
     parser.add_argument(
         "-V", "--version", action="version", version=f"%(prog)s {__version__}"
@@ -442,7 +447,7 @@ def parse_cluster_bins_args(args=None):
         samples = bb.SAMPLE.unique()
         ensure(
             all([a in samples for a in args.subset]),
-            'Samples indicated in "subset" must be present in input BB file. BB file:'
+            "Samples indicated in 'subset' must be present in input BB file. BB file:"
             + f"{samples}, argument: {args.subset}",
         )
 
@@ -498,11 +503,21 @@ def parse_count_reads_args(args=None):
         help="1bed file containing SNP information from tumor samples (i.e., baf/bulk.1bed)",
     )
     parser.add_argument(
+        "-s",
+        "--segfile",
+        required=False,
+        type=str,
+        default=config.count_reads.segfile,
+        help="path to BED file containing pre-specified segments for which to compute RDR, \
+        exclusive to --refversion"
+    )
+    parser.add_argument(
         "-V",
         "--refversion",
-        required=True,
+        required=False,
         type=str,
-        help="Version of reference genome used in BAM files",
+        help="Version of reference genome used in BAM files, \
+        exclusive to --segfile",
     )
     parser.add_argument(
         "-O",
@@ -583,8 +598,13 @@ def parse_count_reads_args(args=None):
 
     args = parser.parse_args(args)
 
+    no_normal = False
+    if args.normal != None:
+        bams = [args.normal] + args.tumor
+    else:
+        no_normal = True
+        bams = list(args.tumor)
     # Parse BAM files, check their existence, and infer or parse the corresponding sample names
-    bams = [args.normal] + args.tumor
     for bamfile in bams:
         ensure(
             isfile(bamfile),
@@ -603,9 +623,9 @@ def parse_count_reads_args(args=None):
     )
 
     if names is None:
-        names = ["normal"]
-        for bamfile in bams[1:]:
-            names.append(os.path.splitext(os.path.basename(bamfile))[0])
+        names = [os.path.splitext(os.path.basename(bamfile))[0] for bamfile in bams]
+        if not no_normal:
+            names[0] = "normal" #rename normal BAM sample name.
 
     # In default mode, check the existence and compatibility of samtools and bcftools
     samtools = os.path.join(args.samtools, "samtools")
@@ -622,21 +642,24 @@ def parse_count_reads_args(args=None):
         chromosomes = [c for c in chromosomes if c in args.chromosomes]
 
     # Check that chr notation is consistent across chromosomes
-    using_chr = [a.startswith("chr") for a in chromosomes]
-    if any(using_chr):
-        ensure(
-            all(using_chr),
-            "Some chromosomes use chr notation while others do not.",
-        )
-        use_chr = True
-    else:
-        use_chr = False
+    use_chr = use_chr_prefix(chromosomes)
+
+    segfile = None
+    if args.segfile != None:
+        ensure(isfile(args.segfile), "The specified segfile does not exist")
+        segfile = args.segfile
 
     ver = args.refversion
+    if ver != None:
+        ensure(
+            ver in ("hg19", "hg38"),
+            "Invalid reference genome version. Supported versions are hg38 and hg19.",
+        )
     ensure(
-        ver in ("hg19", "hg38"),
-        "Invalid reference genome version. Supported versions are hg38 and hg19.",
+        (ver != None and segfile == None) or (ver == None and segfile != None),
+        "Either reference version or segment file can be specified, but not both/neither of them."
     )
+
     ensure(os.path.exists(args.baffile), f"BAF file not found: {args.baffile}")
     ensure(
         args.processes > 0,
@@ -677,6 +700,9 @@ def parse_count_reads_args(args=None):
         "refversion": ver,
         "baf_file": args.baffile,
         "readquality": args.readquality,
+
+        "no_normal": no_normal,
+        "seg_file": segfile
     }
 
 
@@ -689,7 +715,7 @@ def parse_combine_counts_args(args=None):
         "--array",
         type=str,
         required=True,
-        help='Directory containing array files (output from "count_reads" command)',
+        help="Directory containing array files (output from 'count_reads' command)",
     )
     parser.add_argument(
         "-t",
@@ -697,7 +723,7 @@ def parse_combine_counts_args(args=None):
         required=True,
         type=str,
         help=(
-            'Total read counts in the format "SAMPLE\tCOUNT" used to normalize by the different number of reads '
+            "Total read counts in the format 'SAMPLE\tCOUNT' used to normalize by the different number of reads "
             "extracted from each sample"
         ),
     )
@@ -790,24 +816,66 @@ def parse_combine_counts_args(args=None):
     parser.add_argument(
         "-V",
         "--refversion",
-        required=True,
+        required=False,
         type=str,
-        help="Version of reference genome used in BAM files",
+        help="Version of reference genome used in BAM files, \
+        exclusive to --segfile",
+    )
+    parser.add_argument(
+        "-s",
+        "--segfile",
+        required=False,
+        type=str,
+        help="path to BED file containing pre-specified segments for binning, \
+        exclusive to --refversion"
+    )
+    parser.add_argument(
+        "--gtf",
+        required=False,
+        default=None,
+        type=str,
+        help="Haplotype block GTF file (ONT) testing",
+    )
+    parser.add_argument(
+        "--mos_rgs",
+        required=False,
+        nargs="+",
+        type=str,
+        default=[],
+        help="Mosdepth 1k BED file per sample, same order as listed in rdr/samples.txt",
+    )
+    parser.add_argument(
+        "-x",
+        "--XX",
+        required=False,
+        type=str,
+        default=config.combine_counts.xx,
+        choices=["True", "False", "auto"],
+        help="sex chromosome is XX or not for the Individual: \
+        [True, False, auto]. Default: auto"
+    )
+    parser.add_argument(
+        "-P",
+        "--ponfile",
+        required=False,
+        type=str,
+        help="panel of normal file used for normalizing RDR when no mathched normal is present (default: None). \
+        Make sure the panel and the sample uses the same reference genome version."
     )
     args = parser.parse_args(args)
 
-    ensure(os.path.exists(args.baffile), f"BAF file not found: {args.baffile}")
-    ensure(
-        os.path.exists(args.referencefasta),
+    ensure(isfile(args.baffile), 
+           f"BAF file not found: {args.baffile}")
+
+    ensure(isfile(args.referencefasta),
         f"Reference genome fasta file file not found: {args.referencefasta}",
     )
-    if args.totalcounts is not None and not isfile(args.totalcounts):
-        raise ValueError(
-            error("The specified file for total read counts does not exist!")
-        )
 
-    if args.phase == "None":
-        args.phase = None
+    ensure(
+        (args.totalcounts is None) or isfile(args.totalcounts),
+        "The specified file for total read counts does not exist!"
+    )
+
     ensure(
         (args.phase is None) or isfile(args.phase),
         "The specified phasing file does not exist!",
@@ -819,7 +887,7 @@ def parse_combine_counts_args(args=None):
         "The alpha argument must be between 0 and 1, inclusive.",
     )
     ensure(
-        os.path.exists(args.array),
+        os.path.isdir(args.array),
         f"The provided array directory does not exist: {args.array}",
     )
 
@@ -828,13 +896,13 @@ def parse_combine_counts_args(args=None):
         which(os.path.join("bedtools")) is not None,
         (
             "The bedtools executable was not found or is not executable. Please install bedtools (e.g., conda install "
-            '-c bioconda bedtools). pybedtools require "bedtools" executable to be in PATH.'
+            "-c bioconda bedtools). pybedtools require 'bedtools' executable to be in PATH."
         ),
     )
     namesfile = os.path.join(args.array, "samples.txt")
     ensure(
-        os.path.exists(namesfile),
-        "Missing file containing sample names (1 per line): {namesfile}",
+        isfile(namesfile),
+        f"Missing file containing sample names (1 per line): {namesfile}",
     )
     names = open(namesfile).read().split()
 
@@ -843,31 +911,16 @@ def parse_combine_counts_args(args=None):
         tkns = f.split(".")
         if len(tkns) > 1 and (tkns[1] == "thresholds" or tkns[1] == "total"):
             chromosomes.add(tkns[0])
-    chromosomes = sorted(chromosomes)
+    chromosomes = sort_chroms(chromosomes)
 
     for ch in chromosomes:
-        if args.not_compressed:
-            totals_arr = os.path.join(args.array, f"{ch}.total")
-            thresholds_arr = os.path.join(args.array, f"{ch}.thresholds")
-        else:
-            totals_arr = os.path.join(args.array, f"{ch}.total.gz")
-            thresholds_arr = os.path.join(args.array, f"{ch}.thresholds.gz")
-        if not os.path.exists(totals_arr):
-            raise ValueError(error("Missing array file: {}".format(totals_arr)))
-        if not os.path.exists(thresholds_arr):
-            raise ValueError(error("Missing array file: {}".format(thresholds_arr)))
+        totals_arr, thresholds_arr = get_array_file_path(args.array, ch, args.not_compressed)
+        ensure(isfile(totals_arr), f"Missing array file: {totals_arr}")
+        ensure(isfile(thresholds_arr), f"Missing array file: {thresholds_arr}")
 
     log(msg=f"Identified {len(chromosomes)} chromosomes.\n", level="INFO")
 
-    using_chr = [a.startswith("chr") for a in chromosomes]
-    if any(using_chr):
-        if not all(using_chr):
-            raise ValueError(
-                error("Some starts files use 'chr' notation while others do not.")
-            )
-        use_chr = True
-    else:
-        use_chr = False
+    use_chr = use_chr_prefix(chromosomes)
 
     ensure(args.processes > 0, "The number of jobs must be positive.")
     ensure(
@@ -876,11 +929,39 @@ def parse_combine_counts_args(args=None):
     )
     ensure(args.mtr > 0, "The minimum number of total reads must be positive.")
 
+    no_normal = names[0].lower() != "normal"
+
+    segfile = None
+    if args.segfile != None:
+        ensure(isfile(args.segfile), "The specified segfile does not exist")
+        segfile = args.segfile
+
     ver = args.refversion
+    if ver != None:
+        ensure(
+            ver in ("hg19", "hg38"),
+            "Invalid reference genome version. Supported versions are hg38 and hg19.",
+        )
     ensure(
-        ver in ("hg19", "hg38"),
-        "Invalid reference genome version. Supported versions are hg38 and hg19.",
+        (ver != None and segfile == None) or (ver == None and segfile != None),
+        "Either reference version or segment file can be specified, but not both/neither of them."
     )
+
+    ensure(
+        (args.gtf is None) or isfile(args.gtf),
+        "The specified haplotype GTF file does not exist!",
+    )
+
+    ensure(
+        (args.ponfile is None) or isfile(args.ponfile),
+        "The specified file for panel of normal does not exist!"
+    )
+
+    mos_rg_files = args.mos_rgs
+    if mos_rg_files != None:
+        for mos_file in mos_rg_files:
+            ensure(isfile(mos_file), "The specified mosdepth region file does not exists")
+
 
     outdir = os.sep.join(args.outfile.split(os.sep)[:-1])
     ensure(
@@ -906,6 +987,12 @@ def parse_combine_counts_args(args=None):
         "test_alpha": args.alpha,
         "multisample": not args.ss_em,
         "ref_version": ver,
+
+        "seg_file": segfile,
+        "gtf_file": args.gtf,
+        "mos_rg_files": mos_rg_files,
+        "XX": args.XX,
+        "no_normal": no_normal,
     }
 
 
