@@ -1,4 +1,4 @@
-__version__ = "3.0.0"
+__version__ = "3.0.0-beta"
 
 import os.path
 from importlib.resources import path
