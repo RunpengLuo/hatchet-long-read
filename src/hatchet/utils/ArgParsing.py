@@ -822,7 +822,6 @@ def parse_combine_counts_args(args=None):
         exclusive to --segfile",
     )
     parser.add_argument(
-        "-s",
         "--segfile",
         required=False,
         type=str,
