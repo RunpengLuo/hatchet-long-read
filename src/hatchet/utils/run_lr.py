@@ -102,20 +102,26 @@ def main(args=None):
         sample_names = ("normal " + config.run.samples).split()
         ref_file = config.run.reference
         os.makedirs(f"{output}/baf", exist_ok=True)
-        params = [
-            "-N", config.run.normal,
-            "-T", *sample_bams,
-            "-S", *sample_names,
-            "-r", ref_file,
-            "-L", *glob.glob(f"{output}/snps/*.vcf.gz"),
-            "-O", f"{output}/baf/normal.1bed",
-            "-o", f"{output}/baf/tumor.1bed",
-            "-l", f"{output}/baf",
-            "--chromosomes", *(chromosomes or []),
-            *extra_args
-        ]
-        count_alleles(params)
-
+        if not os.path.isfile(f"{output}/baf/normal.1bed") or \
+            not os.path.isfile(f"{output}/baf/tumor.1bed"):
+            params = [
+                "-N", config.run.normal,
+                "-T", *sample_bams,
+                "-S", *sample_names,
+                "-r", ref_file,
+                "-L", *glob.glob(f"{output}/snps/*.vcf.gz"),
+                "-O", f"{output}/baf/normal.1bed",
+                "-o", f"{output}/baf/tumor.1bed",
+                "-l", f"{output}/baf",
+                "--chromosomes", *(chromosomes or []),
+                *extra_args
+            ]
+            count_alleles(params)
+        else:
+            log(
+                msg=f"skip, baf/normal.1bed and baf/tumor.1bed exists\n",
+                level="STEP",
+            )
 
     # ----------------------------------------------------
     if config.run.fixed_width:
