@@ -10,7 +10,7 @@ from hatchet.utils.combine_counts_lr import main as combine_counts
 from hatchet.utils.genotype_snps_lr import main as genotype_snps
 from hatchet.utils.phase_snps_lr import main as phase_snps
 
-from hatchet.utils.count_alleles import main as count_alleles
+from hatchet.utils.count_alleles_lr2 import main as count_alleles
 from hatchet.utils.cluster_bins_gmm import main as cluster_bins_gmm
 from hatchet.utils.cluster_bins import main as cluster_bins
 from hatchet.utils.plot_bins import main as plot_bins
@@ -136,7 +136,9 @@ def main(args=None):
             ref_ver = ["--segfile", config.count_reads.segfile] # override refversion
         
         sample_bams = config.run.bams.split()
-        sample_names = ("normal " + config.run.samples).split()
+        sample_names = config.run.samples.split()
+        if config.run.normal != None:
+            sample_names = ["normal"] + sample_names
         ref_file = config.run.reference
     
         os.makedirs(f"{output}/rdr", exist_ok=True)

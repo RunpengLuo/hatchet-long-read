@@ -140,7 +140,7 @@ def main(args):
             block_mos = [(n, mos[(mos.START > hb_start - 1000) & (mos.END < hb_stop + 1000)]) 
                 for n, mos in mosdepth_ch]
             
-            (starts, ends, totals, bss, rdrs) = adaptive_bins_segment_lr_ver2(
+            (starts, ends, totals, bss, rdrs) = adaptive_bins_segment_lr(
                 snp_thresholds=block_thres,
                 total_counts=block_totals,
                 snp_positions=block_snp_pos,
@@ -259,159 +259,11 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
             block_bb.loc[block_bb.SAMPLE==s, "BAF"] = 1 - baf
     return block_bb
 
-
-"""
-2d snp_thresholds (segment version), greedy binning
-assumption
-1. left-most snp positions >= snp_thresholds[0, 0]
-2. right-most snp positions < snp_thresholds[-1, 1]
-3. snp_thresholds must be strictly adjacent, 
-    i.e., snp_thresholds[i, 0] < snp_thresholds[i, 1] <= snp_thresholds[i+1, 0]
-4. region [snp_thresholds[0, 0]...snp_thresholds[-1, 1] are all vaild binning region,
-    centromere region is masked beforehand.
-5. snp positions are distinct
-6. snp_thresholds are non-overlap & sorted by starting positions
-"""
-def adaptive_bins_segment_lr(
-    snp_thresholds: np.ndarray,
-    total_counts: np.ndarray,
-    snp_positions: np.ndarray,
-    snp_counts: np.ndarray,
-    ch: str,
-    min_snp_reads=2000,
-    min_total_reads=5000,
-    no_normal=False,
-    use_averages_rd=False,
-    mos_block=None,
-):
-    """
-    Compute adaptive bins for a single haplotype block.
-    Parameters: TBD
-    """
-    try:
-        assert len(snp_thresholds) == len(total_counts), f"#tot_cts={len(total_counts)}\t#thres={len(snp_thresholds)}"
-        assert len(snp_positions) == len(snp_counts), f"#snp_pos={len(snp_positions)}\t#snp_cts={len(snp_counts)}"
-        assert ch[-1] not in ["X", "Y"], "sex chromosome unsupported yet"
-        # assert len(snp_positions) == len(snp_thresholds), f"#snp_pos={len(snp_positions)}\t#thres={len(snp_thresholds)}" 
-    except AssertionError:
-        log(msg=f"ERROR! {snp_thresholds[0]}\t{snp_thresholds[-1]}\t{snp_positions[0]}\t{snp_positions[-1]}\t{total_counts[0]}\t{total_counts[-1]}\n", level="ERROR")
-        log(msg=f"{len(snp_thresholds)}\t{len(snp_positions)}\t{len(total_counts)}\n", level="ERROR")
-        sys.exit(1)
-    
-    print(f"adaptive binning {ch}:{snp_thresholds[0]}-{snp_thresholds[-1]} #seg={len(snp_thresholds)} and #snps={len(snp_positions)}\n")
-
-    n_samples = total_counts.shape[1] // 2
-    n_thresholds  = len(snp_thresholds)
-
-    # #starts for ith sample
-    even_index = np.array([i * 2 for i in range(n_samples)], dtype=np.int8)
-    # mean read depth for ith sample
-    odd_index = even_index + 1
-
-    starts = []
-    ends = []
-    rdrs = []
-    totals = []
-    bss = []
-    bin_sep_idx = []
-
-    # per-threshold bin counts
-    bin_total = np.zeros(n_samples, dtype=np.uint32)
-    bin_snp_size = n_samples if no_normal else n_samples - 1
-    bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
-    
-    # one snp per threshold segment
-    start = None
-    end = None
-    j = 0 # snp counter
-    n_snps = len(snp_positions)
-    for i in range(n_thresholds):
-        if start == None:
-            start = snp_thresholds[i, 0]
-        cstart = snp_thresholds[i, 0]
-        end = snp_thresholds[i, 1]
-
-        while j != n_snps and snp_positions[j] < end:
-            if snp_positions[j] >= cstart: # ensure inclusive SNP
-                bin_snp += snp_counts[j]
-            j += 1
-
-        if use_averages_rd: # long read case
-            bin_total += total_counts[i, odd_index]
-            total_cond = np.all(bin_total >= min_total_reads)
-        else: # short reads case
-            bin_total += total_counts[i, even_index]
-            if i + 1 < n_thresholds:
-                total_cond = np.all((bin_total - total_counts[i + 1, odd_index]) >= min_total_reads)
-            else:
-                total_cond = np.all(bin_total >= min_total_reads)
-        
-        merge_last_bin = False
-        if np.any(bin_snp < min_snp_reads) or total_cond == False:
-            if i + 1 < n_thresholds: # hope next one
-                continue
-            # last bin now, merge if there is one previous bin, create new bin otherwise
-            merge_last_bin = len(starts) != 0
-
-        if not use_averages_rd and i + 1 < n_thresholds:
-            print("next threshold: ", total_counts[i + 1])
-            assert any(bin_total > total_counts[i + 1, odd_index])
-            bin_total -= total_counts[i + 1, odd_index]
-
-        if merge_last_bin:
-            ends[-1] = end
-            prev_sep_idx = bin_sep_idx[-1]
-            if not use_averages_rd:
-                totals[-1] += total_counts[prev_sep_idx, odd_index] # add back
-            totals[-1] += bin_total
-            bss[-1] += bin_snp
-        else:
-            starts.append(start)
-            ends.append(end)
-            bss.append(bin_snp)
-            totals.append(bin_total)
-
-        rdrs_bin = []
-        if mos_block != None:
-            # starts[-1] and ends[-1] already update, no merge last bin to check
-            mos_intersect = [(n, mos[(mos.START > starts[-1] - 1000) & (mos.END < ends[-1] + 1000)]) 
-                for n, mos in mos_block]
-            if no_normal:
-                rdrs_bin = [np.mean(_mos_int["AVG_DEPTH"]) for (_, _mos_int) in mos_intersect]
-            else:
-                norm = np.mean(mos_intersect[0][1]["AVG_DEPTH"])
-                rdrs_bin = [np.mean(_mos_int["AVG_DEPTH"]) / norm for (_, _mos_int) in mos_intersect]
-        else:
-            if no_normal:
-                rdrs_bin = totals[0:] / totals[0:]
-            else:
-                if merge_last_bin:
-                    rdrs_bin = (totals[-2][1:] + totals[-1][1:]) / (totals[-2][0] + totals[-1][0])
-                else:
-                    rdrs_bin = totals[-1][1:] / totals[-1][0]
-        rdrs_bin = np.array(rdrs_bin, dtype=np.float32)
-        if merge_last_bin: # replace the previous bin
-            rdrs[-1] = rdrs_bin
-        else:
-            rdrs.append(rdrs_bin)
-        
-        # init next round
-        start = None
-        end = None
-        bin_total = np.zeros(n_samples, dtype=np.uint32)
-        bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
-        bin_sep_idx.append(i) # add bin separator
-    
-    log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
-    # TODO bss may also be useful?
-    return starts, ends, totals, rdrs
-    
-
 """
 Given a group of consecutive bins, merge bins from left to right
 
 """
-def adaptive_bins_segment_lr_ver2(
+def adaptive_bins_segment_lr(
     snp_thresholds: np.ndarray,
     total_counts: np.ndarray,
     snp_positions: np.ndarray,

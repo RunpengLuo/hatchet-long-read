@@ -319,7 +319,7 @@ def load_snps_positions(baf_file: str, chromosomes: list):
     ret = {}
     for ch in chromosomes:
         if ch.endswith('X') or ch.endswith('Y'):
-            log(msg=f"Warning, found SNP for sec chromosomes {ch}, ignored")
+            log(msg=f"Warning, found SNP for sex chromosomes {ch}, ignored")
             ret.append(None) # append an empty array here
             continue
         baf_ch = baf_groups.get_group(ch)
