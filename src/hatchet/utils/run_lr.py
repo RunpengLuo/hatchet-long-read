@@ -40,6 +40,8 @@ def main(args=None):
     normal_arg = []
     if config.run.normal != None:
         normal_arg = ["-N", config.run.normal]
+    else:
+        normal_arg = ["-N", "None"]
 
     extra_args = []
     try:

@@ -598,7 +598,7 @@ def parse_count_reads_args(args=None):
     args = parser.parse_args(args)
 
     no_normal = False
-    if args.normal != None:
+    if args.normal != "None":
         bams = [args.normal] + args.tumor
     else:
         no_normal = True
