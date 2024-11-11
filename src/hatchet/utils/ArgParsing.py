@@ -988,6 +988,7 @@ def parse_combine_counts_args(args=None):
 
         "seg_file": segfile,
         "gtf_file": args.gtf,
+        "pon_file": args.ponfile,
         "mos_rg_files": mos_rg_files,
         "XX": args.XX,
         "no_normal": no_normal,

@@ -47,13 +47,14 @@ def main(args):
     test_alpha = args["test_alpha"]
     multisample = args["multisample"]
     no_normal = args["no_normal"] # set based on samples.txt first name
-    ponfile = args["ponfile"]
     referencefasta = args["referencefasta"]
     XX = args["XX"]
     rdr_dir = args["array"]
 
+    ponfile = args["pon_file"]
     segfile = args["seg_file"]
     refversion = args["ref_version"]
+    gtf_file = args["gtf_file"]
 
     outdir = outfile[:str.rindex(outfile, "/")]
 
@@ -63,9 +64,8 @@ def main(args):
         log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level="INFO")
     
     seg_df, _ = load_seg_file(segfile, use_chr)
-    
-    haplotype_file = args["gtf_file"]
-    if haplotype_file == None:
+
+    if gtf_file == None:
         log(msg="haplotype file is not provided, not tested, exit\n", level="ERROR")
         raise ValueError()
     
@@ -76,7 +76,7 @@ def main(args):
     
     # all mosdepth from same chromosome across all samples; n is sample name
     bed_mosdepths = load_mosdepth_files(all_names, mosdepth_files)
-    haplotype_blocks = load_gtf_file_bed(haplotype_file)
+    haplotype_blocks = load_gtf_file_bed(gtf_file)
 
     log(msg=f"Correct Haplotype blocks by segment file, #total hap blocks(raw)={len(haplotype_blocks)}\n", level="STEP")
     corr_hap_blocks = intersect_segments(seg_df, haplotype_blocks, raise_err=True)
