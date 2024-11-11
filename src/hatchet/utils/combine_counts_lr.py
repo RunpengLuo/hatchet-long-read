@@ -33,8 +33,7 @@ def main(args):
 
     ts = time.process_time()
 
-    baffile = args["baffile"]
-    threads = args["processes"]
+    baffile = args["baffile"] # tumor.1bed
     chromosomes = args["chromosomes"]
     outfile = args["outfile"]
     all_names = args["sample_names"]
@@ -42,11 +41,12 @@ def main(args):
     mtr = args["min_total_reads"]
     use_chr = args["use_chr"]
     phase = args["phase"]
+    threads = args["processes"]
     blocksize = args["blocksize"]
     max_snps_per_block = args["max_snps_per_block"]
     test_alpha = args["test_alpha"]
     multisample = args["multisample"]
-    no_normal = args["no_normal"]
+    no_normal = args["no_normal"] # set based on samples.txt first name
     ponfile = args["ponfile"]
     referencefasta = args["referencefasta"]
     XX = args["XX"]
@@ -182,7 +182,9 @@ def main(args):
     # correct RD by total normal / sample counts
     if no_normal:
         for sample, df in big_bb.groupby("SAMPLE", sort=False):
-            mead_rdr = max(df.RD.mean(), 1) # avoid div0
+            mead_rdr = df.RD.mean()
+            mean_rdr = mean_rdr if mean_rdr > 0 else 1 # avoid div0
+            log(msg=f"no-normal, sample:{sample} mean RDR factor={mean_rdr}\n", level="STEP")
             big_bb.loc[big_bb.SAMPLE == sample, "RD"] = df["RD"] / mead_rdr
     else:
         rc = pd.read_table(args["totalcounts"], header=None, names=["SAMPLE", "#READS"])
