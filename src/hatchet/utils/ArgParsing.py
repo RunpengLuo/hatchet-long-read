@@ -909,7 +909,7 @@ def parse_combine_counts_args(args=None):
         tkns = f.split(".")
         if len(tkns) > 1 and (tkns[1] == "thresholds" or tkns[1] == "total"):
             chromosomes.add(tkns[0])
-    chromosomes = sort_chroms(chromosomes)
+    chromosomes = sort_chroms(list(chromosomes))
 
     for ch in chromosomes:
         totals_arr, thresholds_arr = get_array_file_path(args.array, ch, args.not_compressed)
