@@ -9,10 +9,10 @@ from hatchet.utils.count_reads_lr import main as count_reads
 from hatchet.utils.combine_counts_lr import main as combine_counts
 from hatchet.utils.genotype_snps_lr import main as genotype_snps
 from hatchet.utils.phase_snps_lr import main as phase_snps
+from hatchet.utils.cluster_bins_lr import main as cluster_bins
 
 from hatchet.utils.count_alleles_lr2 import main as count_alleles
 from hatchet.utils.cluster_bins_gmm import main as cluster_bins_gmm
-from hatchet.utils.cluster_bins import main as cluster_bins
 from hatchet.utils.plot_bins import main as plot_bins
 from hatchet.utils.plot_bins_1d2d import main as plot_bins_1d2d
 from hatchet.bin.HATCHet import main as hatchet_main
