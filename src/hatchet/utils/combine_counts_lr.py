@@ -56,7 +56,11 @@ def main(args):
     refversion = args["ref_version"]
     gtf_file = args["gtf_file"]
 
+    DEBUG = True
+
     outdir = outfile[:str.rindex(outfile, "/")]
+    if DEBUG:
+        os.makedirs(f"{outdir}/snpsv", exist_ok=True) # DEBUG
 
     if os.path.isfile(outfile):
         log(msg=f"output={outfile} exists, skip combine-counts-ont\n", level="STEP")
@@ -93,6 +97,8 @@ def main(args):
         log(msg=f"adaptive binning {ch}\n", level="STEP")
         # TODO can be optimized
         snp_positions, snp_totals, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
+        if DEBUG:
+            snpsv.to_csv(f"{outdir}/snpsv/snpsv.{ch}.tsv", index=False, sep="\t")
         snp_positions = snp_positions - 1 # translate to 0-based index
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
@@ -181,7 +187,8 @@ def main(args):
     log(msg=f"finish adaptive binning\n", level="STEP")
     
     # check unscaled version
-    big_bb.to_csv(f"{outdir}/bulk.raw.bb", index=False, sep="\t")
+    if DEBUG:
+        big_bb.to_csv(f"{outdir}/bulk.unscaled_rdr.bb", index=False, sep="\t")
 
     # correct RD by total normal / sample counts
     if no_normal:
@@ -282,8 +289,14 @@ def adaptive_bins_segment_lr(
     mos_block=None
 ):
     """
-    Compute adaptive bins for a single haplotype block.
+    Compute adaptive bins within one haplotype block.
     Parameters: TBD
+    Returns:
+        starts: bin start positions.
+        ends: bin end positions [exclusive]
+        totals: (average) read depth per sample per bin
+        bss: (sum) read depth at SNP positions per sample per bin
+        rdrs: average read depth ratio per sample per bin
     """
     n_samples = total_counts.shape[1] // 2
     n_thresholds  = len(snp_thresholds)
@@ -375,9 +388,7 @@ def adaptive_bins_segment_lr(
         end = None
         bin_total = np.zeros(n_samples, dtype=np.uint32)
         bin_snp = np.zeros(bin_snp_size, dtype=np.uint32) 
-    
-    # log(msg=f"---hblock {snp_thresholds[0]}-{snp_thresholds[-1]} has {len(starts)} bins\n", level="STEP")
-    # TODO bss may also be useful?
+    # end for
     return starts, ends, totals, bss, rdrs
 
 if __name__ == "__main__":

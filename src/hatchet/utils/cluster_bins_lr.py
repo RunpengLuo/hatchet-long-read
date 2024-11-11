@@ -13,7 +13,7 @@ from hatchet.utils.Supporting import log, logArgs
 
 
 def main(args=None):
-    log(msg="combine_counts_lr test version\n", level="STEP")
+    log(msg="cluster_bins_lr test version\n", level="STEP")
     log(msg="# Parsing and checking input arguments\n", level="STEP")
     args = parse_cluster_bins_args(args)
     logArgs(args, 80)
