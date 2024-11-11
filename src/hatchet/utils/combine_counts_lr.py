@@ -58,6 +58,10 @@ def main(args):
 
     outdir = outfile[:str.rindex(outfile, "/")]
 
+    if os.path.isfile(outfile):
+        log(msg=f"output={outfile} exists, skip combine-counts-ont\n", level="STEP")
+        return
+
     if refversion != None:
         with path(hatchet.data, f"{refversion}.segments.bed") as p:
             segfile = str(p)
