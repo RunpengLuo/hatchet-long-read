@@ -507,7 +507,6 @@ def parse_count_reads_args(args=None):
         "--segfile",
         required=False,
         type=str,
-        default=config.count_reads.segfile,
         help="path to BED file containing pre-specified segments for which to compute RDR, \
         exclusive to --refversion"
     )

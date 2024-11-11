@@ -37,6 +37,10 @@ def main(args=None):
     except (KeyError, AttributeError):  # if key is absent or is blank (None)
         chromosomes = []  # process all
 
+    normal_arg = []
+    if config.run.normal != None:
+        normal_arg = ["-N", config.run.normal]
+
     extra_args = []
     try:
         if config.run.processes is not None:
@@ -56,8 +60,7 @@ def main(args=None):
             )
         os.makedirs(f"{output}/snps", exist_ok=True)
         params = [
-            "-N",
-            config.run.normal,
+            *normal_arg,
             "-r",
             config.run.reference,
             "-R",
@@ -82,8 +85,7 @@ def main(args=None):
             )
         os.makedirs(f"{output}/phase", exist_ok=True)
         params = [
-            "-N",
-            config.run.normal,
+            *normal_arg,
             "-r",
             config.run.reference,
             "-R",
@@ -105,7 +107,7 @@ def main(args=None):
         if not os.path.isfile(f"{output}/baf/normal.1bed") or \
             not os.path.isfile(f"{output}/baf/tumor.1bed"):
             params = [
-                "-N", config.run.normal,
+                *normal_arg,
                 "-T", *sample_bams,
                 "-S", *sample_names,
                 "-r", ref_file,
@@ -149,7 +151,7 @@ def main(args=None):
     
         os.makedirs(f"{output}/rdr", exist_ok=True)
         params = [
-                "-N", config.run.normal, 
+                *normal_arg, 
                 "-T", *sample_bams,
                 "-S", *sample_names,
                 *ref_ver,
