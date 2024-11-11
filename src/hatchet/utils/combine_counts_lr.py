@@ -182,10 +182,11 @@ def main(args):
     # correct RD by total normal / sample counts
     if no_normal:
         for sample, df in big_bb.groupby("SAMPLE", sort=False):
-            mead_rdr = df.RD.mean()
-            mean_rdr = mean_rdr if mean_rdr > 0 else 1 # avoid div0
+            mean_rdr = df.RD.mean()
+            if mean_rdr <= 0: # avoid div0
+                mean_rdr = 1
             log(msg=f"no-normal, sample:{sample} mean RDR factor={mean_rdr}\n", level="STEP")
-            big_bb.loc[big_bb.SAMPLE == sample, "RD"] = df["RD"] / mead_rdr
+            big_bb.loc[big_bb.SAMPLE == sample, "RD"] = df["RD"] / mean_rdr
     else:
         rc = pd.read_table(args["totalcounts"], header=None, names=["SAMPLE", "#READS"])
         nreads_normal = rc[rc.SAMPLE == all_names[0]].iloc[0]["#READS"]
