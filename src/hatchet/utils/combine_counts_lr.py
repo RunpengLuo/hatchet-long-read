@@ -197,7 +197,7 @@ def main(args):
     
     if args["gc_correct"]:
         log(
-            msg="# In long read sequencing pipeline, GC correction for RD is not recommended\n",
+            msg="# In long read sequencing pipeline, GC correction for RD is not recommended, skip\n",
             level="WARN",
         )
         # log(

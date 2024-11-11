@@ -860,6 +860,14 @@ def parse_combine_counts_args(args=None):
         help="panel of normal file used for normalizing RDR when no mathched normal is present (default: None). \
         Make sure the panel and the sample uses the same reference genome version."
     )
+    parser.add_argument(
+        '-g',
+        '--gc_correct',
+        action='store_true',
+        default=False,
+        required=False,
+        help='Use single-sample EM BAF inference (instead of multi-sample)',
+    )
     args = parser.parse_args(args)
 
     ensure(isfile(args.baffile), 
@@ -992,6 +1000,7 @@ def parse_combine_counts_args(args=None):
         "mos_rg_files": mos_rg_files,
         "XX": args.XX,
         "no_normal": no_normal,
+        "gc_correct": args.gc_correct,
     }
 
 
