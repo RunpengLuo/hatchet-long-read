@@ -247,7 +247,7 @@ def compute_mhap(snp_sv: pd.DataFrame, tumor_samples: list):
         hbafs0 += compute_hBAF(snp_sv_tumor, "FLIP")[1]
         hbafs1 += compute_hBAF(snp_sv_tumor, "NOFLIP")[1] # should be 1 - hbaf0
     hbafs0_per_sample = hbafs0 / p
-    hbafs1_per_sample = hbafs1 / []
+    hbafs1_per_sample = hbafs1 / p
     return "FLIP" if hbafs0_per_sample < hbafs1_per_sample else "NOFLIP"
 
 def handle_hap_block_bins(ch: str, all_names: list, snp_sv: pd.DataFrame,
