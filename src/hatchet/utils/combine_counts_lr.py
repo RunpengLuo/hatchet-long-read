@@ -228,68 +228,70 @@ def main(args):
 
 def compute_hBAF(df: pd.DataFrame, phase: str):
     assert phase in ["FLIP", "NOFLIP"]
-    totals = df.TOTAL.to_numpy(dtype=np.uint32)
-    refs = df.REF.to_numpy(dtype=np.uint32)
-    alts = df.ALT.to_numpy(dtype=np.uint32)
-    h = df[phase].to_numpy(dtype=np.uint32)
+    totals = df.TOTAL.to_numpy()
+    refs = df.REF.to_numpy()
+    alts = df.ALT.to_numpy()
+    h = df[phase].to_numpy()
     b_count = np.dot(h, alts) + np.dot(1 - h, refs)
     return int(b_count), float(b_count / float(np.sum(totals)))
 
 # select smaller haplotype BAF frequencies on average across samples
-def compute_mhap(snp_sv: pd.DataFrame, tumor_samples: list):
+def compute_mhBAF(snp_sv: pd.DataFrame, tumor_samples: list):
     p = len(tumor_samples)
     assert p > 0
     snp_sv_samples = snp_sv.groupby("SAMPLE")
-    hbafs0 = 0
-    hbafs1 = 0
+    hbafs0 = []
+    bcs0 = []
+    hbafs1 = []
+    bcs1 = []
+    num_snps = []
+    tot_snps_reads = []
     for tumor in tumor_samples:
         snp_sv_tumor = snp_sv_samples.get_group(tumor)
-        hbafs0 += compute_hBAF(snp_sv_tumor, "FLIP")[1]
-        hbafs1 += compute_hBAF(snp_sv_tumor, "NOFLIP")[1] # should be 1 - hbaf0
-    hbafs0_per_sample = hbafs0 / p
-    hbafs1_per_sample = hbafs1 / p
-    return "FLIP" if hbafs0_per_sample < hbafs1_per_sample else "NOFLIP"
+        num_snps.append(len(snp_sv_tumor))
+        tot_snps_reads.append(snp_sv_tumor.TOTAL.sum())
+        bc0, baf0 = compute_hBAF(snp_sv_tumor, "FLIP")
+        hbafs0.append(baf0)
+        bcs0.append(bc0)
+        bc1, baf1 = compute_hBAF(snp_sv_tumor, "NOFLIP")
+        hbafs1.append(baf1) # should be 1 - hbaf0
+        bcs1.append(bc1)
+    hbafs0_per_sample = sum(hbafs0) / p
+    hbafs1_per_sample = sum(hbafs1) / p
+    if hbafs0_per_sample < hbafs1_per_sample:
+        return "FLIP", bcs0, hbafs0, num_snps, tot_snps_reads
+    else:
+        return "NOFLIP", bcs1, hbafs1, num_snps, tot_snps_reads
 
 def handle_hap_block_bins(ch: str, all_names: list, snp_sv: pd.DataFrame,
                           block_start: int, block_stop: int, 
                           starts: list, ends: list, totals: list, rdrs: list,
                           no_normal=False):
-    phase = compute_mhap(snp_sv, all_names[(0 if no_normal else 1):])
+    tumors = all_names[0 if no_normal else 1:]
     block_bb = init_bb_dataframe()
     for i in range(len(starts)): # per bin
         start, end = starts[i], ends[i]
         df = snp_sv[(snp_sv.POS >= start) & (snp_sv.POS <= end)]
-        df: pd.DataFrame = df.dropna(subset=["FLIP"])
-        df_groups = df.groupby("SAMPLE")
         if len(df) == 0:
             continue
+        phase, b_counts, mhBAFs, num_snps, total_snp_reads = compute_mhBAF(df, tumors)
         normal_reads = 0 if no_normal else totals[i][0]
-        for s in range(0 if no_normal else 1, len(all_names)):
+        for s in range(len(tumors)):
+            ss = s if no_normal else s + 1
             # per-bin
-            sample = all_names[s]
-            df_sample = df_groups.get_group(sample)
-            num_snps = len(df_sample)
-            total_reads = totals[i][s]
-            rdr = rdrs[i][s]
-            if num_snps <= 0 or total_reads <= 0 or rdr <= 0:
+            sample = tumors[s]
+            total_reads = totals[i][ss]
+            rdr = rdrs[i][ss]
+            if num_snps[s] <= 0 or total_reads <= 0 or rdr <= 0 or total_snp_reads[s] <= 0:
                 continue
 
-            total_snp_reads = df_sample.TOTAL.sum()
-            assert total_snp_reads > 0, f"ERROR! total_snp_reads is 0 for {sample}:{start}-{end}"
-            b_count, mhBAF = compute_hBAF(df_sample, phase)
             block_bb.loc[len(block_bb)] = [
                 ch, "unit", start, end, sample,
                 rdr, total_reads, normal_reads,
-                num_snps, b_count, total_snp_reads,
-                "", "", "", "", mhBAF,
+                num_snps[s], b_counts[s], total_snp_reads[s],
+                phase, "", "", "", mhBAFs[s],
                 block_start, block_stop
             ]
-
-    for s in block_bb.SAMPLE.unique():
-        med_baf = block_bb[block_bb.SAMPLE==s].BAF.median()
-        if med_baf > 0.5:
-            baf = block_bb.loc[block_bb.SAMPLE==s, "BAF"]
-            block_bb.loc[block_bb.SAMPLE==s, "BAF"] = 1 - baf
     return block_bb
 
 """
