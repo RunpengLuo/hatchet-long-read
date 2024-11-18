@@ -114,7 +114,7 @@ def main(args):
         log(msg=f"{ch}\t#hap blocks (raw)={len(hap_blocks_ch)}\n", level="STEP")
 
         # TODO parallel this step
-        for _, row in hap_blocks_ch.iterrows():
+        for ridx, row in hap_blocks_ch.iterrows():
             hb_start, hb_stop = row.START, row.END
 
             # compute left-most and right-most threshold segment 
@@ -142,7 +142,10 @@ def main(args):
             # extract snp snp_positions within the haplotype block region
             block_snp_pos = snp_positions[block_snps_idx]
             block_snp_total = snp_totals[block_snps_idx]
-            # block_snp_sv = snp_df.iloc[block_snps_idx]  FIXME
+            block_snp_sv = snp_sv.iloc[block_snps_idx]
+            if DEBUG:
+                np.savetxt(f"{outdir}/snpsv/block_snps_idx.{ch}.{ridx}.{hb_start}_{hb_stop}.tsv", block_snps_idx, fmt="%d", delimiter='\t')
+                block_snp_sv.to_csv(f"{outdir}/snpsv/snpsv.{ch}.{ridx}.{hb_start}_{hb_stop}.tsv", index=True, sep="\t")
 
 
             block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
