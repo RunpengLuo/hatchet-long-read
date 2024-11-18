@@ -248,8 +248,14 @@ def compute_mhBAF(snp_sv: pd.DataFrame, tumor_samples: list):
     tot_snps_reads = []
     for tumor in tumor_samples:
         snp_sv_tumor = snp_sv_samples.get_group(tumor)
-        num_snps.append(len(snp_sv_tumor))
-        tot_snps_reads.append(snp_sv_tumor.TOTAL.sum())
+        snp_sv_tumor.dropna(subset=["FLIP", "NOFLIP"], inplace=True)
+
+        nsnp = len(snp_sv_tumor)
+        tot = snp_sv_tumor.TOTAL.sum()
+        assert nsnp > 0 and tot > 0, f"sample {tumor} has bin with zero snp reads or zero total snp reads"
+        num_snps.append(nsnp)
+        tot_snps_reads.append(tot)
+
         bc0, baf0 = compute_hBAF(snp_sv_tumor, "FLIP")
         hbafs0.append(baf0)
         bcs0.append(bc0)
