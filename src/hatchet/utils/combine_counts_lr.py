@@ -60,7 +60,7 @@ def main(args):
 
     outdir = outfile[:str.rindex(outfile, "/")]
     if DEBUG:
-        os.makedirs(f"{outdir}/snpsv", exist_ok=True) # DEBUG
+        os.makedirs(f"{outdir}/snp_sv", exist_ok=True) # DEBUG
 
     if os.path.isfile(outfile):
         log(msg=f"output={outfile} exists, skip combine-counts-ont\n", level="STEP")
@@ -98,7 +98,7 @@ def main(args):
         # TODO can be optimized
         snp_positions, snp_totals, snp_sv = read_snps(baffile, ch, all_names, phasefile=phase)
         if DEBUG:
-            snp_sv.to_csv(f"{outdir}/snpsv/snpsv.{ch}.tsv", index=True, sep="\t")
+            snp_sv.to_csv(f"{outdir}/snp_sv/snp_sv.{ch}.tsv", index=True, sep="\t")
         snp_positions = snp_positions - 1 # translate to 0-based index
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
@@ -143,10 +143,6 @@ def main(args):
             block_snp_pos = snp_positions[block_snps_idx]
             block_snp_total = snp_totals[block_snps_idx]
             block_snp_sv = snp_sv.iloc[block_snps_idx]
-            if DEBUG:
-                np.savetxt(f"{outdir}/snpsv/block_snps_idx.{ch}.{ridx}.{hb_start}_{hb_stop}.tsv", block_snps_idx, fmt="%d", delimiter='\t')
-                block_snp_sv.to_csv(f"{outdir}/snpsv/snpsv.{ch}.{ridx}.{hb_start}_{hb_stop}.tsv", index=True, sep="\t")
-
 
             block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
             block_totals = tot_arr_ch[tidx1:tidx2 + 1, ]  # n-by-4
@@ -181,7 +177,8 @@ def main(args):
             if len(starts) == 0:
                 continue
             
-            block_bb = handle_hap_block_bins(ch, all_names, snp_sv,
+            block_bb = handle_hap_block_bins(ch, all_names, 
+                                             block_snp_sv,
                                              hb_start, hb_stop,
                                              starts, ends, totals, 
                                              rdrs, no_normal)
@@ -229,32 +226,46 @@ def main(args):
     log(msg=f"combine-counts-ont completed, processed time (exclude sp): {time.process_time()-ts}sec\n", level="STEP")
     return
 
+def compute_hBAF(df: pd.DataFrame, phase: str):
+    assert phase in ["FLIP", "NOFLIP"]
+    totals = df.TOTAL.to_numpy(dtype=np.uint16)
+    refs = df.REF.to_numpy(dtype=np.uint16)
+    alts = df.ALT.to_numpy(dtype=np.uint16)
+    h = df[phase].to_numpy(dtype=np.uint16)
+    b_count = np.dot(h, alts) + np.dot(1 - h, refs)
+    return int(b_count), float(b_count / float(np.sum(totals)))
 
+# select smaller haplotype BAF frequencies on average across samples
+def compute_mhap(snp_sv: pd.DataFrame, tumor_samples: list):
+    p = len(tumor_samples)
+    assert p > 0
+    snp_sv_samples = snp_sv.groupby("SAMPLE")
+    hbafs0 = 0
+    hbafs1 = 0
+    for tumor in tumor_samples:
+        snp_sv_tumor = snp_sv_samples.get_group(tumor)
+        hbafs0 += compute_hBAF(snp_sv_tumor, "FLIP")[1]
+        hbafs1 += compute_hBAF(snp_sv_tumor, "NOFLIP")[1] # should be 1 - hbaf0
+    hbafs0_per_sample = hbafs0 / p
+    hbafs1_per_sample = hbafs1 / []
+    return "FLIP" if hbafs0_per_sample < hbafs1_per_sample else "NOFLIP"
 
-"""
-get b-allelic frequency count
-"""
-def get_b_count(df: pd.DataFrame):
-    return df.apply(lambda row: row.REF if row.FLIP == 1 else row.ALT, axis=1).sum()
-
-def get_mhBAF(df: pd.DataFrame):
-
-    pass
-
-def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
+def handle_hap_block_bins(ch: str, all_names: list, snp_sv: pd.DataFrame,
                           block_start: int, block_stop: int, 
                           starts: list, ends: list, totals: list, rdrs: list,
                           no_normal=False):
+    phase = compute_mhap(snp_sv, all_names[(0 if no_normal else 1):])
     block_bb = init_bb_dataframe()
     for i in range(len(starts)): # per bin
         start, end = starts[i], ends[i]
-        df = snpsv[(snpsv.POS >= start) & (snpsv.POS <= end)]
+        df = snp_sv[(snp_sv.POS >= start) & (snp_sv.POS <= end)]
         df: pd.DataFrame = df.dropna(subset=["FLIP"])
         df_groups = df.groupby("SAMPLE")
         if len(df) == 0:
             continue
         normal_reads = 0 if no_normal else totals[i][0]
         for s in range(0 if no_normal else 1, len(all_names)):
+            # per-bin
             sample = all_names[s]
             df_sample = df_groups.get_group(sample)
             num_snps = len(df_sample)
@@ -265,12 +276,12 @@ def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
 
             total_snp_reads = df_sample.TOTAL.sum()
             assert total_snp_reads > 0, f"ERROR! total_snp_reads is 0 for {sample}:{start}-{end}"
-            b_count = get_b_count(df_sample)
+            b_count, mhBAF = compute_hBAF(df_sample, phase)
             block_bb.loc[len(block_bb)] = [
                 ch, "unit", start, end, sample,
                 rdr, total_reads, normal_reads,
                 num_snps, b_count, total_snp_reads,
-                "", "", "", "", b_count / total_snp_reads,
+                "", "", "", "", mhBAF,
                 block_start, block_stop
             ]
 
