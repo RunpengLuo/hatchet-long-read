@@ -228,10 +228,10 @@ def main(args):
 
 def compute_hBAF(df: pd.DataFrame, phase: str):
     assert phase in ["FLIP", "NOFLIP"]
-    totals = df.TOTAL.to_numpy(dtype=np.uint16)
-    refs = df.REF.to_numpy(dtype=np.uint16)
-    alts = df.ALT.to_numpy(dtype=np.uint16)
-    h = df[phase].to_numpy(dtype=np.uint16)
+    totals = df.TOTAL.to_numpy(dtype=np.uint32)
+    refs = df.REF.to_numpy(dtype=np.uint32)
+    alts = df.ALT.to_numpy(dtype=np.uint32)
+    h = df[phase].to_numpy(dtype=np.uint32)
     b_count = np.dot(h, alts) + np.dot(1 - h, refs)
     return int(b_count), float(b_count / float(np.sum(totals)))
 
