@@ -96,9 +96,9 @@ def main(args):
     for ch in chromosomes:
         log(msg=f"adaptive binning {ch}\n", level="STEP")
         # TODO can be optimized
-        snp_positions, snp_totals, snpsv = read_snps(baffile, ch, all_names, phasefile=phase)
+        snp_positions, snp_totals, snp_sv = read_snps(baffile, ch, all_names, phasefile=phase)
         if DEBUG:
-            snpsv.to_csv(f"{outdir}/snpsv/snpsv.{ch}.tsv", index=False, sep="\t")
+            snp_sv.to_csv(f"{outdir}/snpsv/snpsv.{ch}.tsv", index=True, sep="\t")
         snp_positions = snp_positions - 1 # translate to 0-based index
         mosdepth_ch = [(n, mos[mos.CHR == ch]) for n, mos in bed_mosdepths]
 
@@ -142,6 +142,7 @@ def main(args):
             # extract snp snp_positions within the haplotype block region
             block_snp_pos = snp_positions[block_snps_idx]
             block_snp_total = snp_totals[block_snps_idx]
+            # block_snp_sv = snp_df.iloc[block_snps_idx]  FIXME
 
 
             block_thres  = thres_arr_ch[tidx1:tidx2 + 1, ] # n-by-2
@@ -177,7 +178,7 @@ def main(args):
             if len(starts) == 0:
                 continue
             
-            block_bb = handle_hap_block_bins(ch, all_names, snpsv,
+            block_bb = handle_hap_block_bins(ch, all_names, snp_sv,
                                              hb_start, hb_stop,
                                              starts, ends, totals, 
                                              rdrs, no_normal)
@@ -232,6 +233,10 @@ get b-allelic frequency count
 """
 def get_b_count(df: pd.DataFrame):
     return df.apply(lambda row: row.REF if row.FLIP == 1 else row.ALT, axis=1).sum()
+
+def get_mhBAF(df: pd.DataFrame):
+
+    pass
 
 def handle_hap_block_bins(ch: str, all_names: list, snpsv: pd.DataFrame,
                           block_start: int, block_stop: int, 
