@@ -22,7 +22,6 @@ from hatchet.utils.additional_features import (
     expected_count_files,
     check_count_files,
     workload_assignment,
-    read_snps,
     load_snps_positions,
     segments2thresholds
 )
@@ -166,16 +165,13 @@ def main(args=None):
         )
         for i in range(n_tasks_mosdepth)
     ]
-    try:
-        with Pool(n_workers_mosdepth) as p:
-            p.map(run_mosdepth_rg, mosdepth_params)
-    except Exception as e:
+    rets = []
+    with Pool(n_workers_mosdepth) as p:
+        rets = p.map(run_mosdepth_rg, mosdepth_params)
+    if any(ret != 0 for ret in rets):
         log(msg=f"ERROR! mosdepth raise exception: {e}\n",level="ERROR")
-        p.terminate()
         raise ValueError()
-    finally:
-        p.join()
-        log(msg="All mosdepth finished\n", level="STEP")
+    log(msg="All mosdepth finished\n", level="STEP")
     
     # 
     # compute count arrays
@@ -191,16 +187,13 @@ def main(args=None):
         )
         for ch in chromosomes
     ]
-    try:
-        with Pool(n_workers_count_array) as p:
-            p.map(run_count_array, count_array_params)
-    except Exception as e:
-            log(msg=f"ERROR! count_array raise exception: {e}\n",level="ERROR")
-            p.terminate()
-            raise ValueError()
-    finally:
-        p.join()
-        log(msg="All count_array finished\n", level="STEP")
+
+    with Pool(n_workers_count_array) as p:
+        rets = p.map(run_count_array, count_array_params)
+    if any(ret != 0 for ret in rets):
+        log(msg="ERROR! count_array raise exception\n",level="ERROR")
+        raise ValueError()
+    log(msg="All count_array finished\n", level="STEP")
 
     
     np.savetxt(os.path.join(outdir, "samples.txt"), names, fmt="%s")
@@ -254,6 +247,7 @@ Returns: <n> x <2d> np.ndarray
     entry [i, 2j + 1]=segment mean read depth, given by mosdepth
 """
 def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: str):
+    retcode = 0
     try:
         [tot_file, thres_file] = get_array_file_path(outdir, chromosome)
         seg_df_ch, _ = load_seg_file(thres_file, use_chr, [])
@@ -283,12 +277,11 @@ def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: st
             arr[:, 2*idx + 1] = reg_df["DEPTH"].to_numpy()
 
         np.savetxt(tot_file, arr, fmt="%d")
+        log(f"Done count array {chromosome}\n", level="STEP")
     except Exception as e:
         log(f"ERROR! count array {chromosome}: {e}\n", level="ERROR")
-        raise e
-    finally:
-        log(f"Done count array {chromosome}\n", level="STEP")
-        return arr
+        retcode = 1
+    return retcode
 
 def run_count_array(params):
     return _run_count_array(*params)
@@ -301,6 +294,7 @@ segment_file: all regions for all chromosomes gzipped
 def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str, 
                      bam_file: str, threads: int, 
                     mosdepth: str, readquality: int):
+    retcode = 0
     try:
         log(
                 f"Run mosdepth (region) for {sample_name}\n",
@@ -332,12 +326,11 @@ def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str,
             err_fd.close()
             out_fd.close()
             ret.check_returncode()
+            log(f"Done mosdepth on sample {sample_name}\n", level="STEP")
     except Exception as e:
-        log(f"ERROR! mosdepth region exception {e}", level="ERROR")
-        raise e
-    finally:
-        log(f"Done mosdepth on sample {sample_name}\n", level="STEP")
-        return None
+        log(f"ERROR! mosdepth region exception {e}\n", level="ERROR")
+        retcode = 1
+    return retcode
 
 def run_mosdepth_rg(params):
     return _run_mosdepth_rg(*params)
