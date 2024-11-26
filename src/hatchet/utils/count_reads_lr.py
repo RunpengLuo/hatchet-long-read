@@ -144,7 +144,7 @@ def main(args=None):
         ret.check_returncode()
         log(msg="computed all segment files\n", level="STEP")
     else:
-        log(msg="found all segments intermediate files, skip", level="STEP")
+        log(msg="found all segments intermediate files, skip\n", level="STEP")
     segment_file = segment_file_gz
 
     # run mosdepth against the global segment file per bam file
@@ -311,7 +311,6 @@ def _run_mosdepth_rg(segment_file: str, outdir: str, sample_name: str,
             )
         else:
             msdp_cmd = [
-                        "time",
                         mosdepth, 
                         "-t", str(threads), 
                         "-Q", str(readquality),
