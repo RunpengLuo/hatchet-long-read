@@ -111,7 +111,7 @@ def main(args=None):
     segment_file = os.path.join(outdir, "segments.bed")
     segment_file_gz = f"{segment_file}.gz"
     if not os.path.isfile(segment_file_gz) or \
-        any(not os.path.isfile(os.path.join(outdir, f"{ch}.threshold.gz")) for ch in chromosomes):
+        any(not os.path.isfile(os.path.join(outdir, f"{ch}.thresholds.gz")) for ch in chromosomes):
         # TODO parallel if need?
         with open(segment_file, "w") as rg_fd:
             # compute segment files per chromosome
@@ -135,7 +135,7 @@ def main(args=None):
                     raise ValueError(f"improper negative interval in provided segment file for chromosome {ch}")
                 np.savetxt(rg_fd, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
                 
-                segment_file_ch = os.path.join(outdir, f"{ch}.threshold.gz")
+                segment_file_ch = os.path.join(outdir, f"{ch}.thresholds.gz")
                 np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
                 log(msg=f"#segments for {ch}: {len(thresholds_ch)}\n", level="STEP")
             rg_fd.close()

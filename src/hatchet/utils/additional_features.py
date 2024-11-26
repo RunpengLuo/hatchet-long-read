@@ -155,7 +155,7 @@ def init_summary_dataframe():
 
 def get_array_file_path(dirname: str, ch: str, uncompressed=False):
     ret1 = os.path.join(dirname, f"{ch}.total.gz")
-    ret2 = os.path.join(dirname, f"{ch}.threshold.gz")
+    ret2 = os.path.join(dirname, f"{ch}.thresholds.gz")
     if uncompressed:
         return [ret1[:-3], ret2[:-3]]
     return [ret1, ret2]
