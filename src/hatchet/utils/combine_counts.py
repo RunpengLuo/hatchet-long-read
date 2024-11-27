@@ -1246,6 +1246,7 @@ def run_chromosome(
 
             # save temp results DEBUG
             outdir = outfile[:str.rindex(outfile, "/")]
+            odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
             store_adp_binning(starts_p, ends_p, snpsv, chromosome, f"{outdir}/binning", "p_arm")
 
             # Infer BAF
