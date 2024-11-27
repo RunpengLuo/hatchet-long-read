@@ -223,32 +223,31 @@ def count_comment_lines(filename: str, comment_symbol='#'):
         else:
             break
     fd.close()
+    log(f"Number of skipped header line={num_header} in {filename}\n", level='DEBUG')
     return num_header
 
-def load_vcf_file(vcf_file: str, read_type="ONT", phased=True):
-    num_header = count_comment_lines(vcf_file, '#')
+def load_vcf_file(vcf_file: str, read_type: str, phased=True):
+    num_comment = count_comment_lines(vcf_file, '#')
+    vcf_header = ["CHR", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "PHASE"]
     # skiprows is necessary versus comment
     # since vcf main content field may still contains comment symbol
     df = pd.read_table(vcf_file, compression='gzip', sep='\t', 
-                       names=["CHR", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "PHASE"],
+                       names=vcf_header,
                        usecols=["CHR", "POS", "PHASE"],
                        quoting=3,
                        low_memory=False,
                        dtype={'CHR': object, 'POS': np.uint32},
-                       skiprows=num_header)
+                       skiprows=num_comment)
 
     if phased:
-        if read_type == "ONT":
-            df["FLIP"] = df.PHASE.str.contains('1|0', regex=False).astype(np.int8)
-            df["NOFLIP"] = df.PHASE.str.contains('0|1', regex=False).astype(np.int8)
-            # Drop entries without phasing output
-            df = df[df.FLIP + df.NOFLIP > 0]
-            # For exact duplicate entries, drop one
-            df = df.drop_duplicates()
-            # For duplicate entries with the same (CHR, POS) but different phase, drop all
-            df = df.drop_duplicates(subset=['CHR', 'POS'], keep=False)
-        else:
-            raise ValueError(f"read_type={read_type} not yet supported")
+        df["FLIP"] = df.PHASE.str.contains('1|0', regex=False).astype(np.int8)
+        df["NOFLIP"] = df.PHASE.str.contains('0|1', regex=False).astype(np.int8)
+        # Drop entries without phasing output
+        df = df[df.FLIP + df.NOFLIP > 0]
+        # For exact duplicate entries, drop one
+        df = df.drop_duplicates()
+        # For duplicate entries with the same (CHR, POS) but different phase, drop all
+        df = df.drop_duplicates(subset=['CHR', 'POS'], keep=False)
     return df
 
 # FIXME to be simplified
@@ -259,7 +258,7 @@ return:
 2. SNP total counts in 2D matrix with dim #SNPs * #samples
 3. SNP dataframe
 """
-def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None):
+def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None, read_type="EMPTY"):
     """
     Read and validate SNP data for this patient (TSV table output from HATCHet deBAF.py).
     """
@@ -299,7 +298,7 @@ def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None):
     snps['TOTAL'] = snps.ALT + snps.REF
 
     if phasefile != None:
-        phased_df = load_vcf_file(phasefile, read_type="ONT", phased=True)
+        phased_df = load_vcf_file(phasefile, read_type, phased=True)
         # Merge tables: keep only those SNPs for which we have phasing output
         snps = pd.merge(snps, phased_df, on=['CHR', 'POS'], how='left')
 
