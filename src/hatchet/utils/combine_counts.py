@@ -13,6 +13,9 @@ from hatchet.utils.ArgParsing import parse_combine_counts_args
 import hatchet.utils.Supporting as sp
 from hatchet.utils.rd_gccorrect import rd_gccorrect
 
+from hatchet.utils.additional_features import (
+    count_comment_lines
+)
 
 def main(args=None):
     sp.log(msg="# Parsing and checking input arguments\n", level="STEP")
@@ -220,10 +223,11 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
 
     if phasefile is not None:
         # Read in phasing output
+        skip_rows = count_comment_lines(phasefile, '#')
         phases = pd.read_table(
             phasefile,
             compression="gzip",
-            comment="#",
+            skiprows=skip_rows,
             names="CHR\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tPHASE".split(),
             usecols=["CHR", "POS", "PHASE"],
             quoting=3,

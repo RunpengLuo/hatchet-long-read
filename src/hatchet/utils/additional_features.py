@@ -211,21 +211,34 @@ def workload_assignment(nproc: int, ntask: int, max_threads=4):
         threads_per_task = [1] * ntask
     return nworker, threads_per_task
 
+def count_comment_lines(filename: str, comment_symbol='#'):
+    num_header = 0
+    if filename.endswith(".gz"):
+        fd = gzip.open(filename, 'rt')
+    else:
+        fd = open(filename, 'r')
+    for line in fd:
+        if line.startswith(comment_symbol):
+            num_header += 1
+        else:
+            break
+    fd.close()
+    return num_header
+
 def load_vcf_file(vcf_file: str, read_type="ONT", phased=True):
-    df = pd.read_table(
-            vcf_file,
-            compression='gzip',
-            comment='#',
-            sep='\t',
-            names=["CHR", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "PHASE"],
-            usecols=['CHR', 'POS', 'PHASE'],
-            quoting=3,
-            low_memory=False,
-            dtype={'CHR': object, 'POS': np.uint32},
-        )
+    num_header = count_comment_lines(vcf_file, '#')
+    # skiprows is necessary versus comment
+    # since vcf main content field may still contains comment symbol
+    df = pd.read_table(vcf_file, compression='gzip', sep='\t', 
+                       names=["CHR", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "PHASE"],
+                       usecols=["CHR", "POS", "PHASE"],
+                       quoting=3,
+                       low_memory=False,
+                       dtype={'CHR': object, 'POS': np.uint32},
+                       skiprows=num_header)
+
     if phased:
         if read_type == "ONT":
-            df.PHASE = df.PHASE.astype(str).apply(lambda x: x.split(':')[0]) # assumes first field is GT
             df["FLIP"] = df.PHASE.str.contains('1|0', regex=False).astype(np.int8)
             df["NOFLIP"] = df.PHASE.str.contains('0|1', regex=False).astype(np.int8)
             # Drop entries without phasing output
