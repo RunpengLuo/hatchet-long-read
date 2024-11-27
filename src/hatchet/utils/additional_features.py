@@ -390,6 +390,9 @@ def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame,
                            ch: str, outdir: str, prefix: str):
     log(f"Save temp results for adaptive binning in {outdir}\n", level="INFO")
     os.makedirs(outdir, exist_ok=True)
+    if "REFC" not in snpsv_ch.columns:
+        assert "REF" in snpsv_ch.columns and "ALT" in snpsv_ch.columns
+        snpsv_ch = snpsv_ch.rename({"REF": "REFC", "ALT": "ALTC"})
     df = snpsv_ch[["SAMPLE", "CHR", "POS", "TOTAL", "REFC", "ALTC"]]
     # nbins = len(starts)
     big_column_names = {
