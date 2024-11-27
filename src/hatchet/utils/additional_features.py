@@ -385,3 +385,32 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
         else:
             thresholds = np.concatenate([thresholds, sub_segments], axis=0)
     return thresholds, init_thres
+
+def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame, 
+                           ch: str, outdir: str, prefix: str):
+    log(f"Save temp results for adaptive binning in {outdir}\n", level="INFO")
+    os.makedirs(outdir, exist_ok=True)
+    df = snpsv_ch[["SAMPLE", "CHR", "POS", "TOTAL", "REFC", "ALTC"]]
+    # nbins = len(starts)
+    big_column_names = {
+        "SAMPLE": "str",
+        "CHR": "str",
+        "POS": "int",
+        "TOTAL": "int",
+        "REFC": "int",
+        "ALTC": "int",
+        "BIN_ID": "int",
+        "BIN_START": "int",
+        "BIN_END": "int"
+    }
+    big_df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in big_column_names.items()})
+    for i in range(len(starts)):
+        snp_df: pd.DataFrame = df[(df.POS >= starts[i]) & (df.POS <= ends[i])]
+        snp_df["BIN_ID"] = i
+        snp_df["BIN_START"] = starts[i]
+        snp_df["BIN_END"] = ends[i]
+        snp_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_BIN_{i}.tsv", sep='\t', header=True, index=False)
+        big_df = pd.concat([big_df, snp_df], ignore_index=True)
+    big_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_ALL.tsv", sep='\t', header=True, index=False)
+    log(f"Number of bins: {len(starts)}\n", level="INFO")
+    return

@@ -14,7 +14,8 @@ import hatchet.utils.Supporting as sp
 from hatchet.utils.rd_gccorrect import rd_gccorrect
 
 from hatchet.utils.additional_features import (
-    count_comment_lines
+    count_comment_lines,
+    store_adp_binning
 )
 
 def main(args=None):
@@ -1243,6 +1244,10 @@ def run_chromosome(
             ends_p = bins_p[1]
             # Partition SNPs for BAF inference
 
+            # save temp results DEBUG
+            outdir = outfile[:str.rindex(outfile, "/")]
+            store_adp_binning(starts_p, ends_p, snpsv, chromosome, f"{outdir}/binning", "p_arm")
+
             # Infer BAF
             if xy:
                 # TODO: compute BAFs for XX
@@ -1328,6 +1333,10 @@ def run_chromosome(
 
             starts_q = bins_q[0]
             ends_q = bins_q[1]
+
+            # save temp results DEBUG
+            outdir = outfile[:str.rindex(outfile, "/")]
+            store_adp_binning(starts_q, ends_q, snpsv, chromosome, f"{outdir}/binning", "q_arm")
 
             if xy:
                 dfs_q = None
