@@ -388,7 +388,7 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
 
 def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame, 
                            ch: str, outdir: str, prefix: str):
-    if len(starts) == 0:
+    if len(starts) == 0 or snpsv_ch.empty:
         log(f"starts empty for {ch} {prefix}", level="INFO")
         print(snpsv_ch)
         return

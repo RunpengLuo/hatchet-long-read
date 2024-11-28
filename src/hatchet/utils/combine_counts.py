@@ -1245,9 +1245,10 @@ def run_chromosome(
             # Partition SNPs for BAF inference
 
             # save temp results DEBUG
-            outdir = outfile[:str.rindex(outfile, "/")]
-            odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
-            store_adp_binning(starts_p, ends_p, snpsv, chromosome, odir, "p_arm")
+            if not xy:
+                outdir = outfile[:str.rindex(outfile, "/")]
+                odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
+                store_adp_binning(starts_p, ends_p, snpsv, chromosome, odir, "p_arm")
 
             # Infer BAF
             if xy:
@@ -1336,9 +1337,10 @@ def run_chromosome(
             ends_q = bins_q[1]
 
             # save temp results DEBUG
-            outdir = outfile[:str.rindex(outfile, "/")]
-            odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
-            store_adp_binning(starts_q, ends_q, snpsv, chromosome, odir, "q_arm")
+            if not xy:
+                outdir = outfile[:str.rindex(outfile, "/")]
+                odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
+                store_adp_binning(starts_q, ends_q, snpsv, chromosome, odir, "q_arm")
 
             if xy:
                 dfs_q = None
