@@ -388,6 +388,10 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
 
 def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame, 
                            ch: str, outdir: str, prefix: str):
+    if snpsv_ch == None:
+        log(f"snpsv_ch==None for {ch} {prefix}", level="INFO")
+        return
+
     log(f"Save temp results for adaptive binning in {outdir}\n", level="INFO")
     os.makedirs(outdir, exist_ok=True)
     if "REFC" not in snpsv_ch.columns:
@@ -408,7 +412,7 @@ def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame,
     }
     big_df = pd.DataFrame({c: pd.Series(dtype=t) for c, t in big_column_names.items()})
     for i in range(len(starts)):
-        snp_df: pd.DataFrame = df[(df.POS >= starts[i]) & (df.POS <= ends[i])]
+        snp_df: pd.DataFrame = df[(df.POS >= starts[i]) & (df.POS <= ends[i])].copy()
         snp_df["BIN_ID"] = i
         snp_df["BIN_START"] = starts[i]
         snp_df["BIN_END"] = ends[i]
