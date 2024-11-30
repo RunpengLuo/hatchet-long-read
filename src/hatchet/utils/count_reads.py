@@ -459,8 +459,8 @@ def form_counts_array(
                 # count the number of reads covering the chromosome end
                 arr[idx, 0] = end_reads
 
-        if os.path.exists(chr_sample_file):
-            os.remove(chr_sample_file)
+        # if os.path.exists(chr_sample_file):
+        #     os.remove(chr_sample_file)
 
     return arr, thresholds
 
