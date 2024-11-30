@@ -170,7 +170,7 @@ def main(args=None):
                 msg="# Array forming completed successfully, removing intermediate count files. \n",
                 level="STEP",
             )
-            [os.remove(f) for f in expected_counts_files(outdir, chromosomes, names)]
+            # [os.remove(f) for f in expected_counts_files(outdir, chromosomes, names)]
 
     totals_file = os.path.join(outdir, "total.tsv")
     if os.path.exists(totals_file):
@@ -425,7 +425,7 @@ def form_counts_array(
 
         if not os.path.exists(chr_sample_file):
             with open(chr_sample_file, "w") as f:
-                subprocess.run([tabix, '-0', fname, chromosome], stdout=f)  # TODO
+                subprocess.run([tabix, "-0", fname, chromosome], stdout=f)  # TODO
 
         with open(chr_sample_file, "r") as records:
             idx = 0
@@ -445,6 +445,7 @@ def form_counts_array(
 
             if i == 0:
                 # identify the (effective) chromosome end as the last well-formed record
+                # FIXME issue 232
                 assert idx == len(thresholds)
                 _, _, chr_end, end_reads = last_record.split()
                 chr_end = int(chr_end)
