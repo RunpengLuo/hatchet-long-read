@@ -1210,6 +1210,9 @@ def run_chromosome(
             positions, snp_counts, snpsv = read_snps(
                 baffile, chromosome, all_names, phasefile=phasefile
             )
+            outdir = outfile[:str.rindex(outfile, "/")]
+            os.makedirs(f"{outdir}/snpsv", exist_ok=True)
+            snpsv.to_csv(f"{outdir}/snpsv/snpsv.{chromosome}.tsv", sep='\t', header=True, index=True)
 
         sp.log(msg=f"Binning p arm of chromosome {chromosome}\n", level="INFO")
         if len(np.where(positions <= centromere_start)[0]) > 0:
