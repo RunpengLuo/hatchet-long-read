@@ -141,7 +141,7 @@ def main(args=None):
         # Use Tabix to index per-position coverage bed files for each sample
         for name in names:
             perpos_file = os.path.join(outdir, name + ".per-base.bed.gz")
-            subprocess.run([tabix, "-0", "-f", perpos_file])
+            subprocess.run([tabix, "-0", "-f", perpos_file]) # TODO
 
         # form parameters for each worker
         params = [
@@ -425,7 +425,7 @@ def form_counts_array(
 
         if not os.path.exists(chr_sample_file):
             with open(chr_sample_file, "w") as f:
-                subprocess.run([tabix, fname, chromosome], stdout=f)
+                subprocess.run([tabix, '-0', fname, chromosome], stdout=f)  # TODO
 
         with open(chr_sample_file, "r") as records:
             idx = 0
