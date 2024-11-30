@@ -141,7 +141,7 @@ def main(args=None):
         # Use Tabix to index per-position coverage bed files for each sample
         for name in names:
             perpos_file = os.path.join(outdir, name + ".per-base.bed.gz")
-            subprocess.run([tabix, "-f", perpos_file])
+            subprocess.run([tabix, "-0", "-f", perpos_file])
 
         # form parameters for each worker
         params = [
