@@ -25,7 +25,7 @@ def main(args=None):
 
     # path to hg19, 1000GP in hg19 coords, potentially needed for liftover
     hg19_path = ""
-    # chain files for liftover, chains['hg38_hg19']=path, chains['hg19_hg38']=path
+    # chain files for liftover, chains['hg38_hg19']=path, chains['hzz-8     g19_hg38']=path
     chains = ""
     # file for renaming chrs with bcftools, rename_files[0] for removing 'chr, rename_files[1] for adding 'chr'
     rename_files = ""
@@ -49,6 +49,17 @@ def main(args=None):
             "The appropriate liftover chain files could not be located! Please run the download-panel "
             "command that downloads these",
         )
+    elif args["refvers"] == "chm13v2":
+        if args["chrnot"]:
+            chains = {
+                "chm13v2_hg19": os.path.join(rpd, "chm13v2-hg19.chr.chain"),
+                "hg19_chm13v2": os.path.join(rpd, "hg19-chm13v2.chr.chain"),
+            }
+        else:
+            chains = {
+                "chm13v2_hg19": os.path.join(rpd, "chm13v2-hg19.no_chr.chain"),
+                "hg19_chm13v2": os.path.join(rpd, "hg19-chm13v2.no_chr.chain"),
+        }
 
     elif args["refvers"] == "hg19" and args["chrnot"]:
         rename_files = [os.path.join(rpd, f"rename_chrs{i}.txt") for i in range(1, 3)]
@@ -195,11 +206,17 @@ class Phaser(Worker):
                 vcf_toFilter = self.stage_vcfs(infile=vcf, chromosome=chromosome)
         else:
             # liftover
+            if self.refvers == "hg38":
+                chain = self.chains["hg38_hg19"]
+            elif self.refvers == "chm13v2":
+                chain = self.chains["chm13v2_hg19"]
+            else: # unsupported refversion
+                chain = None
             vcf_toFilter = self.liftover(
                 infile=vcf,
                 chromosome=chromosome,
                 outname="toFilter",
-                chain=self.chains["hg38_hg19"],
+                chain=chain,
                 refgen=self.hg19,
                 ch=False,
             )
@@ -227,11 +244,17 @@ class Phaser(Worker):
                     vcf_phased  # do nothing; vcfs already in original format
                 )
         else:
+            if self.refvers == "hg38":
+                chain = self.chains["hg19_hg38"]
+            elif self.refvers == "chm13v2":
+                chain = self.chains["hg19_chm13v2"]
+            else: # unsupported refversion
+                chain = None
             vcf_to_concat = self.liftover(
                 infile=vcf_phased,
                 chromosome=chromosome,
                 outname="toConcat",
-                chain=self.chains["hg19_hg38"],
+                chain=chain,
                 refgen=self.ref,
                 ch=self.chrnot,
             )

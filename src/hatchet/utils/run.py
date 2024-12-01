@@ -96,6 +96,9 @@ def main(args=None):
                 ): "https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/VCF/00-All.vcf.gz",
             }
 
+            snps_mapping[("chm13v2", True)] = snps_mapping[("hg19", True)]
+            snps_mapping[("chm13v2", False)] = snps_mapping[("hg19", False)]
+
             if (
                 config.genotype_snps.reference_version,
                 config.genotype_snps.chr_notation,

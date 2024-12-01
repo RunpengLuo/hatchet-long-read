@@ -651,8 +651,8 @@ def parse_count_reads_args(args=None):
     ver = args.refversion
     if ver != None:
         ensure(
-            ver in ("hg19", "hg38"),
-            "Invalid reference genome version. Supported versions are hg38 and hg19.",
+            ver in ("hg19", "hg38", "chm13v2"),
+            "Invalid reference genome version. Supported versions are hg38 and hg19 and chm13v2.",
         )
     ensure(
         (ver != None and segfile == None) or (ver == None and segfile != None),
@@ -945,8 +945,8 @@ def parse_combine_counts_args(args=None):
     ver = args.refversion
     if ver != None:
         ensure(
-            ver in ("hg19", "hg38"),
-            "Invalid reference genome version. Supported versions are hg38 and hg19.",
+            ver in ("hg19", "hg38", "chm13v2"),
+            "Invalid reference genome version. Supported versions are hg38 and hg19 and chm13v2.",
         )
     ensure(
         (ver != None and segfile == None) or (ver == None and segfile != None),
@@ -1391,9 +1391,9 @@ def parse_phase_snps_arguments(args=None):
     if which(bcftools) is None:
         raise ValueError(error("bcftools has not been found or is not executable!"))
 
-    if args.refversion not in ("hg19", "hg38"):
+    if args.refversion not in ("hg19", "hg38", "chm13v2"):
         error(
-            'The reference genome version of your samples is not "hg19" or "hg38".',
+            "The reference genome version of your samples is not hg19 or hg38 or chm13v2.",
             raise_exception=True,
         )
 
