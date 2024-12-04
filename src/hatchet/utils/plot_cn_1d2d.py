@@ -391,6 +391,15 @@ def plot_genome(
 
                 colors.append((0, 0, 0, 1))
 
+            ## FIXME DEBUG save result
+            print(f"SAVE temp file {temp_fname}")
+            temp_fname = f"{save_prefix}_{sample}_{chromosome}.csv"
+            temp_df = bbc[[chrkey, "START", "END", sample, "RD", "BAF", 
+                           "cn_normal", "u_normal", "cn_clone1", "u_clone1"]]
+            temp_df["FCN_LINE"] = [x[0][0] for x in fcn_lines]
+            temp_df["BAF_LINE"] = [x[0][0] for x in baf_lines]
+            temp_df.to_csv(temp_fname, header=True)
+
             lc_fcn = collections.LineCollection(fcn_lines, linewidth=2, colors=colors)
             axes[idx * 2 + 0].add_collection(lc_fcn)
             lc_baf = collections.LineCollection(baf_lines, linewidth=2, colors=colors)
