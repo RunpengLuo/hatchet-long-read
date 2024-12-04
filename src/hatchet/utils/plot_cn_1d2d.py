@@ -396,8 +396,8 @@ def plot_genome(
             print(f"SAVE temp file {temp_fname}")
             temp_df = bbc[[chrkey, "START", "END", "SAMPLE", "RD", "BAF", 
                            "cn_normal", "u_normal", "cn_clone1", "u_clone1"]]
-            temp_df["FCN_LINE"] = [x[0][0] for x in fcn_lines]
-            temp_df["BAF_LINE"] = [x[0][0] for x in baf_lines]
+            temp_df["FCN_LINE"] = [x[0][1] for x in fcn_lines]
+            temp_df["BAF_LINE"] = [x[0][1] for x in baf_lines]
             temp_df.to_csv(temp_fname, index=False, sep='\t', header=True)
 
             lc_fcn = collections.LineCollection(fcn_lines, linewidth=2, colors=colors)
