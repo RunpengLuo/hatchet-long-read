@@ -50,6 +50,7 @@ def main(args=None):
             "command that downloads these",
         )
     elif args["refvers"] == "chm13v2":
+        hg19_path = os.path.join(rpd, "hg19_no_chr.fa")
         if args["chrnot"]:
             chains = {
                 "chm13v2_hg19": os.path.join(rpd, "chm13v2-hg19.chr.chain"),
