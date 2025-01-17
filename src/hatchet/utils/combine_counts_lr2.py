@@ -86,7 +86,7 @@ def main(args):
         snp_positions, _, snp_sv = read_snps(baffile, ch, all_names, phasefile=phase)
         
         snp_positions = snp_positions - 1 # translate to 0-based index
-        snp_unphased = snp_sv[snp_sv.SAMPLE == all_names[0 if no_normal else 1]].FILP.isna().tolist()
+        snp_unphased = snp_sv[snp_sv.SAMPLE == all_names[0 if no_normal else 1]].FLIP.isna().tolist()
         snp_phases = snp_sv[snp_sv.SAMPLE == all_names[0 if no_normal else 1]].FLIP.astype(np.uint8).to_numpy()
 
         # load total and threshold file from count-reads, one SNP per segment
