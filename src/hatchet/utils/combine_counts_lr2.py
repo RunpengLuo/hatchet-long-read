@@ -109,8 +109,12 @@ def main(args):
             snp_sidx = 0
 
             for tidx, [tstart, tstop] in enumerate(thres_arr_ch):
-                if not (tstart >= sstart and tstop <= sstop):
-                    continue
+                if tstop < sstart:
+                    continue # before the current segment
+
+                if tstart >= sstop:
+                    tidx -= 1
+                    break # beyond the scope of current segment
 
                 block_snps_idx = np.where((snp_positions >= tstart) & (snp_positions < tstop))[0]
                 assert len(block_snps_idx) == 1, f"more than one snp found in a threshold block=({tstart},{tstop})"
@@ -128,7 +132,7 @@ def main(args):
                     snp_sidx = snp_idx
 
             if sidx < tidx: # add last block
-                hblock_states.append((ch, sidx, tidx + 1, 
+                hblock_states.append((ch, sidx, min(tidx + 1, len(thres_arr_ch)), 
                                       snp_sidx, min(snp_idx + 1, len(snp_positions)), is_unphased))
             
             if len(hblock_states) == 0:
