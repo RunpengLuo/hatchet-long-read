@@ -101,11 +101,6 @@ def load_gtf_file_bed(gtf_file: str):
     df.loc[:, "START"] = df.START - 1
     return df[["CHR", "START", "END"]]
 
-# derive a dataframe with columns [CHR, START, END] TODO
-def derive_phased_blocks():
-
-    return
-
 def load_mosdepth_files(sample_names: list, mosdepth_files: list):
     bed_mosdepths = []
     for sname, sbed_file in zip(sample_names, mosdepth_files):

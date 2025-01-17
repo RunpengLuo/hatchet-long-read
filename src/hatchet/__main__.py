@@ -12,7 +12,7 @@ from hatchet.utils.commands import commands, command_aliases
 # temporary options for Long read mode
 from hatchet.utils.run_lr import main as run_lr  # noqa: F401
 from hatchet.utils.count_reads_lr import main as count_reads_lr # noqa: F401
-from hatchet.utils.combine_counts_lr import main as combine_counts_lr # noqa: F401
+from hatchet.utils.combine_counts_lr2 import main as combine_counts_lr # noqa: F401
 from hatchet.utils.genotype_snps_lr import main as genotype_snps_lr # noqa: F401
 from hatchet.utils.phase_snps_lr import main as phase_snps_lr # noqa: F401
 # end

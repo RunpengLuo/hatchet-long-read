@@ -6,7 +6,7 @@ import argparse
 
 from hatchet import config
 from hatchet.utils.count_reads_lr import main as count_reads
-from hatchet.utils.combine_counts_lr import main as combine_counts
+from hatchet.utils.combine_counts_lr2 import main as combine_counts
 from hatchet.utils.genotype_snps_lr import main as genotype_snps
 from hatchet.utils.phase_snps_lr import main as phase_snps
 from hatchet.utils.cluster_bins_lr import main as cluster_bins
