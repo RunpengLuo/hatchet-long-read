@@ -87,7 +87,6 @@ def main(args):
         
         snp_positions = snp_positions - 1 # translate to 0-based index
         snp_unphased = snp_sv[snp_sv.SAMPLE == all_names[0 if no_normal else 1]].FLIP.isna().tolist()
-        snp_phases = snp_sv[snp_sv.SAMPLE == all_names[0 if no_normal else 1]].FLIP.astype(np.uint8).to_numpy()
 
         # load total and threshold file from count-reads, one SNP per segment
         tot_file, thres_file = get_array_file_path(rdr_dir, ch)
@@ -145,7 +144,6 @@ def main(args):
                 if row.UNPHASED:
                     continue
 
-                block_snp_phases = snp_phases[row.START_SIDX:row.STOP_SIDX]
                 # block_snp_total = snp_totals[row.START_SIDX:row.STOP_SIDX]
                 block_snp_pos = snp_positions[row.START_SIDX:row.STOP_SIDX]
 
@@ -170,7 +168,6 @@ def main(args):
                     bin_end = bin_thres[-1][1]
 
                     # compute mhBAF
-                    bin_snp_phases = block_snp_phases[si:st]
                     bin_bafs_h1 = np.zeros(n_tumors, dtype=np.float64)
                     bin_bafs_h2 = np.zeros(n_tumors, dtype=np.float64)
                     bin_cov = np.zeros(n_tumors, dtype=np.uint32)
@@ -179,9 +176,10 @@ def main(args):
                     for s in range(n_tumors):
                         sample_name = all_names[s if no_normal else s + 1]
                         bin_snps = snp_sv[(snp_sv.SAMPLE == sample_name) & (snp_sv.POS >= bin_snp_pos[0]) & (snp_sv.POS < bin_snp_pos[-1])]
+                        phases = bin_snps.FLIP.astype(np.uint8).to_numpy()
                         assert len(bin_snps) == num_snps
-                        alpha = np.sum(np.choose(bin_snp_phases, [bin_snps.REF, bin_snps.ALT]))
-                        beta = np.sum(np.choose(bin_snp_phases, [bin_snps.ALT, bin_snps.REF]))
+                        alpha = np.sum(np.choose(phases, [bin_snps.REF, bin_snps.ALT]))
+                        beta = np.sum(np.choose(phases, [bin_snps.ALT, bin_snps.REF]))
                         bin_alpha[s] = alpha
                         bin_beta[s] = beta
                         bin_bafs_h1[s] = beta / (alpha + beta)
