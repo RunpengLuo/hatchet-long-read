@@ -68,6 +68,8 @@ def main(args=None):
         with path(hatchet.data, f"{refversion}.segments.bed") as p:
             segfile = str(p)
         log(msg=f"use prebuilt reference file from {refversion}: {str(segfile)}\n", level="STEP")
+    else:
+        log(msg=f"use external segment file: {segfile}\n", level="INFO")
     
     seg_df, seg_chroms = load_seg_file(segfile, use_chr)
 
@@ -108,7 +110,7 @@ def main(args=None):
     # compute mosdepth with --by BED option
     snp_positions = load_snps_positions(baffile, chromosomes)
     # global segment file
-    segment_file = os.path.join(outdir, "segments.bed")
+    segment_file = os.path.join(outdir, "segments.per-snp.bed")
     segment_file_gz = f"{segment_file}.gz"
     if not os.path.isfile(segment_file_gz) or \
         any(not os.path.isfile(os.path.join(outdir, f"{ch}.thresholds.gz")) for ch in chromosomes):
@@ -119,10 +121,7 @@ def main(args=None):
                 log(msg=f"compute segment file for {ch}\n", level="STEP")
                 if str.endswith(ch, "X") or str.endswith(ch, "Y"):
                     # TODO: do this procedure only for XY
-                    log(
-                        msg="Running on sex chromosome -- ignoring SNPs and min SNP reads\n",
-                        level="STEP",
-                    )
+                    log(msg="Running on sex chromosome -- simulate SNP positions\n", level="STEP")
                     last_start = get_chr_end(outdir, names, ch)
                     snp_positions_ch = np.arange(5000, last_start, 5000)
                 else:
@@ -131,20 +130,20 @@ def main(args=None):
                 thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
                 if not init_thres:
                     raise ValueError(f"ERROR, {segfile} is invalid/empty for {ch}")
-                if np.any(np.diff(thresholds_ch) < 0):
-                    raise ValueError(f"improper negative interval in provided segment file for chromosome {ch}")
+                if np.any(np.diff(thresholds_ch) <= 0):
+                    raise ValueError(f"non-positive interval found for chromosome {ch}")
                 np.savetxt(rg_fd, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
                 
                 segment_file_ch = os.path.join(outdir, f"{ch}.thresholds.gz")
                 np.savetxt(segment_file_ch, thresholds_ch, fmt=str(ch)+"\t%d\t%d")
-                log(msg=f"#segments for {ch}: {len(thresholds_ch)}\n", level="STEP")
+                log(msg=f"#segments for {ch}={len(thresholds_ch)}\n", level="STEP")
             rg_fd.close()
         
         ret = sp.run(["gzip", "-6", segment_file])
         ret.check_returncode()
-        log(msg="computed all segment files\n", level="STEP")
+        log(msg="computed all thresholds.gz files\n", level="STEP")
     else:
-        log(msg="found all segments intermediate files, skip\n", level="STEP")
+        log(msg="found all intermediate thresholds.gz files, skip\n", level="STEP")
     segment_file = segment_file_gz
 
     # run mosdepth against the global segment file per bam file
@@ -235,7 +234,7 @@ def main(args=None):
         for name in names:
             f.write("{}\t{}\n".format(name, total[name]))
     
-    log(msg=f"count-reads-ont completed, processed time (exclude sp): {time.process_time()-ts}sec\n", level="STEP")
+    log(msg=f"count-reads-lr completed, processed time (exclude sp): {time.process_time()-ts}sec\n", level="STEP")
     return
 
 """
@@ -258,17 +257,17 @@ def _run_count_array(outdir: str, use_chr: bool, all_names: list, chromosome: st
         
         for idx, name in enumerate(all_names):
             starts_file = os.path.join(outdir, f"{name}.{chromosome}.starts.gz")
-            fd = gzip.open(starts_file, "r") if starts_file.endswith(".gz") else open(starts_file, "r")
+            fd = gzip.open(starts_file, "r")
             read_starts = np.array([int(a) for a in fd])
             num_reads = len(read_starts)
             fd.close()
             for sdx, [sstart, sstop] in enumerate(segments):
                 left_idx = np.argmax(read_starts >= sstart)
-                if read_starts[left_idx] < sstart:
+                if read_starts[left_idx] < sstart: # no reads start after sstart
                     continue
                 right_idx = np.argmax(read_starts >= sstop)
-                if read_starts[right_idx] < sstop:
-                    right_idx = num_reads - 1
+                if read_starts[right_idx] < sstop: # no reads start after sstop
+                    right_idx = num_reads
                 arr[sdx, 2*idx] = right_idx - left_idx
 
             mosdp_rg_file = os.path.join(outdir, f"{name}.regions.bed.gz")

@@ -17,7 +17,7 @@ from hatchet.utils.Supporting import (
 
 def sort_chroms(chromosomes: list):
     assert len(chromosomes) != 0
-    use_chr  = True if str(chromosomes[0]).startswith('chr') else False
+    use_chr  = True if str(chromosomes[0]).startswith("chr") else False
     if not use_chr:
         return sorted(chromosomes)
     chr2ord = {}
@@ -34,17 +34,17 @@ def sort_chroms(chromosomes: list):
 """
 def use_chr_prefix(chromosomes: list):
     # Check that chr notation is consistent across chromosomes
-    using_chr = [a.startswith('chr') for a in chromosomes]
+    using_chr = [a.startswith("chr") for a in chromosomes]
     if any(using_chr):
         ensure(
             all(using_chr),
-            'Some chromosomes use chr notation while others do not.',
+            "Some chromosomes use chr notation while others do not.",
         )
         return True
     return False
 
 def has_header(file: str, header_prefix=["CHR", "Chr", "CHROMOSOME", "#ID"]):
-    fd = gzip.open(file, 'rt') if file.endswith(".gz") else open(file, 'r')
+    fd = gzip.open(file, "rt") if file.endswith(".gz") else open(file, "r")
     first_line = fd.readline()
     fd.close()
     for hp in header_prefix:
@@ -57,9 +57,9 @@ def has_header(file: str, header_prefix=["CHR", "Chr", "CHROMOSOME", "#ID"]):
 def load_seg_file(seg_file: str, use_chr_bam: bool, additional_columns=[]):
     num_columns = 3 + len(additional_columns)
     if has_header(seg_file):
-        seg_df = pd.read_csv(seg_file, sep='\t')
+        seg_df = pd.read_csv(seg_file, sep="\t")
     else:
-        seg_df = pd.read_csv(seg_file, sep='\t', header=None,
+        seg_df = pd.read_csv(seg_file, sep="\t", header=None,
                              usecols=range(num_columns),
                              names=["CHR", "START", "END"] + additional_columns)
 
@@ -78,17 +78,17 @@ Reads haplotype blocks from gtf file
 """
 def load_gtf_file(gtf_file: str):
     return pd.read_csv(
-        gtf_file, sep='\t', header=None, comment='#',
+        gtf_file, sep="\t", header=None, comment="#",
         names=[
-            'CHR',
-            'source',
-            'feature',
-            'START',
-            'END',
-            'score',
-            'strand',
-            'frame',
-            'attribute',
+            "CHR",
+            "source",
+            "feature",
+            "START",
+            "END",
+            "score",
+            "strand",
+            "frame",
+            "attribute",
         ],
     )
 
@@ -101,52 +101,83 @@ def load_gtf_file_bed(gtf_file: str):
     df.loc[:, "START"] = df.START - 1
     return df[["CHR", "START", "END"]]
 
+# derive a dataframe with columns [CHR, START, END] TODO
+def derive_phased_blocks():
+
+    return
+
 def load_mosdepth_files(sample_names: list, mosdepth_files: list):
     bed_mosdepths = []
     for sname, sbed_file in zip(sample_names, mosdepth_files):
-        with gzip.open(sbed_file, 'rt') as f:
-            bed_data = pd.read_csv(f, sep='\t', 
-                                   names=['CHR', 'START', 'END', 'AVG_DEPTH'])
-            bed_data['sample'] = sname
+        with gzip.open(sbed_file, "rt") as f:
+            bed_data = pd.read_csv(f, sep="\t", 
+                                   names=["CHR", "START", "END", "AVG_DEPTH"])
+            bed_data["sample"] = sname
             bed_mosdepths.append((sname, bed_data))
     return bed_mosdepths
 
 # bb/bulk.bb
 def init_bb_dataframe():
     bb_column_names = {
-        'CHR': 'str',
-        'UNIT': 'str',
-        'START': 'int',
-        'END': 'int',
-        'SAMPLE': 'str',
-        'RD': 'float',
-        'TOTAL_READS': 'int',
-        'NORMAL_READS': 'int',
-        'SNPS': 'int',
-        'BCOUNT': 'int',
-        'TOTAL_SNP_READS': 'int',
-        'HAPLO': 'str',
-        'SNP_POS': 'int',
-        'SNP_REF_COUNTS': 'int',
-        'SNP_ALT_COUNTS': 'int',
-        'BAF': 'float',
-        'BLOCK_START': 'int',
-        'BLOCK_END': 'int'
+        "CHR": "str",
+        "UNIT": "str",
+        "START": "int",
+        "END": "int",
+        "SAMPLE": "str",
+        "RD": "float",
+        "TOTAL_READS": "int",
+        "NORMAL_READS": "int",
+        "SNPS": "int",
+        "BCOUNT": "int",
+        "TOTAL_SNP_READS": "int",
+        "HAPLO": "str",
+        "SNP_POS": "int",
+        "SNP_REF_COUNTS": "int",
+        "SNP_ALT_COUNTS": "int",
+        "BAF": "float",
+        "BLOCK_START": "int",
+        "BLOCK_END": "int"
+    }
+
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in bb_column_names.items()})
+
+# bb/bulk.bb, same format as HATCHetv2
+# #CHR	START	END	SAMPLE	RD	#SNPS	COV	ALPHA	BETA	BAF	TOTAL_READS	NORMAL_READS	
+# ORIGINAL_BAF	CORRECTED_READS	GC	UNCORR_RD	GCCORR
+def init_bb_dataframe_v2():
+    bb_column_names = {
+        "CHR": "str",
+        "START": "int",
+        "END": "int",
+        "SAMPLE": "str",
+        "RD": "float",
+        "#SNPS": "int",
+        "COV": "float",
+        "ALPHA": "int",
+        "BETA": "int",
+        "BAF": "float",
+        "TOTAL_READS": "float",
+        "NORMAL_READS": "float",
+        "ORIGINAL_BAF": "float",
+        "CORRECTED_READS": "int",
+        "UNCORR_RD": "float",
+        "GC": "float",
+        "GCCORR": "float",
     }
 
     return pd.DataFrame({c: pd.Series(dtype=t) for c, t in bb_column_names.items()})
 
 def init_summary_dataframe():
     bb_column_names = {
-        'CHR': 'str',
-        'BLOCK_START': 'int',
-        'BLOCK_END': 'int',
-        'BLOCK_LEN': 'int',
-        'THRES_START': 'int',
-        'THRES_END': 'int',
-        'NUM_THRESHOLDS': 'int',
-        'NUM_SNPS': 'int',
-        'NUM_BIN': 'int'
+        "CHR": "str",
+        "BLOCK_START": "int",
+        "BLOCK_END": "int",
+        "BLOCK_LEN": "int",
+        "THRES_START": "int",
+        "THRES_END": "int",
+        "NUM_THRESHOLDS": "int",
+        "NUM_SNPS": "int",
+        "NUM_BIN": "int"
     }
 
     return pd.DataFrame({c: pd.Series(dtype=t) for c, t in bb_column_names.items()})
@@ -162,7 +193,7 @@ def get_array_file_path(dirname: str, ch: str, uncompressed=False):
 
 # return all non-exists files
 def check_array_files(dirname: str, chromosomes: list):
-    expected = [os.path.join(dirname, 'samples.txt')]
+    expected = [os.path.join(dirname, "samples.txt")]
     for ch in chromosomes:
         [ptotal, pthres] = get_array_file_path(dirname, ch)
         expected.extend([ptotal, pthres])
@@ -211,43 +242,43 @@ def workload_assignment(nproc: int, ntask: int, max_threads=4):
         threads_per_task = [1] * ntask
     return nworker, threads_per_task
 
-def count_comment_lines(filename: str, comment_symbol='#'):
+def count_comment_lines(filename: str, comment_symbol="#"):
     num_header = 0
     if filename.endswith(".gz"):
-        fd = gzip.open(filename, 'rt')
+        fd = gzip.open(filename, "rt")
     else:
-        fd = open(filename, 'r')
+        fd = open(filename, "r")
     for line in fd:
         if line.startswith(comment_symbol):
             num_header += 1
         else:
             break
     fd.close()
-    log(f"Number of skipped header line={num_header} in {filename}\n", level='DEBUG')
+    log(f"Number of skipped header line={num_header} in {filename}\n", level="DEBUG")
     return num_header
 
 def load_vcf_file(vcf_file: str, read_type: str, phased=True):
-    num_comment = count_comment_lines(vcf_file, '#')
+    num_comment = count_comment_lines(vcf_file, "#")
     vcf_header = ["CHR", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "PHASE"]
     # skiprows is necessary versus comment
     # since vcf main content field may still contains comment symbol
-    df = pd.read_table(vcf_file, compression='gzip', sep='\t', 
+    df = pd.read_table(vcf_file, compression="gzip", sep="\t", 
                        names=vcf_header,
                        usecols=["CHR", "POS", "PHASE"],
                        quoting=3,
                        low_memory=False,
-                       dtype={'CHR': object, 'POS': np.uint32},
+                       dtype={"CHR": object, "POS": np.uint32},
                        skiprows=num_comment)
 
     if phased:
-        df["FLIP"] = df.PHASE.str.contains('1|0', regex=False).astype(np.int8)
-        df["NOFLIP"] = df.PHASE.str.contains('0|1', regex=False).astype(np.int8)
+        df["FLIP"] = df.PHASE.str.contains("1|0", regex=False).astype(np.int8)
+        df["NOFLIP"] = df.PHASE.str.contains("0|1", regex=False).astype(np.int8)
         # Drop entries without phasing output
         df = df[df.FLIP + df.NOFLIP > 0]
         # For exact duplicate entries, drop one
         df = df.drop_duplicates()
         # For duplicate entries with the same (CHR, POS) but different phase, drop all
-        df = df.drop_duplicates(subset=['CHR', 'POS'], keep=False)
+        df = df.drop_duplicates(subset=["CHR", "POS"], keep=False)
     return df
 
 # FIXME to be simplified
@@ -263,47 +294,47 @@ def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None, read_type
     Read and validate SNP data for this patient (TSV table output from HATCHet deBAF.py).
     """
     # remove normal sample -- not looking for SNP counts from normal
-    all_names = [name for name in all_names if name != 'normal']
+    all_names = [name for name in all_names if name != "normal"]
     # Read in HATCHet BAF table
     all_snps = pd.read_table(
         baf_file,
         header=None,
-        names=['CHR', 'POS', 'SAMPLE', 'REF', 'ALT', 'REFC', 'ALTC'],
+        names=["CHR", "POS", "SAMPLE", "REF", "ALT", "REFC", "ALTC"],
         dtype={
-            'CHR': object,
-            'POS': np.uint32,
-            'SAMPLE': object,
-            'ALT': np.uint32,
-            'REF': np.uint32,
-            'REFC': object,
-            'ALTC': object,
+            "CHR": object,
+            "POS": np.uint32,
+            "SAMPLE": object,
+            "ALT": np.uint32,
+            "REF": np.uint32,
+            "REFC": object,
+            "ALTC": object,
         },
     )
 
     # Keep only SNPs on this chromosome
-    snps = all_snps[all_snps.CHR == ch].sort_values(by=['POS', 'SAMPLE'], ignore_index=True)
+    snps = all_snps[all_snps.CHR == ch].sort_values(by=["POS", "SAMPLE"], ignore_index=True)
     if len(snps) == 0:
         raise ValueError(
-            error(f'Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})')
+            error(f"Chromosome {ch} not found in SNPs file (chromosomes in file: {all_snps.CHR.unique()})")
         )
 
     snps_samples = snps.SAMPLE.unique().tolist()
     if len(all_names) != len(snps_samples) or set(all_names) != set(snps_samples):
         raise ValueError(
-            error(f'Expected sample names did not match sample names in SNPs file.\n\
-                Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}')
+            error(f"Expected sample names did not match sample names in SNPs file.\n\
+                Expected: {sorted(all_names)}\n  Found:{sorted(snps.SAMPLE.unique())}")
         )
 
     # Add total counts column
-    snps['TOTAL'] = snps.ALT + snps.REF
+    snps["TOTAL"] = snps.ALT + snps.REF
 
     if phasefile != None:
         phased_df = load_vcf_file(phasefile, read_type, phased=True)
         # Merge tables: keep only those SNPs for which we have phasing output
-        snps = pd.merge(snps, phased_df, on=['CHR', 'POS'], how='left')
+        snps = pd.merge(snps, phased_df, on=["CHR", "POS"], how="left")
 
     # Create counts array and find SNPs that are not present in all samples
-    snp_counts = snps.pivot(index='POS', columns='SAMPLE', values='TOTAL')
+    snp_counts = snps.pivot(index="POS", columns="SAMPLE", values="TOTAL")
     missing_pos = snp_counts.isna().any(axis=1)
 
     # Remove SNPs that are absent in any sample
@@ -311,9 +342,9 @@ def read_snps(baf_file: str, ch: str, all_names: list, phasefile=None, read_type
     snps = snps[~snps.POS.isin(missing_pos[missing_pos].index)]
 
     # Pivot table for dataframe should match counts array and have no missing entries
-    check_pivot = snps.pivot(index='POS', columns='SAMPLE', values='TOTAL')
-    assert np.array_equal(check_pivot, snp_counts), 'SNP file reading failed'
-    assert not np.any(check_pivot.isna()), 'SNP file reading failed'
+    check_pivot = snps.pivot(index="POS", columns="SAMPLE", values="TOTAL")
+    assert np.array_equal(check_pivot, snp_counts), "SNP file reading failed"
+    assert not np.any(check_pivot.isna()), "SNP file reading failed"
     assert np.array_equal(all_names, list(snp_counts.columns))   # make sure that sample order is the same
     return np.array(snp_counts.index), np.array(snp_counts), snps
 
@@ -324,13 +355,13 @@ chromosomes are pre-sorted.
 baf and chromosomes should use same format for chr notation.
 """
 def load_snps_positions(baf_file: str, chromosomes: list):
-    baf_df = pd.read_csv(baf_file, sep='\t', header=None,
+    baf_df = pd.read_csv(baf_file, sep="\t", header=None,
                              usecols=range(2),
                              names=["CHR", "POS"])
     baf_groups = baf_df.groupby("CHR")
     ret = {}
     for ch in chromosomes:
-        if ch.endswith('X') or ch.endswith('Y'):
+        if ch.endswith("X") or ch.endswith("Y"):
             log(msg=f"Warning, found SNP for sex chromosomes {ch}, ignored")
             ret.append(None) # append an empty array here
             continue
@@ -370,7 +401,7 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
                 sub_segments = np.array([[sstart, sstop]])
             else:
                 # for every adjacent SNP position, record the midpoint as the interval splitting position.
-                snp_thresholds = np.trunc(np.vstack([bounded_snp_positions[:-1], 
+                snp_thresholds = np.ceil(np.vstack([bounded_snp_positions[:-1], 
                                                     bounded_snp_positions[1:]]).mean(axis=0)).astype(np.uint32)
                 if snp_thresholds[0] != sstart:
                     snp_thresholds = np.concatenate([[sstart], snp_thresholds])
@@ -417,8 +448,8 @@ def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame,
         snp_df["BIN_ID"] = i
         snp_df["BIN_START"] = starts[i]
         snp_df["BIN_END"] = ends[i]
-        snp_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_BIN_{i}.tsv", sep='\t', header=True, index=False)
+        snp_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_BIN_{i}.tsv", sep="\t", header=True, index=False)
         big_df = pd.concat([big_df, snp_df], ignore_index=True)
-    big_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_ALL.tsv", sep='\t', header=True, index=False)
+    big_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_ALL.tsv", sep="\t", header=True, index=False)
     log(f"Number of bins: {len(starts)}\n", level="INFO")
     return
