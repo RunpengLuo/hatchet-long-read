@@ -147,8 +147,8 @@ def main(args):
                 # block_snp_total = snp_totals[row.START_SIDX:row.STOP_SIDX]
                 block_snp_pos = snp_positions[row.START_SIDX:row.STOP_SIDX]
 
-                block_thres = thres_arr_ch[row.START_TIDX:row.END_TIDX]
-                block_totals = tot_arr_ch[row.START_TIDX:row.END_TIDX]
+                block_thres = thres_arr_ch[row.START_TIDX:row.STOP_TIDX]
+                block_totals  = tot_arr_ch[row.START_TIDX:row.STOP_TIDX]
 
                 # split phased block to multiple smaller bins
                 num_thres = len(block_thres)
