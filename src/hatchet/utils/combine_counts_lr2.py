@@ -198,6 +198,8 @@ def main(args):
                         bin_tmp = bin_alpha
                         bin_alpha = bin_beta
                         bin_beta = bin_tmp
+                    
+                    bin_bafs = np.clip(bin_bafs, a_min=0.0, a_max=1.0)
 
                     # compute normal, tumor reads
                     total_reads = np.sum(bin_totals[:, even_index], axis=0)
@@ -238,12 +240,10 @@ def main(args):
                 df["TOTAL_READS"] * correction
             ).astype(np.int64)
 
-            big_bb.loc[big_bb.SAMPLE == sample, "RD"] = (
-                df["CORRECTED_READS"] / df["NORMAL_READS"]
-            ).astype(np.float64)
-            big_bb.loc[big_bb.SAMPLE == sample, "UNCORR_RD"] = (
-                df["TOTAL_READS"] / df["NORMAL_READS"]
-            ).astype(np.float64)
+        big_bb.loc[:, "RD"] = np.clip(big_bb["CORRECTED_READS"] / big_bb["NORMAL_READS"], 
+                                      a_min=0.0).astype(np.float64)
+        big_bb.loc[:, "UNCORR_RD"] = np.clip(big_bb["TOTAL_READS"] / big_bb["NORMAL_READS"], 
+                                             a_min=0.0).astype(np.float64)
     
     if args["gc_correct"]:
         log(

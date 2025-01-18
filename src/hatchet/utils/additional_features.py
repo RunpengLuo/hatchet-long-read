@@ -141,7 +141,7 @@ def init_bb_dataframe():
 # ORIGINAL_BAF	CORRECTED_READS	GC	UNCORR_RD	GCCORR
 def init_bb_dataframe_v2():
     bb_column_names = {
-        "CHR": "str",
+        "#CHR": "str",
         "START": "int",
         "END": "int",
         "SAMPLE": "str",
