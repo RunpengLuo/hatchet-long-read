@@ -240,10 +240,9 @@ def main(args):
                 df["TOTAL_READS"] * correction
             ).astype(np.int64)
 
-        big_bb.loc[:, "RD"] = np.clip(big_bb["CORRECTED_READS"] / big_bb["NORMAL_READS"], 
-                                      a_min=0.0).astype(np.float64)
-        big_bb.loc[:, "UNCORR_RD"] = np.clip(big_bb["TOTAL_READS"] / big_bb["NORMAL_READS"], 
-                                             a_min=0.0).astype(np.float64)
+        big_bb = big_bb[big_bb["NORMAL_READS"] > 0]
+        big_bb.loc[:, "RD"] = big_bb["CORRECTED_READS"] / big_bb["NORMAL_READS"]
+        big_bb.loc[:, "UNCORR_RD"] = big_bb["TOTAL_READS"] / big_bb["NORMAL_READS"]
     
     if args["gc_correct"]:
         log(
