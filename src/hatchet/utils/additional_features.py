@@ -379,12 +379,14 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
     thresholds = None
     init_thres = False
     for [sstart, sstop] in segments:
-        # find all snp positions within boundery
-        left_idx = np.argmax(snp_positions_1 >= sstart)
-        if not consider_snp or snp_positions_1[left_idx] < sstart: 
-            # argmax -> 0, no SNP found with position >= sstart. or ignore SNP positions
+        if not consider_snp:
             sub_segments = np.array([[sstart, sstop]])
         else:
+            # find all snp positions within boundery
+            left_idx = np.argmax(snp_positions_1 >= sstart)
+            if snp_positions_1[left_idx] < sstart: 
+                # argmax -> 0, no SNP found with position >= sstart.
+                continue
             right_idx = np.argmax(snp_positions_1 >= sstop)
             if snp_positions_1[right_idx] < sstop:
                 # argmax returns 0, no SNP found after sstop, bound left only

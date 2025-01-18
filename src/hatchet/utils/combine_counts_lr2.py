@@ -117,7 +117,7 @@ def main(args):
                     break # beyond the scope of current segment
 
                 block_snps_idx = np.where((snp_positions >= tstart) & (snp_positions < tstop))[0]
-                assert len(block_snps_idx) == 1, f"more than one snp found in a threshold block=({tstart},{tstop})"
+                assert len(block_snps_idx) == 1, f"more/less than one snp found in a threshold block=({tstart},{tstop}), {len(block_snps_idx)}"
                 snp_idx = block_snps_idx[0]
                 if is_unphased == None: # first time visit
                     is_unphased = snp_unphased[snp_idx]
