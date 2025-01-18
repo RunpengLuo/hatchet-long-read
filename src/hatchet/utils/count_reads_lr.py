@@ -127,7 +127,7 @@ def main(args=None):
                 else:
                     snp_positions_ch = snp_positions[ch]
                 seg_df_ch = seg_df[seg_df["CHR"] == ch]
-                thresholds_ch, init_thres = segments2thresholds(snp_positions_ch, seg_df_ch, consider_snp=True)
+                thresholds_ch, init_thres = segments2thresholds(ch, snp_positions_ch, seg_df_ch, consider_snp=True)
                 if not init_thres:
                     raise ValueError(f"ERROR, {segfile} is invalid/empty for {ch}")
                 if np.any(np.diff(thresholds_ch) <= 0):
