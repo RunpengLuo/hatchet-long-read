@@ -240,10 +240,10 @@ def main(args):
 
             big_bb.loc[big_bb.SAMPLE == sample, "RD"] = (
                 df["CORRECTED_READS"] / df["NORMAL_READS"]
-            )
+            ).astype(np.float64)
             big_bb.loc[big_bb.SAMPLE == sample, "UNCORR_RD"] = (
                 df["TOTAL_READS"] / df["NORMAL_READS"]
-            )
+            ).astype(np.float64)
     
     if args["gc_correct"]:
         log(
