@@ -372,7 +372,7 @@ snp_positions: 1D array, 1-based and pre-sorted
 seg_df_df: 0-based and left-close&right-open, possibly unsorted.
 return nx2 thresholds
 """
-def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, consider_snp=True):
+def segments2thresholds(ch: str, snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, consider_snp=True):
     seg_df_ch = seg_df_ch.sort_values(by="START", ignore_index=True)
     segments = seg_df_ch[["START", "END"]].to_numpy(dtype=np.uint32)
     snp_positions_1 = snp_positions - 1 # translate to 0-based index
@@ -384,7 +384,8 @@ def segments2thresholds(snp_positions: np.ndarray, seg_df_ch: pd.DataFrame, cons
         else:
             # find all snp positions within boundery
             left_idx = np.argmax(snp_positions_1 >= sstart)
-            if snp_positions_1[left_idx] < sstart: 
+            if snp_positions_1[left_idx] < sstart or snp_positions_1[left_idx] >= sstop:
+                log(msg=f"warning! no SNP found in pre-defined segment: {ch}:{sstart}-{sstop}\n", level="STEP")
                 # argmax -> 0, no SNP found with position >= sstart.
                 continue
             right_idx = np.argmax(snp_positions_1 >= sstop)
