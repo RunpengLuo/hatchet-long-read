@@ -165,7 +165,7 @@ def main(args):
                     
                     num_snps = st - si
 
-                    bin_snp_pos = block_snp_pos[si:st]
+                    bin_snp_pos = block_snp_pos[si:st] # inclusive snp positions
                     bin_totals = block_totals[si:st]
                     bin_thres = block_thres[si:st]
                     bin_start = bin_thres[0][0]
@@ -179,9 +179,9 @@ def main(args):
                     bin_beta = np.zeros(n_tumors, dtype=np.uint32)
                     for s in range(n_tumors):
                         sample_name = all_names[s if no_normal else s + 1]
-                        bin_snps = snp_sv[(snp_sv.SAMPLE == sample_name) & (snp_sv.POS >= bin_snp_pos[0]) & (snp_sv.POS < bin_snp_pos[-1])]
+                        bin_snps = snp_sv[(snp_sv.SAMPLE == sample_name) & (snp_sv.POS >= bin_snp_pos[0]) & (snp_sv.POS <= bin_snp_pos[-1])]
+                        assert len(bin_snps) == num_snps, f"unmatched, {len(bin_snps)} vs {num_snps}; {bin_snp_pos[0]}-{bin_snp_pos[-1]}"
                         phases = bin_snps.FLIP.astype(np.uint8).to_numpy()
-                        assert len(bin_snps) == num_snps
                         alpha = np.sum(np.choose(phases, [bin_snps.REF, bin_snps.ALT]))
                         beta = np.sum(np.choose(phases, [bin_snps.ALT, bin_snps.REF]))
                         bin_alpha[s] = alpha
