@@ -57,8 +57,6 @@ def main(args):
     DEBUG = True
 
     outdir = outfile[:str.rindex(outfile, "/")]
-    if DEBUG:
-        os.makedirs(f"{outdir}/snp_sv", exist_ok=True) # DEBUG
 
     if os.path.isfile(outfile):
         log(msg=f"output={outfile} exists, skip combine-counts-lr\n", level="STEP")
@@ -141,8 +139,6 @@ def main(args):
 
             hblock_df = pd.DataFrame(hblock_states, columns=["#CHR", "START_TIDX", "STOP_TIDX", 
                                                              "START_SIDX", "STOP_SIDX", "UNPHASED"])
-            if DEBUG:
-                hblock_df.to_csv(f"{outdir}/debug_hblocks_{ch}_{sstart}_{sstop}.tsv", sep="\t", header=True)
 
             for _, row in hblock_df.iterrows():
                 if row.UNPHASED:
@@ -244,6 +240,8 @@ def main(args):
         big_bb.loc[:, "RD"] = big_bb["CORRECTED_READS"] / big_bb["NORMAL_READS"]
         big_bb.loc[:, "UNCORR_RD"] = big_bb["TOTAL_READS"] / big_bb["NORMAL_READS"]
     
+    big_bb = big_bb[big_bb["RD"] > 0]
+    
     if args["gc_correct"]:
         log(
             msg="# In long read sequencing pipeline, GC correction for RD is not recommended, skip\n",
@@ -258,6 +256,7 @@ def main(args):
     # convert back to 1-indexed inclusive
     # TODO can make this consistent?
     big_bb.loc[:, "START"] = big_bb.START + 1
+    big_bb.loc[:, "END"] = big_bb.END + 1
     big_bb.to_csv(outfile, index=False, sep="\t")
     log(msg=f"combine-counts-lr completed, processed time (exclude sp): {time.process_time()-ts}sec\n", level="STEP")
     return
