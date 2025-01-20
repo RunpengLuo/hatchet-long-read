@@ -5,7 +5,7 @@ import traceback
 from importlib.resources import path
 import numpy as np
 import pandas as pd
-from scipy.stats import binom, norm
+from scipy.stats import binom, norm, bernoulli
 from scipy.special import softmax
 
 import hatchet.data
@@ -559,12 +559,53 @@ def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
 
         alpha = np.sum(np.choose(phases, [refs[i], alts[i]]))
         beta = np.sum(np.choose(phases, [alts[i], refs[i]]))
-        baf = bafs[i]
+        # baf = bafs[i]
+        baf, _ = baf_bootstrapping(bafs[i], refs[i], alts[i]) ##### Test bootstrapping method
         cov = np.sum(alpha + beta) / n_snps
 
         result[sample] = n_snps, cov, baf, alpha, beta
     return result
 
+##### Test bootstrapping method
+def random_baf(refs: np.ndarray, alts: np.ndarray):
+    phases = bernoulli.rvs(0.5, size=len(refs)) # random phasing
+    alpha = np.sum(np.choose(phases, [refs, alts]))
+    beta = np.sum(np.choose(phases, [alts, refs]))
+    return min(alpha, beta) / (alpha + beta)
+
+# re-compute BAF by estimating if it's allelic balanced
+def baf_bootstrapping(baf: float, refs: np.ndarray, alts: np.ndarray, 
+                      cutoff=0.40, significance=0.05, bootstrap=10) -> float:
+    if baf <= cutoff:
+        return baf, False
+    rand_baf = random_baf(refs, alts)
+    if abs(rand_baf - 0.50) <= 0.02:
+        return rand_baf, True
+    else:
+        return baf, False
+    thres = max(0, est_error(refs, alts, significance, bootstrap))
+    if thres <= abs(baf - 0.5):
+        return baf, False
+    else:
+        # allelic balance, randomly assign phases
+        return random_baf(refs, alts), True
+
+def est_error(refs: np.ndarray, alts: np.ndarray, significance: float, bootstrap: int):
+    betas = []
+    n_snps = len(refs)
+    totals = (refs + alts).astype(np.int64)
+    totals_ = totals.reshape(1,n_snps)
+    for _ in range(bootstrap):
+        alpha = binom.rvs(n=totals, p=0.5, size=len(totals)).reshape(1,n_snps)
+        beta = totals_ - alpha
+        runs = {b: multisample_em(alpha, beta, b) for b in np.arange(0.35, 0.5, 0.05)}
+        bafs, _, _ = max(runs.values(), key=lambda x: x[-1])
+        betas.append(bafs[0])
+    
+    betas = sorted(betas)
+    betas = betas[int(round(len(betas) * significance)):]
+    return 0.5 - betas[0]
+#####
 
 def multisample_em(alts, refs, start, tol=10e-6):
     assert (
@@ -1248,9 +1289,11 @@ def run_chromosome(
             # Partition SNPs for BAF inference
 
             # save temp results DEBUG
+            outdir = outfile[:str.rindex(outfile, "/")]
+            odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
+            # em_pfile = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}/em_phasing.bed"
+            # em_pfd = open(em_pfile, )
             if not xy:
-                outdir = outfile[:str.rindex(outfile, "/")]
-                odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
                 store_adp_binning(starts_p, ends_p, snpsv, chromosome, odir, "p_arm")
 
             # Infer BAF
@@ -1341,8 +1384,6 @@ def run_chromosome(
 
             # save temp results DEBUG
             if not xy:
-                outdir = outfile[:str.rindex(outfile, "/")]
-                odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
                 store_adp_binning(starts_q, ends_q, snpsv, chromosome, odir, "q_arm")
 
             if xy:
