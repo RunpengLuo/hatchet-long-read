@@ -1254,6 +1254,10 @@ def run_chromosome(
             outdir = outfile[:str.rindex(outfile, "/")]
             os.makedirs(f"{outdir}/snpsv", exist_ok=True)
             snpsv.to_csv(f"{outdir}/snpsv/snpsv.{chromosome}.tsv", sep='\t', header=True, index=True)
+        
+        # save temp results DEBUG
+        outdir = outfile[:str.rindex(outfile, "/")]
+        odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
 
         sp.log(msg=f"Binning p arm of chromosome {chromosome}\n", level="INFO")
         if len(np.where(positions <= centromere_start)[0]) > 0:
@@ -1289,10 +1293,6 @@ def run_chromosome(
             # Partition SNPs for BAF inference
 
             # save temp results DEBUG
-            outdir = outfile[:str.rindex(outfile, "/")]
-            odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
-            # em_pfile = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}/em_phasing.bed"
-            # em_pfd = open(em_pfile, )
             if not xy:
                 store_adp_binning(starts_p, ends_p, snpsv, chromosome, odir, "p_arm")
 
