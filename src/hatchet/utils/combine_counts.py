@@ -559,8 +559,8 @@ def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
 
         alpha = np.sum(np.choose(phases, [refs[i], alts[i]]))
         beta = np.sum(np.choose(phases, [alts[i], refs[i]]))
-        # baf = bafs[i]
-        baf, _ = baf_bootstrapping(bafs[i], refs[i], alts[i]) ##### Test bootstrapping method
+        baf = bafs[i]
+        # baf, _ = baf_bootstrapping(bafs[i], refs[i], alts[i]) ##### Test bootstrapping method
         cov = np.sum(alpha + beta) / n_snps
 
         result[sample] = n_snps, cov, baf, alpha, beta
