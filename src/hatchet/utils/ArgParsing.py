@@ -1161,6 +1161,97 @@ def parse_download_panel_arguments(args=None):
         "refpaneldir": os.path.abspath(args.refpaneldir),
     }
 
+def parse_phase_snps_lr_arguments(args=None):
+    description = "Phase germline SNPs using read-based phasing"
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument(
+        "-N",
+        "--normal",
+        required=True,
+        type=str,
+        help="BAM file corresponding to matched normal sample",
+    )
+    parser.add_argument(
+        "-g",
+        "--refgenome",
+        required=True,
+        type=str,
+        help="Path to Reference genome used in BAM files",
+    )
+    parser.add_argument(
+        "-o",
+        "--outdir",
+        required=False,
+        type=str,
+        help="Output folder for phased VCFs",
+    )
+    parser.add_argument(
+        "-L",
+        "--snps",
+        required=True,
+        type=str,
+        nargs="+",
+        help="List of SNPs in the normal sample to phase",
+    )
+    parser.add_argument(
+        "-j",
+        "--processes",
+        required=False,
+        default=config.genotype_snps.processes,
+        type=int,
+        help="Number of available parallel processes (default: 2)",
+    )
+    parser.add_argument(
+        "-wh",
+        "--whatshap",
+        required=False,
+        default=config.paths.whatshap,
+        type=str,
+        help='Path to the directory of "whatshap" executable (default: look in $PATH)',
+    )
+    parser.add_argument(
+        "-bt",
+        "--bcftools",
+        required=False,
+        default=config.paths.bcftools,
+        type=str,
+        help='Path to the directory of "bcftools" executable (default: look in $PATH)',
+    )
+    args = parser.parse_args(args)
+
+    # Parse normal BAM file
+    if not isfile(os.path.abspath(args.normal)):
+        raise ValueError(error("The specified normal BAM file does not exist"))
+    normal = os.path.abspath(args.normal)
+
+    bcftools = os.path.join(args.bcftools, "bcftools")
+    if which(bcftools) is None:
+        raise ValueError(error("bcftools has not been found or is not executable!"))
+    
+    whatshap = os.path.join(args.whatshap, "whatshap")
+    if which(whatshap) is None:
+        raise ValueError(error("whatshap has not been found or is not executable!"))
+    
+    snplists = {}
+    for f in args.snps:
+        if not isfile(f):
+            raise ValueError(
+                error("The specified SNP file {} does not exist!".format(f))
+            )
+        snplists[os.path.basename(f).split(".")[0]] = f
+    chromosomes = sort_chroms(list(snplists.keys()))
+
+    return {
+        "j": args.processes,
+        "normal": normal,
+        "chromosomes": chromosomes,
+        "snps": snplists,
+        "refgenome": args.refgenome,
+        "outdir": os.path.abspath(args.outdir),
+        "bcftools": bcftools,
+        "whatshap": whatshap
+    }
+
 
 def parse_phase_snps_arguments(args=None):
     description = "Phase germline SNPs using a reference panel"
@@ -2481,6 +2572,17 @@ def parse_plot_bins_args(args=None):
         "dpi": args.dpi,
     }
 
+def sort_chroms(chromosomes: list):
+    assert len(chromosomes) != 0
+    use_chr  = True if str(chromosomes[0]).startswith("chr") else False
+    if not use_chr:
+        return sorted(chromosomes)
+    chr2ord = {}
+    for i in range(1,23):
+        chr2ord[f"chr{i}"] = i
+    chr2ord["chrX"] = 23
+    chr2ord["chrY"] = 24
+    return sorted(chromosomes, key=lambda x: chr2ord[x])
 
 def extractChromosomes(samtools, normal, tumors, reference=None):
     """

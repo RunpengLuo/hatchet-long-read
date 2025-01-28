@@ -20,6 +20,7 @@ from hatchet.utils.plot_cn import main as plot_cn
 from hatchet.utils.plot_cn_1d2d import main as plot_cn_1d2d
 from hatchet.utils.download_panel import main as download_panel
 from hatchet.utils.phase_snps import main as phase_snps
+from hatchet.utils.phase_snps_lr import main as phase_snps_lr
 from hatchet.utils.Supporting import log, error
 
 
@@ -47,6 +48,16 @@ def main(args=None):
             extra_args = ["-j", str(config.run.processes)]
     except KeyError:
         pass
+
+    run_lr = False
+    if config.run.run_lr is not None:
+        if config.run.run_lr:
+            run_lr = True
+    
+    if run_lr:
+        log(msg="Running HATCHet in long read mode\n", level="INFO")
+    else:
+        log(msg="Running HATCHet in default mode\n", level="INFO")
 
     # ----------------------------------------------------
 
@@ -155,22 +166,37 @@ def main(args=None):
             )
 
         os.makedirs(f"{output}/phase", exist_ok=True)
-        phase_snps(
-            args=[
-                "-D",
-                config.download_panel.refpaneldir,
-                "-g",
-                config.run.reference,
-                "-V",
-                config.genotype_snps.reference_version,
-                "-o",
-                f"{output}/phase/",
-                "-L",
-            ]
-            + glob.glob(f"{output}/snps/*.vcf.gz")
-            + (["-N"] if config.genotype_snps.chr_notation else [])
-            + extra_args
-        )
+        if not run_lr: #default mode
+            phase_snps(
+                args=[
+                    "-D",
+                    config.download_panel.refpaneldir,
+                    "-g",
+                    config.run.reference,
+                    "-V",
+                    config.genotype_snps.reference_version,
+                    "-o",
+                    f"{output}/phase/",
+                    "-L",
+                ]
+                + glob.glob(f"{output}/snps/*.vcf.gz")
+                + (["-N"] if config.genotype_snps.chr_notation else [])
+                + extra_args
+            )
+        else:
+            phase_snps_lr(
+                args=[
+                    "-N",
+                    config.run.normal,
+                    "-g",
+                    config.run.reference,
+                    "-o",
+                    f"{output}/phase/",
+                    "-L",
+                ]
+                + glob.glob(f"{output}/snps/*.vcf.gz")
+                + extra_args
+            )
 
     # ----------------------------------------------------
     if config.run.count_alleles:

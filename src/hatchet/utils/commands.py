@@ -1,5 +1,7 @@
 # All supported HATCHet commands
 commands = (
+    'phase-snps-lr'
+
     "count-reads",
     "count-reads-fw",
     "genotype-snps",
