@@ -25,7 +25,7 @@ def main(args=None):
 
     # path to hg19, 1000GP in hg19 coords, potentially needed for liftover
     hg19_path = ""
-    # chain files for liftover, chains['hg38_hg19']=path, chains['hzz-8     g19_hg38']=path
+    # chain files for liftover, chains['hg38_hg19']=path, chains['hg19_hg38']=path
     chains = ""
     # file for renaming chrs with bcftools, rename_files[0] for removing 'chr, rename_files[1] for adding 'chr'
     rename_files = ""

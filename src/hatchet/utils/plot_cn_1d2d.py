@@ -263,8 +263,10 @@ def cn2evs(cns, props):
     assert len(cns) == len(props)
     A = np.array([x[0] for x in cns])
     B = np.array([x[1] for x in cns])
+    y_fcn = np.sum((A + B) * props)
+    y_baf = np.sum(B * props) / np.sum((A + B) * props)
 
-    return np.sum((A + B) * props), np.sum(B * props) / np.sum((A + B) * props)
+    return y_fcn, y_baf
 
 
 def plot_genome(
@@ -398,6 +400,7 @@ def plot_genome(
                            "cn_normal", "u_normal", "cn_clone1", "u_clone1"]]
             temp_df.loc[:, "FCN_LINE"] = [x[0][1] for x in fcn_lines]
             temp_df.loc[:, "BAF_LINE"] = [x[0][1] for x in baf_lines]
+            temp_df.loc[:, "FCN"] = bbc.RD * gamma
             temp_df.to_csv(temp_fname, index=False, sep='\t', header=True)
 
             lc_fcn = collections.LineCollection(fcn_lines, linewidth=2, colors=colors)
