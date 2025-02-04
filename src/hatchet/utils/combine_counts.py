@@ -1419,7 +1419,7 @@ def run_chromosome(
                         test_alpha,
                         multisample,
                     )
-                    for i in range(len(starts_p))
+                    for i in range(len(starts_q))
                 ] #TODO
 
             bb_q = merge_data(bins_q, dfs_q, bafs_q, all_names, chromosome)
