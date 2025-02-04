@@ -451,11 +451,11 @@ def apply_EM(totals_in, alts_in):
 
 
 def compute_baf_wrapper(
-    bin_snps, blocksize, max_snps_per_block, test_alpha, multisample
+    bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha, multisample
 ):
     if multisample:
         return compute_baf_task_multi(
-            bin_snps, blocksize, max_snps_per_block, test_alpha
+            bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha
         )
     else:
         return compute_baf_task_single(
@@ -504,7 +504,7 @@ def compute_baf_task_single(bin_snps, blocksize, max_snps_per_block, test_alpha)
     return result
 
 
-def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
+def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha):
     """
     Estimates the BAF for the bin containing exactly <bin_snps> SNPs.
     <bin_snps> is a dataframe with at least ALT and REF columns containing read counts.
@@ -548,6 +548,9 @@ def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
     # Need hard phasing to assign ref/alt reads to alpha/beta
     phases = np.round(phases).astype(np.int8)
 
+    # allelic balanced threshold inferred from normal BAF bin
+    Nthres = compute_MAE(normal_snps.ALT.to_numpy(), normal_snps.REF.to_numpy())
+
     # Compose results table
     for i in range(len(samples)):
         sample = samples[i]
@@ -560,13 +563,19 @@ def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
         alpha = np.sum(np.choose(phases, [refs[i], alts[i]]))
         beta = np.sum(np.choose(phases, [alts[i], refs[i]]))
         baf = bafs[i]
-        baf, _, _ = baf_recalc(baf, refs[i], alts[i]) ##### Test BAF recalc method
+        baf, _, _ = baf_recalc(baf, alts[i], refs[i], Nthres) ##### Test BAF recalc method
         cov = np.sum(alpha + beta) / n_snps
 
         result[sample] = n_snps, cov, baf, alpha, beta
     return result
 
 ##### Test recompute-BAF method
+# compute mean absolute error
+def compute_MAE(alts: np.ndarray, refs: np.ndarray, exp_mean=0.5):
+    data = alts/np.clip(alts + refs, a_min=1, a_max=None)
+    data = data[data != 0]  
+    return np.mean(np.abs(data - exp_mean))
+
 def random_baf(refs: np.ndarray, alts: np.ndarray):
     phases = bernoulli.rvs(0.5, size=len(refs)) # random phasing
     alpha = np.sum(np.choose(phases, [refs, alts]))
@@ -574,15 +583,18 @@ def random_baf(refs: np.ndarray, alts: np.ndarray):
     return min(alpha, beta) / (alpha + beta)
 
 # re-compute BAF by estimating if it's allelic balanced
-def baf_recalc(baf: float, refs: np.ndarray, alts: np.ndarray, threshold=0.01) -> float:
-    totals = alts + refs
-    data = (2*(alts/totals) - 1)**2
-    geo_mean = gmean(data)
-    # geo_mean = np.mean(data)
-    if geo_mean > threshold:
-        return baf, False, geo_mean
-    rand_baf = random_baf(refs, alts)
-    return max(min(rand_baf, 1 - rand_baf), baf), True, geo_mean
+def baf_recalc(baf: float, alts: np.ndarray, refs: np.ndarray, threshold=0.1):
+    if len(refs) < 2:
+        return baf, False, 0.0
+    
+    mae = compute_MAE(alts, refs)
+    if mae > threshold:
+        # allelic imbalanced, farther to 0.5 than normal sample.
+        return baf, False, mae
+    else:
+        rand_baf = random_baf(refs, alts)
+        mbaf = max(min(rand_baf, 1 - rand_baf), baf)
+        return mbaf, True, mae
 #####
 
 def multisample_em(alts, refs, start, tol=10e-6):
@@ -1229,13 +1241,20 @@ def run_chromosome(
             positions, snp_counts, snpsv = read_snps(
                 baffile, chromosome, all_names, phasefile=phasefile
             )
-            outdir = outfile[:str.rindex(outfile, "/")]
-            os.makedirs(f"{outdir}/snpsv", exist_ok=True)
-            snpsv.to_csv(f"{outdir}/snpsv/snpsv.{chromosome}.tsv", sep='\t', header=True, index=True)
-        
-        # save temp results DEBUG
-        outdir = outfile[:str.rindex(outfile, "/")]
-        odir = f"{outdir}/binning_msr{min_snp_reads}_mtr{min_total_reads}"
+            # TODO hack to get normal.1bed for now
+            normal1 = baffile[:str.rindex(baffile, "/")] + "/normal.1bed"
+            normal_df = pd.read_table(
+                normal1,
+                names=["CHR", "POS", "SAMPLE", "ALT", "REF"],
+                dtype={
+                    "CHR": object,
+                    "POS": np.uint32,
+                    "SAMPLE": object,
+                    "ALT": np.uint32,
+                    "REF": np.uint32,
+                },
+            )
+            normal_df_ch = normal_df[normal_df.CHR == chromosome]
 
         sp.log(msg=f"Binning p arm of chromosome {chromosome}\n", level="INFO")
         if len(np.where(positions <= centromere_start)[0]) > 0:
@@ -1270,10 +1289,6 @@ def run_chromosome(
             ends_p = bins_p[1]
             # Partition SNPs for BAF inference
 
-            # save temp results DEBUG
-            if not xy:
-                store_adp_binning(starts_p, ends_p, snpsv, chromosome, odir, "p_arm")
-
             # Infer BAF
             if xy:
                 # TODO: compute BAFs for XX
@@ -1293,17 +1308,24 @@ def run_chromosome(
                             .sum(axis=0)
                             >= min_snp_reads
                         ), i
+                
+                # TODO
+                normal_p = [
+                    normal_df_ch[(normal_df_ch.POS >= starts_p[i]) & (normal_df_ch.POS <= ends_p[i])]
+                    for i in range(len(starts_p))
+                ]
 
                 bafs_p = [
                     compute_baf_wrapper(
-                        d,
+                        dfs_p[i],
+                        normal_p[i],
                         blocksize,
                         max_snps_per_block,
                         test_alpha,
                         multisample,
                     )
-                    for d in dfs_p
-                ]
+                    for i in range(len(starts_p))
+                ] # TODO
 
             bb_p = merge_data(bins_p, dfs_p, bafs_p, all_names, chromosome)
 
@@ -1360,10 +1382,6 @@ def run_chromosome(
             starts_q = bins_q[0]
             ends_q = bins_q[1]
 
-            # save temp results DEBUG
-            if not xy:
-                store_adp_binning(starts_q, ends_q, snpsv, chromosome, odir, "q_arm")
-
             if xy:
                 dfs_q = None
                 bafs_q = None
@@ -1382,18 +1400,26 @@ def run_chromosome(
                             .sum(axis=0)
                             >= min_snp_reads
                         ), i
+                
+                                
+                # TODO
+                normal_q = [
+                    normal_df_ch[(normal_df_ch.POS >= starts_q[i]) & (normal_df_ch.POS <= ends_q[i])]
+                    for i in range(len(starts_q))
+                ]
 
                 # Infer BAF
                 bafs_q = [
                     compute_baf_wrapper(
-                        d,
+                        dfs_q[i],
+                        normal_q[i],
                         blocksize,
                         max_snps_per_block,
                         test_alpha,
                         multisample,
                     )
-                    for d in dfs_q
-                ]
+                    for i in range(len(starts_p))
+                ] #TODO
 
             bb_q = merge_data(bins_q, dfs_q, bafs_q, all_names, chromosome)
 
