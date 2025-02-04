@@ -1242,6 +1242,7 @@ def run_chromosome(
                 baffile, chromosome, all_names, phasefile=phasefile
             )
             # TODO hack to get normal.1bed for now
+            sp.log(msg=f"FLAG here, running normal-sample guard\n", level="INFO")
             normal1 = baffile[:str.rindex(baffile, "/")] + "/normal.1bed"
             normal_df = pd.read_table(
                 normal1,
