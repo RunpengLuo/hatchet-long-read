@@ -1443,6 +1443,16 @@ def execute_python(solver, args, n, outprefix):
         purities=args["purities"],
     )
 
+    # DEBUG
+    print(f"RESULTS for n={n}!!!!!")
+    print("obj: " + str(obj))
+    print("n: " + str(n))
+    print("cA: " + str(cA))
+    print("cB: " + str(cB))
+    print("u: " + str(u))
+    print("cluster_ids: " + str(cluster_ids))
+    print("sample_ids: " + str(sample_ids))
+
     segmentation(
         cA,
         cB,
@@ -1544,6 +1554,7 @@ def select(diploid, tetraploid, v, rundir, g, limit):
     dscores = {}
     tscores = {}
 
+    # 1-clone or 2-sublcone
     if len(diploid) == 1 or len(diploid) == 2:
         for dip in diploid:
             dscores[dip[0]] = dip[1]
@@ -1639,6 +1650,7 @@ def select(diploid, tetraploid, v, rundir, g, limit):
                 )
             )
 
+    #FIXME intepret as max-objective
     dchosen = max(diploid, key=(lambda x: dscores[x[0]]))
     dbout = os.path.join(rundir, "chosen.diploid.bbc.ucn")
     shutil.copy2(dchosen[2] + ".bbc.ucn.tsv", dbout)
@@ -1661,6 +1673,7 @@ def select(diploid, tetraploid, v, rundir, g, limit):
             )
         )
 
+    #FIXME intepret as max-objective
     tchosen = max(tetraploid, key=(lambda x: tscores[x[0]]))
     tbout = os.path.join(rundir, "chosen.tetraploid.bbc.ucn")
     shutil.copy2(tchosen[2] + ".bbc.ucn.tsv", tbout)
@@ -1685,6 +1698,7 @@ def select(diploid, tetraploid, v, rundir, g, limit):
 
     bbest = os.path.join(rundir, "best.bbc.ucn")
     sbest = os.path.join(rundir, "best.seg.ucn")
+    #FIXME intepret as min-objective
     if tchosen[0] < dchosen[0]:
         shutil.copy2(tchosen[2] + ".bbc.ucn.tsv", bbest)
         shutil.copy2(tchosen[2] + ".seg.ucn.tsv", sbest)

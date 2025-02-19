@@ -83,6 +83,7 @@ def solve(
             raise RuntimeError(
                 f"Unable to determine cluster with diploid RDR threshold {diploid_threshold}"
             )
+        # get cluster with BAF close to 0.5 and has most clustered bins
         dipoid_cluster_id = (_candidate_cluster_ids * weights).idxmax()
         copy_numbers = {dipoid_cluster_id: (1, 1)}
     else:
@@ -96,6 +97,12 @@ def solve(
     rdr = rdr * gamma
     f_b = rdr * baf
     f_a = rdr - f_b
+
+    # DEBUG
+    print(f"FRACTIONAL COPYNUMBERS for n={n} !!!!!")
+    print("rdr: ", rdr)
+    print("f_a: ", f_a)
+    print("f_b: ", f_b)
 
     if not binwise:
         if solve_mode == "ilp":
