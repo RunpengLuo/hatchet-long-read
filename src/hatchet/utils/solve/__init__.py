@@ -26,18 +26,18 @@ def solve(
     clonal,
     bbc_file,
     seg_file,
-    n,
+    n, # n_clones
     solver="gurobi",
     solve_mode="cd",
-    d=-1,
-    cn_max=-1,
-    mu=0.01,
-    diploid_threshold=0.1,
-    ampdel=True,
+    d=-1, # number of distinct states per segment
+    cn_max=-1, # threshold, max cA + cB per segment
+    mu=0.01, #u_min
+    diploid_threshold=0.1, # constant TODO
+    ampdel=True, # all amp or all del
     n_seed=400,
     n_worker=8,
     random_seed=None,
-    max_iters=None,
+    max_iters=None, # cd
     timelimit=None,
     binwise=False,
     purities=None,
@@ -101,12 +101,12 @@ def solve(
     f_a = rdr - f_b
 
     # DEBUG
-    print(f"FRACTIONAL COPYNUMBERS for n={n} !!!!!")
+    print(f"solve() n={n} !!!!!")
     print("weights: ", list(weights))
-    print("rdr: ", list(rdr))
-    print("fcn: ", list(fcn))
-    print("f_a: ", list(f_a))
-    print("f_b: ", list(f_b))
+    print("rdr: ", rdr)
+    print("fcn: ", fcn)
+    print("f_a: ", f_a)
+    print("f_b: ", f_b)
 
     if not binwise:
         if solve_mode == "ilp":
@@ -158,7 +158,7 @@ def solve(
                 cn=copy_numbers,
                 purities=purities,
             )
-            _, cA, cB, _, _, _ = cd.run(
+            obj, cA, cB, u, _, _ = cd.run(
                 solver_type=solver,
                 max_iters=max_iters,
                 n_seed=n_seed,
@@ -168,8 +168,10 @@ def solve(
             )
             # run coordinate-descent first to get local-opt cA and cB
             # use cA and cB to hot start the model.
-            print("cd result cA: ", cA)
-            print("cd result cB: ", cB)
+            print(f"intermediate CD result; obj={obj}!!!!!")
+            print("cA: ", str(cA))
+            print("cB: ", str(cA))
+            print("u: " + str(u))
             ilp = ILPSubset(
                 n,
                 cn_max,

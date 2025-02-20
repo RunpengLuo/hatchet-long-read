@@ -1422,6 +1422,7 @@ def execute_python(solver, args, n, outprefix):
 
     _mode = ("both", "ilp", "cd")[args["M"]]
     print(f"{outprefix}\tmode={_mode}\tsolver={solver}")
+    print("clonal: ", args["c"])
 
     obj, cA, cB, u, cluster_ids, sample_ids = solve(
         solver=solver,
@@ -1445,9 +1446,7 @@ def execute_python(solver, args, n, outprefix):
     )
 
     # DEBUG
-    print(f"RESULTS for n={n}!!!!!")
-    print("obj: " + str(obj))
-    print("n: " + str(n))
+    print(f"final results for n={n};obj={obj}!!!!!")
     print("cA: " + str(cA))
     print("cB: " + str(cB))
     print("u: " + str(u))
