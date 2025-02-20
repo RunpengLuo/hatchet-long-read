@@ -96,7 +96,7 @@ def solve(
     )
 
     fcn = rdr * gamma
-    # rdr = rdr * gamma
+    rdr = rdr * gamma
     f_b = rdr * baf
     f_a = rdr - f_b
 
