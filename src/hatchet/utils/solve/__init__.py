@@ -94,15 +94,19 @@ def solve(
         msg="Computed scaling factor gamma = \n" + str(gamma) + "\n",
         level="INFO",
     )
-    rdr = rdr * gamma
+
+    fcn = rdr * gamma
+    # rdr = rdr * gamma
     f_b = rdr * baf
     f_a = rdr - f_b
 
     # DEBUG
     print(f"FRACTIONAL COPYNUMBERS for n={n} !!!!!")
-    print("rdr: ", rdr)
-    print("f_a: ", f_a)
-    print("f_b: ", f_b)
+    print("weights: ", list(weights))
+    print("rdr: ", list(rdr))
+    print("fcn: ", list(fcn))
+    print("f_a: ", list(f_a))
+    print("f_b: ", list(f_b))
 
     if not binwise:
         if solve_mode == "ilp":
@@ -162,7 +166,10 @@ def solve(
                 random_seed=random_seed,
                 timelimit=timelimit,
             )
-
+            # run coordinate-descent first to get local-opt cA and cB
+            # use cA and cB to hot start the model.
+            print("cd result cA: ", cA)
+            print("cd result cB: ", cB)
             ilp = ILPSubset(
                 n,
                 cn_max,
