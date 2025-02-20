@@ -1421,6 +1421,7 @@ def execute_python(solver, args, n, outprefix):
     seg_out_file = outprefix + ".seg.ucn.tsv"
 
     _mode = ("both", "ilp", "cd")[args["M"]]
+    print(f"{outprefix}\tmode={_mode}\tsolver={solver}")
 
     obj, cA, cB, u, cluster_ids, sample_ids = solve(
         solver=solver,
