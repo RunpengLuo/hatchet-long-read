@@ -1449,14 +1449,6 @@ def execute_python(solver, args, n, outprefix):
         tempdir=tempdir
     )
 
-    # DEBUG
-    print(f"final results for n={n};obj={obj}!!!!!")
-    print("cA: " + str(cA))
-    print("cB: " + str(cB))
-    print("u: " + str(u))
-    print("cluster_ids: " + str(cluster_ids))
-    print("sample_ids: " + str(sample_ids))
-
     segmentation(
         cA,
         cB,

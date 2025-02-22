@@ -131,7 +131,7 @@ class CoordinateDescent:
             raise RuntimeError("Not a single feasible solution found!")
 
         # TODO store all results
-        fd = f"{tempdir}/cd_raw_results.txt"
+        fd = open(f"{tempdir}/cd_raw_results.txt", 'w')
         for i, [obj, cA, cB, u] in enumerate(sorted(summary, key=lambda v: v[0])):
             fd.write(f"{i}\tobj={obj}\tcA={str(cA)}\tcB={str(cB)}\tcU={str(u)}\n")
         fd.close()
