@@ -2,7 +2,7 @@ from copy import copy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
-from hatchet.utils.solve.utils import Random
+from hatchet.utils.solve.utils import Random, store_temp_result
 
 
 class Worker:
@@ -128,25 +128,9 @@ class CoordinateDescent:
             raise RuntimeError("Not a single feasible solution found!")
 
         # TODO store all results
-        cluster_ids = self.ilp.cluster_ids.tolist() 
-        sample_ids = self.ilp.sample_ids.tolist()
-        fd2_header = "CLUSTER\tSAMPLE\tcn_normal\tu_normal\t" + '\t'.join(f"cn_clone{i}\tu_clone{i}" 
-                                                                        for i in range(1, self.ilp.n)) + '\n'
-        with open(f"{tempdir}/cd_objs.tsv", 'w') as fd1:
-            fd1.write("sol_id\tobjective\n")
-            for i, obj in enumerate(sorted(result.keys())):
-                fd1.write(f"{i}\t{obj}\n")
-                with open(f"{tempdir}/cd_sol{i}.tsv", 'w') as fd2:
-                    fd2.write(fd2_header)
-                    cA, cB, u = result[obj]
-                    for ci, cid in enumerate(cluster_ids):
-                        for si, sid in enumerate(sample_ids):
-                            row = f"{cid}\t{sid}"
-                            for oi in range(self.ilp.n):
-                                row += f"\t{cA[ci][oi]}|{cB[ci][oi]}\t{u[oi][si]}"
-                            fd2.write(row + '\n')
-                    fd2.close()
-            fd1.close()
+        if tempdir != None:
+            store_temp_result(result, self.ilp.cluster_ids, 
+                              self.ilp.sample_ids, tempdir, "cd", self.ilp.n)
 
         best = min(result)
         return (best,) + result[best] + (self.ilp.cluster_ids, self.ilp.sample_ids)

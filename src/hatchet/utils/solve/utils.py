@@ -179,3 +179,30 @@ def segmentation(
         df = df.groupby(["segment", "SAMPLE"]).agg(aggregation_rules)
 
         df.to_csv(seg_out_file, sep="\t", index=False)
+
+def store_temp_result(result: dict, cluster_ids: pd.Index, sample_ids: pd.Index, 
+                      tempdir: str, solve_type: str, n: int):
+    """
+    store temporary solution(s) from optimization.
+    """
+    assert solve_type in ["cd", "ilp", "both"] and tempdir != None
+    cluster_ids = cluster_ids.tolist() 
+    sample_ids = sample_ids.tolist()
+    fd2_header = "CLUSTER\tSAMPLE\tcn_normal\tu_normal\t"
+    fd2_header += '\t'.join(f"cn_clone{i}\tu_clone{i}" for i in range(1, n)) + '\n'
+    with open(f"{tempdir}/{solve_type}_objs.tsv", 'w') as fd1:
+        fd1.write("sol_id\tobjective\n")
+        for i, obj in enumerate(sorted(result.keys())):
+            fd1.write(f"{i}\t{obj}\n")
+            with open(f"{tempdir}/{solve_type}_sol{i}.tsv", 'w') as fd2:
+                fd2.write(fd2_header)
+                cA, cB, u = result[obj]
+                for ci, cid in enumerate(cluster_ids):
+                    for si, sid in enumerate(sample_ids):
+                        row = f"{cid}\t{sid}"
+                        for oi in range(n):
+                            row += f"\t{cA[ci][oi]}|{cB[ci][oi]}\t{u[oi][si]}"
+                        fd2.write(row + '\n')
+                fd2.close()
+        fd1.close()
+    return

@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
 from hatchet.utils.solve.cd import CoordinateDescent, CoordinateDescentSplit
-from hatchet.utils.solve.utils import parse_clonal, scale_rdr
+from hatchet.utils.solve.utils import parse_clonal, scale_rdr, store_temp_result
 from hatchet import config
 import hatchet.utils.Supporting as sp
 
@@ -101,20 +101,19 @@ def solve(
     f_b = rdr * baf
     f_a = rdr - f_b
 
-    # DEBUG
     if not binwise:
-        fd = open(f"{tempdir}/solve.txt", 'w')
-        fd.write(f"solve() n={n}\tgamma={gamma}\tmode={solve_mode}\tbinwise={binwise}\n")
-        fd.write(f"weights: " + ','.join(str(v) for v in list(weights)) + "\n")
-        for sample in sample_ids:
-            fd.write("========================================\n")
-            fd.write(str(sample) + "\n")
-            fd.write("rdr: [" + ','.join(str(v) for v in rdr[sample].tolist()) + "]\n")
-            fd.write("fcn: [" + ','.join(str(v) for v in fcn[sample].tolist()) + "]\n")
-            fd.write("f_a: [" + ','.join(str(v) for v in f_a[sample].tolist()) + "]\n")
-            fd.write("f_b: [" + ','.join(str(v) for v in f_b[sample].tolist()) + "]\n")
+        with open(f"{tempdir}/solve.txt", 'w') as fd:
+            fd.write(f"n={n}\ngamma={gamma}\nmode={solve_mode}\nbinwise={binwise}\n")
+            fd.write(f"weights: " + ','.join(str(v) for v in list(weights)) + "\n")
+            for sample in sample_ids:
+                fd.write("========================================\n")
+                fd.write(str(sample) + "\n")
+                fd.write("rdr:" + ','.join(str(v) for v in rdr[sample].tolist()) + "\n")
+                fd.write("fcn:" + ','.join(str(v) for v in fcn[sample].tolist()) + "\n")
+                fd.write("f_a:" + ','.join(str(v) for v in f_a[sample].tolist()) + "\n")
+                fd.write("f_b:" + ','.join(str(v) for v in f_b[sample].tolist()) + "\n")
+        fd.close()
 
-    if not binwise:
         if solve_mode == "cd" or solve_mode == "both":
             cd = CoordinateDescent(
                 f_a=f_a,
@@ -137,11 +136,6 @@ def solve(
                 timelimit=timelimit,
                 tempdir=tempdir,
             )
-            fd.write("----------------------------------------\n")
-            fd.write(f"CD result; obj={obj}\n")
-            fd.write("cA: " + str(cA) + '\n')
-            fd.write("cB: " + str(cB) + '\n')
-            fd.write("u: " + str(u) + '\n')
         
         if solve_mode == "ilp" or solve_mode == "both":
             ilp = ILPSubset(
@@ -166,13 +160,7 @@ def solve(
 
             obj, cA, cB, u, cluster_ids, sample_ids = ilp.run(
                 solver_type=solver, timelimit=timelimit)
-
-            fd.write("----------------------------------------\n")
-            fd.write(f"ILP/ILP+both result; obj={obj}\n")
-            fd.write("cA: " + str(cA) + '\n')
-            fd.write("cB: " + str(cB) + '\n')
-            fd.write("u: " + str(u) + '\n')
-        fd.close()
+            store_temp_result({obj: [cA, cB, u]}, cluster_ids, sample_ids, tempdir, solver, n)
         return obj, cA, cB, u, cluster_ids, sample_ids
 
     else:

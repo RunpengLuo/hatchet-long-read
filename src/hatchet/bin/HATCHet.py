@@ -1421,6 +1421,8 @@ def execute_python(solver, args, n, outprefix):
     seg_out_file = outprefix + ".seg.ucn.tsv"
 
     _mode = ("both", "ilp", "cd")[args["M"]]
+
+    # TODO
     tempdir = outprefix[:str.rindex(outprefix, "/")] + "/sols/"
     tempdir += outprefix[str.rindex(outprefix, "/") + 1:].replace('.', '_')
     os.makedirs(tempdir, exist_ok=True)
