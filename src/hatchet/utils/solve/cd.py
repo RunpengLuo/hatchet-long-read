@@ -105,6 +105,7 @@ class CoordinateDescent:
         
         # TODO didn't consider coincide obj-value pair, although pretty rare case
         summary = [] # store all results TODO
+        identical_res = set()
         result = {}  # obj. value => (cA, cB, u) mapping
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
@@ -125,7 +126,11 @@ class CoordinateDescent:
                 if results is not None:
                     obj, cA, cB, u = results
                     result[obj] = cA, cB, u
-                    summary.append([obj, cA, cB, u])
+
+                    res_str = f"{str(cA)},{str(cB)},{str(u)}"
+                    if res_str not in identical_res: # ignore identical results
+                        summary.append([obj, cA, cB, u])
+                        identical_res.add(res_str)
 
         if not result:
             raise RuntimeError("Not a single feasible solution found!")
@@ -133,7 +138,7 @@ class CoordinateDescent:
         # TODO store all results
         fd = open(f"{tempdir}/cd_raw_results.txt", 'w')
         for i, [obj, cA, cB, u] in enumerate(sorted(summary, key=lambda v: v[0])):
-            fd.write(f"{i}\tobj={obj}\tcA={str(cA)}\tcB={str(cB)}\tcU={str(u)}\n")
+            fd.write(f"{i}\tobj={obj}\tcA={str(cA)}\tcB={str(cB)}\tu={str(u)}\n")
         fd.close()
 
         best = min(result)
