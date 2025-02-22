@@ -17,14 +17,12 @@ from hatchet.utils.Supporting import (
 
 def sort_chroms(chromosomes: list):
     assert len(chromosomes) != 0
-    use_chr  = True if str(chromosomes[0]).startswith("chr") else False
-    if not use_chr:
-        return sorted(chromosomes)
+    ch = "chr" if str(chromosomes[0]).startswith("chr") else ""
     chr2ord = {}
     for i in range(1,23):
-        chr2ord[f"chr{i}"] = i
-    chr2ord["chrX"] = 23
-    chr2ord["chrY"] = 24
+        chr2ord[f"{ch}{i}"] = i
+    chr2ord[f"{ch}X"] = 23
+    chr2ord[f"{ch}Y"] = 24
     return sorted(chromosomes, key=lambda x: chr2ord[x])
 
 """
@@ -451,3 +449,4 @@ def store_adp_binning(starts: list, ends: list, snpsv_ch: pd.DataFrame,
     big_df.to_csv(f"{outdir}/TEMP_{prefix}_{ch}_ALL.tsv", sep="\t", header=True, index=False)
     log(f"Number of bins: {len(starts)}\n", level="INFO")
     return
+
