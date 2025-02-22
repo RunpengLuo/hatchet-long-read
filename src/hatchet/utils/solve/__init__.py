@@ -138,7 +138,7 @@ def solve(
                 tempdir=tempdir,
             )
             fd.write("----------------------------------------\n")
-            fd.write(f"CD result; obj={obj}")
+            fd.write(f"CD result; obj={obj}\n")
             fd.write("cA: " + str(cA) + '\n')
             fd.write("cB: " + str(cB) + '\n')
             fd.write("u: " + str(u) + '\n')
@@ -168,7 +168,7 @@ def solve(
                 solver_type=solver, timelimit=timelimit)
 
             fd.write("----------------------------------------\n")
-            fd.write(f"ILP/ILP+both result; obj={obj}")
+            fd.write(f"ILP/ILP+both result; obj={obj}\n")
             fd.write("cA: " + str(cA) + '\n')
             fd.write("cB: " + str(cB) + '\n')
             fd.write("u: " + str(u) + '\n')
