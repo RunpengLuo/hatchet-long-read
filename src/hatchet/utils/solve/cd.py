@@ -130,7 +130,7 @@ class CoordinateDescent:
         # TODO store all results
         cluster_ids = self.ilp.cluster_ids.tolist() 
         sample_ids = self.ilp.sample_ids.tolist()
-        fd2_header = "CLUSTER\tSAMPLE\tcn_normal\tu_normal" + '\t'.join(f"cn_clone{i}\tu_clone{i}" 
+        fd2_header = "CLUSTER\tSAMPLE\tcn_normal\tu_normal\t" + '\t'.join(f"cn_clone{i}\tu_clone{i}" 
                                                                         for i in range(1, self.ilp.n)) + '\n'
         with open(f"{tempdir}/cd_objs.tsv", 'w') as fd1:
             fd1.write("sol_id\tobjective\n")
