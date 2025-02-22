@@ -103,9 +103,6 @@ class CoordinateDescent:
         with Random(random_seed):
             seeds = [self.ilp.build_random_u() for _ in range(n_seed)]
         
-        # TODO didn't consider coincide obj-value pair, although pretty rare case
-        summary = [] # store all results TODO
-        identical_res = set()
         result = {}  # obj. value => (cA, cB, u) mapping
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
@@ -127,19 +124,29 @@ class CoordinateDescent:
                     obj, cA, cB, u = results
                     result[obj] = cA, cB, u
 
-                    res_str = f"{str(cA)},{str(cB)},{str(u)}"
-                    if res_str not in identical_res: # ignore identical results
-                        summary.append([obj, cA, cB, u])
-                        identical_res.add(res_str)
-
         if not result:
             raise RuntimeError("Not a single feasible solution found!")
 
         # TODO store all results
-        fd = open(f"{tempdir}/cd_raw_results.txt", 'w')
-        for i, [obj, cA, cB, u] in enumerate(sorted(summary, key=lambda v: v[0])):
-            fd.write(f"{i}\tobj={obj}\tcA={str(cA)}\tcB={str(cB)}\tu={str(u)}\n")
-        fd.close()
+        cluster_ids = self.ilp.cluster_ids.tolist() 
+        sample_ids = self.ilp.sample_ids.tolist()
+        fd2_header = "CLUSTER\tSAMPLE\tcn_normal\tu_normal" + '\t'.join(f"cn_clone{i}\tu_clone{i}" 
+                                                                        for i in range(1, self.ilp.n)) + '\n'
+        with open(f"{tempdir}/cd_objs.tsv", 'w') as fd1:
+            fd1.write("sol_id\tobjective\n")
+            for i, obj in enumerate(sorted(result.keys())):
+                fd1.write(f"{i}\t{obj}\n")
+                with open(f"{tempdir}/cd_sol{i}.tsv", 'w') as fd2:
+                    fd2.write(fd2_header)
+                    cA, cB, u = result[obj]
+                    for ci, cid in enumerate(cluster_ids):
+                        for si, sid in enumerate(sample_ids):
+                            row = f"{cid}\t{sid}"
+                            for oi in range(self.ilp.n):
+                                row += f"\t{cA[ci][oi]}|{cB[ci][oi]}\t{u[oi][si]}"
+                            fd2.write(row + '\n')
+                    fd2.close()
+            fd1.close()
 
         best = min(result)
         return (best,) + result[best] + (self.ilp.cluster_ids, self.ilp.sample_ids)
