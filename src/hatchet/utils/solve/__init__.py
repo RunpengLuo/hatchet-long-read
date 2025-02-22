@@ -41,6 +41,7 @@ def solve(
     timelimit=None,
     binwise=False,
     purities=None,
+    tempdir=None,
 ):
     assert solve_mode in ("ilp", "cd", "both"), "Unrecognized solve_mode"
     assert solver_available(solver), f"Solver {solver} not available or not licensed"
@@ -101,30 +102,20 @@ def solve(
     f_a = rdr - f_b
 
     # DEBUG
-    print(f"solve() n={n} !!!!!")
-    print("weights: ", list(weights))
-    print("rdr: ", rdr)
-    print("fcn: ", fcn)
-    print("f_a: ", f_a)
-    print("f_b: ", f_b)
+    if not binwise:
+        fd = open(os.path.join(tempdir, "solve.txt"), 'w')
+        fd.write(f"solve() n={n}\tgamma={gamma}\tmode={solve_mode}\tbinwise={binwise}\n")
+        fd.write(f"weights: " + ','.join(str(v) for v in list(weights)) + "\n")
+        for sample in sample_ids:
+            fd.write("========================================\n")
+            fd.write(str(sample) + "\n")
+            fd.write("rdr: [" + ','.join(str(v) for v in rdr[sample].tolist()) + "]\n")
+            fd.write("fcn: [" + ','.join(str(v) for v in fcn[sample].tolist()) + "]\n")
+            fd.write("f_a: [" + ','.join(str(v) for v in f_a[sample].tolist()) + "]\n")
+            fd.write("f_b: [" + ','.join(str(v) for v in f_b[sample].tolist()) + "]\n")
 
     if not binwise:
-        if solve_mode == "ilp":
-            ilp = ILPSubset(
-                n,
-                cn_max,
-                d=d,
-                mu=mu,
-                ampdel=ampdel,
-                copy_numbers=copy_numbers,
-                f_a=f_a,
-                f_b=f_b,
-                w=weights,
-                purities=purities,
-            )
-            ilp.create_model(pprint=True)
-            return ilp.run(solver_type=solver, timelimit=timelimit)
-        elif solve_mode == "cd":
+        if solve_mode == "cd" or solve_mode == "both":
             cd = CoordinateDescent(
                 f_a=f_a,
                 f_b=f_b,
@@ -137,41 +128,22 @@ def solve(
                 cn=copy_numbers,
                 purities=purities,
             )
-            return cd.run(
+            obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
                 solver_type=solver,
                 max_iters=max_iters,
                 n_seed=n_seed,
                 j=n_worker,
                 random_seed=random_seed,
                 timelimit=timelimit,
+                tempdir=tempdir,
             )
-        else:
-            cd = CoordinateDescent(
-                f_a=f_a,
-                f_b=f_b,
-                n=n,
-                mu=mu,
-                d=d,
-                cn_max=cn_max,
-                w=weights,
-                ampdel=ampdel,
-                cn=copy_numbers,
-                purities=purities,
-            )
-            obj, cA, cB, u, _, _ = cd.run(
-                solver_type=solver,
-                max_iters=max_iters,
-                n_seed=n_seed,
-                j=n_worker,
-                random_seed=random_seed,
-                timelimit=timelimit,
-            )
-            # run coordinate-descent first to get local-opt cA and cB
-            # use cA and cB to hot start the model.
-            print(f"intermediate CD result; obj={obj}!!!!!")
-            print("cA: ", str(cA))
-            print("cB: ", str(cA))
-            print("u: " + str(u))
+            fd.write("----------------------------------------\n")
+            fd.write(f"CD result; obj={obj}")
+            fd.write("cA: " + str(cA) + '\n')
+            fd.write("cB: " + str(cB) + '\n')
+            fd.write("u: " + str(u) + '\n')
+        
+        if solve_mode == "ilp" or solve_mode == "both":
             ilp = ILPSubset(
                 n,
                 cn_max,
@@ -184,9 +156,24 @@ def solve(
                 w=weights,
                 purities=purities,
             )
-            ilp.create_model()
-            ilp.hot_start(cA, cB)
-            return ilp.run(solver_type=solver, timelimit=timelimit)
+            if solve_mode == "ilp":
+                ilp.create_model(pprint=True)
+            else:
+                # run coordinate-descent first to get local-opt cA and cB
+                # use cA and cB to hot start the model.
+                ilp.create_model()
+                ilp.hot_start(cA, cB)
+
+            obj, cA, cB, u, cluster_ids, sample_ids = ilp.run(
+                solver_type=solver, timelimit=timelimit)
+
+            fd.write("----------------------------------------\n")
+            fd.write(f"ILP/ILP+both result; obj={obj}")
+            fd.write("cA: " + str(cA) + '\n')
+            fd.write("cB: " + str(cB) + '\n')
+            fd.write("u: " + str(u) + '\n')
+        fd.close()
+        return obj, cA, cB, u, cluster_ids, sample_ids
 
     else:
         bins = OrderedDict()  # cluster_id => RDR for cluster

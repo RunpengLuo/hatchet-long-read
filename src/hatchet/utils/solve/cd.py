@@ -98,10 +98,13 @@ class CoordinateDescent:
         j=8,
         random_seed=None,
         timelimit=None,
+        tempdir=None,
     ):
         with Random(random_seed):
             seeds = [self.ilp.build_random_u() for _ in range(n_seed)]
-
+        
+        # TODO didn't consider coincide obj-value pair, although pretty rare case
+        summary = [] # store all results TODO
         result = {}  # obj. value => (cA, cB, u) mapping
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
@@ -122,9 +125,16 @@ class CoordinateDescent:
                 if results is not None:
                     obj, cA, cB, u = results
                     result[obj] = cA, cB, u
+                    summary.append([obj, cA, cB, u])
 
         if not result:
             raise RuntimeError("Not a single feasible solution found!")
+
+        # TODO store all results
+        fd = f"{tempdir}/cd_raw_results.txt"
+        for i, [obj, cA, cB, u] in enumerate(sorted(summary, key=lambda v: v[0])):
+            fd.write(f"{i}\tobj={obj}\tcA={str(cA)}\tcB={str(cB)}\tcU={str(u)}\n")
+        fd.close()
 
         best = min(result)
         return (best,) + result[best] + (self.ilp.cluster_ids, self.ilp.sample_ids)
