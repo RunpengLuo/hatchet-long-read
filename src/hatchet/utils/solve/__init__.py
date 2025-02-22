@@ -103,7 +103,7 @@ def solve(
 
     # DEBUG
     if not binwise:
-        fd = open(os.path.join(tempdir, "/solve.txt"), 'w')
+        fd = open(f"{tempdir}/solve.txt", 'w')
         fd.write(f"solve() n={n}\tgamma={gamma}\tmode={solve_mode}\tbinwise={binwise}\n")
         fd.write(f"weights: " + ','.join(str(v) for v in list(weights)) + "\n")
         for sample in sample_ids:
