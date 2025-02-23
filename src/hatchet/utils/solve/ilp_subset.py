@@ -444,7 +444,7 @@ class ILPSubset:
         if copy_numbers_fixed != None:
             for _m in range(self.m):
                 cluster_id = self.f_a.index[_m]
-                if cluster_id not in copy_numbers_fixed:
+                if cluster_id in copy_numbers_fixed:
                     for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
                         # +1 to skip normal clone.
                         self.cA[_m][_n + 1].fix(_cnA)
