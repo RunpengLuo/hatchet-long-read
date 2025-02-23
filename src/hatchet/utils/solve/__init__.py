@@ -103,8 +103,15 @@ def solve(
 
     if not binwise:
         with open(f"{tempdir}/solve.txt", 'w') as fd:
-            fd.write(f"n={n}\ngamma={gamma}\nmode={solve_mode}\nbinwise={binwise}\n")
-            fd.write(f"weights: " + ','.join(str(v) for v in list(weights)) + "\n")
+            fd.write(f"random_seed={random_seed}\nnum_seeds={n_seed}\nmax_iters={max_iters}\n\n")
+            fd.write(f"mode={solve_mode}\nbinwise={binwise}\n")
+            fd.write(f"gamma={gamma}\n(m,n,k)=({f_a.shape[0]},{n},{f_a.shape[1]})\n")
+            fd.write(f"u_min={mu}\ncn_max{cn_max}\nampdel={ampdel}\n")
+            fd.write(f"base={min(2, len(copy_numbers))}\n")
+            fd.write(f"#distinct_states_per_cluster={d}\n")
+            fd.write(f"copynumbers/clonal={copy_numbers}\n")
+            fd.write(f"purity={purities}\n")
+            fd.write(f"cluster-weights=" + ','.join(str(v) for v in list(weights)) + "\n")
             for sample in sample_ids:
                 fd.write("========================================\n")
                 fd.write(str(sample) + "\n")

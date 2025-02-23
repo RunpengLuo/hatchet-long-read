@@ -1439,6 +1439,7 @@ def execute_python(solver, args, n, outprefix):
         d=-1 if args["d"] is None else args["d"],
         cn_max=args["e"],
         mu=args["u"],
+        # FIXME why this is fixed?
         diploid_threshold=0.1,
         ampdel=args["ampdel"],
         n_seed=args["p"],
