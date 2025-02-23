@@ -115,7 +115,7 @@ def solve(
             for sample in sample_ids:
                 fd.write("========================================\n")
                 fd.write(str(sample) + "\n")
-                fd.write(f"gamma={gamma[sample].tolist()[0]}\n")
+                fd.write(f"gamma={gamma[sample].tolist()}\n")
                 fd.write("rdr:" + ','.join(str(v) for v in rdr[sample].tolist()) + "\n")
                 fd.write("fcn:" + ','.join(str(v) for v in fcn[sample].tolist()) + "\n")
                 fd.write("f_a:" + ','.join(str(v) for v in f_a[sample].tolist()) + "\n")
