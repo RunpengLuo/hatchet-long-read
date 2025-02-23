@@ -117,12 +117,12 @@ def solve(
             fd.write("========================================\n")
             fd.write(f"clonal={list(copy_numbers.items())}\n")
             if copy_numbers_fixed != None:
-                fd.write(f"cn_fixed={list(copy_numbers_fixed.items())}")
+                fd.write(f"cn_fixed={list(copy_numbers_fixed.items())}\n")
             fd.write(f"purity={purities}\n")
             fd.write(f"weights=" + ','.join(str(v) for v in list(weights)) + "\n")
             fd.write("========================================\n")
             fd.write(f"(m,n,k)=({f_a.shape[0]},{n},{f_a.shape[1]})\n")
-            fd.write(f"u_min={mu}\ncn_max{cn_max}\nampdel={ampdel}\n")
+            fd.write(f"u_min={mu}\ncn_max={cn_max}\nampdel={ampdel}\n")
             fd.write(f"base={min(2, len(copy_numbers))}\n")
             fd.write(f"d={d}\n")
             for sample in sample_ids:
