@@ -8,7 +8,7 @@ from hatchet.utils.solve.utils import Random
 
 
 class ILPSubset:
-    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities):
+    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, copy_numbers_fixed):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
 
@@ -28,6 +28,7 @@ class ILPSubset:
         self.mu = mu
         self.ampdel = ampdel
         self.copy_numbers = copy_numbers
+        self.copy_numbers_fixed = copy_numbers_fixed  # TODO
         self.w = w
         self.purities = purities
 
@@ -118,6 +119,7 @@ class ILPSubset:
         cn_max = self.cn_max
         ampdel = self.ampdel
         copy_numbers = self.copy_numbers
+        copy_numbers_fixed = self.copy_numbers_fixed # TODO
         mode_t = self.mode
         d = self.d
         _M = self.M
@@ -436,6 +438,15 @@ class ILPSubset:
         if mode_t in ("FULL", "CARCH"):
             self.build_symmetry_breaking(model)
             self.fix_given_cn(model)
+        
+        # TODO manually fix additional copynumbers in either U/C/Full-step
+        if copy_numbers_fixed != None:
+            for _m in range(self.m):
+                cluster_id = self.f_a.index[_m]
+                if cluster_id in copy_numbers_fixed:
+                    for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
+                        model.constraints.add(self.cA[_m][_n + 1] == _cnA) # +1 to skip normal clone.
+                        model.constraints.add(self.cB[_m][_n + 1] == _cnB)
 
         if mode_t == "FULL":
             self.hot_start()

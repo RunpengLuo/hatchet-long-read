@@ -102,16 +102,29 @@ def solve(
     f_a = rdr - f_b
 
     if not binwise:
+        # TODO HT941
+        if sample_ids[0] == "HT941" and n == 3:
+            copy_numbers_fixed = {1: [(1,1),(1,1)], 
+                                  6: [(1,0),(1,0)]}
+        else:
+            copy_numbers_fixed = None
+        # store detailed config
         with open(f"{tempdir}/solve.txt", 'w') as fd:
-            fd.write(f"random_seed={random_seed}\nnum_seeds={n_seed}\nmax_iters={max_iters}\n\n")
+            fd.write("========================================\n")
             fd.write(f"mode={solve_mode}\nbinwise={binwise}\n")
+            fd.write(f"max_iters={max_iters}\ntimelimit={timelimit}\n")
+            fd.write(f"random_seed={random_seed}\nnum_seeds={n_seed}\n")
+            fd.write("========================================\n")
+            fd.write(f"clonal={list(copy_numbers.items())}\n")
+            if copy_numbers_fixed != None:
+                fd.write(f"cn_fixed={list(copy_numbers_fixed.items())}")
+            fd.write(f"purity={purities}\n")
+            fd.write(f"weights=" + ','.join(str(v) for v in list(weights)) + "\n")
+            fd.write("========================================\n")
             fd.write(f"(m,n,k)=({f_a.shape[0]},{n},{f_a.shape[1]})\n")
             fd.write(f"u_min={mu}\ncn_max{cn_max}\nampdel={ampdel}\n")
             fd.write(f"base={min(2, len(copy_numbers))}\n")
             fd.write(f"d={d}\n")
-            fd.write(f"clonal={list(copy_numbers.items())}\n")
-            fd.write(f"purity={purities}\n")
-            fd.write(f"weights=" + ','.join(str(v) for v in list(weights)) + "\n")
             for sample in sample_ids:
                 fd.write("========================================\n")
                 fd.write(str(sample) + "\n")
@@ -134,6 +147,7 @@ def solve(
                 ampdel=ampdel,
                 cn=copy_numbers,
                 purities=purities,
+                copy_numbers_fixed=copy_numbers_fixed
             )
             obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
                 solver_type=solver,
@@ -157,6 +171,7 @@ def solve(
                 f_b=f_b,
                 w=weights,
                 purities=purities,
+                copy_numbers_fixed=copy_numbers_fixed
             )
             if solve_mode == "ilp":
                 ilp.create_model(pprint=True)
