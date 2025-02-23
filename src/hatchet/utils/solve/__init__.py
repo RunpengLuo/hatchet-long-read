@@ -142,7 +142,7 @@ def solve(
                              str(fcn.loc[cID, sample]),
                              str(f_a.loc[cID, sample]),
                              str(f_b.loc[cID, sample]),
-                             str(weights.loc[cID, sample])
+                             str(weights[cID])
                             ]) + '\n')
                 fd.close()
 
