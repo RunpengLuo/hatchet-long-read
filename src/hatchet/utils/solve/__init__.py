@@ -142,7 +142,7 @@ def solve(
                              str(rdr.loc[cID, sample]),
                              str(fcn.loc[cID, sample]),
                              str(f_a.loc[cID, sample]),
-                             str(f_b.loc[cID, sample])]))
+                             str(f_b.loc[cID, sample])]) + '\n')
                 fd.close()
 
         if solve_mode == "cd" or solve_mode == "both":
