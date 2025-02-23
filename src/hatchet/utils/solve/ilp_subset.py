@@ -444,10 +444,11 @@ class ILPSubset:
         if copy_numbers_fixed != None:
             for _m in range(self.m):
                 cluster_id = self.f_a.index[_m]
-                if cluster_id in copy_numbers_fixed:
+                if cluster_id not in copy_numbers_fixed:
                     for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
-                        model.constraints.add(self.cA[_m][_n + 1] == _cnA) # +1 to skip normal clone.
-                        model.constraints.add(self.cB[_m][_n + 1] == _cnB)
+                        # +1 to skip normal clone.
+                        self.cA[_m][_n + 1].fix(_cnA)
+                        self.cB[_m][_n + 1].fix(_cnB)
 
         if mode_t == "FULL":
             self.hot_start()
@@ -475,6 +476,9 @@ class ILPSubset:
             model.constraints.add(_sum1 <= _sum2)
 
     def fix_given_cn(self, model):
+        """
+        Fix copy number state for clonal clusters
+        """
         for _m in range(self.m):
             cluster_id = self.f_a.index[_m]
             if cluster_id in self.copy_numbers:

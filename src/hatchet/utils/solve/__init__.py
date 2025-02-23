@@ -106,6 +106,9 @@ def solve(
         if sample_ids[0] == "HT941" and n == 3:
             copy_numbers_fixed = {1: [(1,1),(1,1)], 
                                   6: [(1,0),(1,0)]}
+            for cluster_id in list(copy_numbers_fixed.keys()):
+                if cluster_id in copy_numbers:
+                    copy_numbers_fixed.pop(cluster_id)
         else:
             copy_numbers_fixed = None
         # store detailed config
