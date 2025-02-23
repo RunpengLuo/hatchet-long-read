@@ -158,6 +158,7 @@ def solve(
                 ampdel=ampdel,
                 cn=copy_numbers,
                 purities=purities,
+                baf=baf,
                 copy_numbers_fixed=copy_numbers_fixed
             )
             obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
@@ -182,6 +183,7 @@ def solve(
                 f_b=f_b,
                 w=weights,
                 purities=purities,
+                baf=baf,
                 copy_numbers_fixed=copy_numbers_fixed
             )
             if solve_mode == "ilp":

@@ -8,7 +8,7 @@ from hatchet.utils.solve.utils import Random
 
 
 class ILPSubset:
-    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, copy_numbers_fixed):
+    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, baf, copy_numbers_fixed):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
 
@@ -29,6 +29,7 @@ class ILPSubset:
         self.ampdel = ampdel
         self.copy_numbers = copy_numbers
         self.copy_numbers_fixed = copy_numbers_fixed  # TODO
+        self.baf = baf
         self.w = w
         self.purities = purities
 
@@ -61,6 +62,7 @@ class ILPSubset:
             f_b=self.f_b,
             w=self.w,
             purities=self.purities,
+            baf = self.baf,
             copy_numbers_fixed=self.copy_numbers_fixed # TODO
         )
 
@@ -449,6 +451,18 @@ class ILPSubset:
                         # +1 to skip normal clone.
                         self.cA[_m][_n + 1].fix(_cnA)
                         self.cB[_m][_n + 1].fix(_cnB)
+        # add a BAF penalty term here, test 
+        baf_vars = {}
+        for _m in range(m):
+            cluster_id = self.baf.index[_m]
+            baf_values = self.baf.loc[cluster_id].values
+            for _k in range(k):
+                baf_vars[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                model.add_component(f"baf_{_m + 1}_{_k + 1}", baf_vars[(_m, _k)])
+                
+                _fA, _fB = fA[(_m, _k)], fB[(_m, _k)]
+                model.constraints.add(float(baf_values[_k]) * (_fA + _fB) - _fB <= baf_vars[(_m, _k)])
+                model.constraints.add(_fB - float(baf_values[_k]) * (_fA + _fB) <= baf_vars[(_m, _k)])
 
         if mode_t == "FULL":
             self.hot_start()
@@ -458,6 +472,12 @@ class ILPSubset:
             for _k in range(k):
                 cluster_id = self.cluster_ids[_m]
                 obj += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[cluster_id]
+        
+        # add a BAF penalty term here, test 
+        for _m in range(m):
+            for _k in range(k):
+                cluster_id = self.cluster_ids[_m]
+                obj += baf_vars[(_m, _k)] * self.w[cluster_id]
 
         model.obj = pe.Objective(expr=obj, sense=pe.minimize)
         self.model = model
