@@ -440,8 +440,8 @@ class ILPSubset:
             self.build_symmetry_breaking(model)
             self.fix_given_cn(model)
         
-        # TODO manually fix additional copynumbers in either U/C/Full-step
-        if copy_numbers_fixed != None:
+        # TODO manually fix additional copynumbers in either C/Full-step
+        if copy_numbers_fixed != None and mode_t in ("FULL", "CARCH"):
             for _m in range(self.m):
                 cluster_id = self.f_a.index[_m]
                 if cluster_id in copy_numbers_fixed:
