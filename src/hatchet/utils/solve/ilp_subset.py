@@ -61,6 +61,7 @@ class ILPSubset:
             f_b=self.f_b,
             w=self.w,
             purities=self.purities,
+            copy_numbers_fixed=self.copy_numbers_fixed # TODO
         )
 
     def __str__(self):
