@@ -133,11 +133,12 @@ def solve(
             fd.close()
 
             with open(f"{tempdir}/input.tsv", 'w') as fd:
-                fd.write("CLUSTER\tSAMPLE\tRDR\tFCN\tF_A\tF_B\tweight\n")
+                fd.write("CLUSTER\tSAMPLE\tBAF\tRDR\tFCN\tF_A\tF_B\tweight\n")
                 for sample in sample_ids:
                     for cID in df["#ID"].unique().tolist():
                         fd.write('\t'.join(
                             [str(cID), str(sample),
+                             str(baf.loc[cID, sample]),
                              str(rdr.loc[cID, sample]),
                              str(fcn.loc[cID, sample]),
                              str(f_a.loc[cID, sample]),
@@ -196,7 +197,8 @@ def solve(
 
             obj, cA, cB, u, cluster_ids, sample_ids = ilp.run(
                 solver_type=solver, timelimit=timelimit)
-            store_temp_result({obj: [cA, cB, u]}, cluster_ids, sample_ids, tempdir, solver, n)
+            store_temp_result({obj: [cA, cB, u]}, cluster_ids, sample_ids, f_a, f_b, 
+                              baf, tempdir, solve_mode, n)
         return obj, cA, cB, u, cluster_ids, sample_ids
 
     else:
