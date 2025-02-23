@@ -122,7 +122,6 @@ def solve(
             if copy_numbers_fixed != None:
                 fd.write(f"cn_fixed={list(copy_numbers_fixed.items())}\n")
             fd.write(f"purity={purities}\n")
-            fd.write(f"weights=" + ','.join(str(v) for v in list(weights)) + "\n")
             fd.write("========================================\n")
             fd.write(f"(m,n,k)=({f_a.shape[0]},{n},{f_a.shape[1]})\n")
             fd.write(f"u_min={mu}\ncn_max={cn_max}\nampdel={ampdel}\n")
@@ -134,7 +133,7 @@ def solve(
             fd.close()
 
             with open(f"{tempdir}/input.tsv", 'w') as fd:
-                fd.write("CLUSTER\tSAMPLE\tRDR\tFCN\tF_A\tF_B\n")
+                fd.write("CLUSTER\tSAMPLE\tRDR\tFCN\tF_A\tF_B\tweight\n")
                 for sample in sample_ids:
                     for cID in df["#ID"].unique().tolist():
                         fd.write('\t'.join(
@@ -142,7 +141,9 @@ def solve(
                              str(rdr.loc[cID, sample]),
                              str(fcn.loc[cID, sample]),
                              str(f_a.loc[cID, sample]),
-                             str(f_b.loc[cID, sample])]) + '\n')
+                             str(f_b.loc[cID, sample]),
+                             str(weights.loc[cID, sample])
+                            ]) + '\n')
                 fd.close()
 
         if solve_mode == "cd" or solve_mode == "both":
