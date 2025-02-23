@@ -112,9 +112,9 @@ def solve(
         else:
             copy_numbers_fixed = None
         # store detailed config
-        with open(f"{tempdir}/solve.txt", 'w') as fd:
+        with open(f"{tempdir}/config.txt", 'w') as fd:
             fd.write("========================================\n")
-            fd.write(f"mode={solve_mode}\nbinwise={binwise}\n")
+            fd.write(f"mode={solve_mode}\nsolver={solver}\nbinwise={binwise}\n")
             fd.write(f"max_iters={max_iters}\ntimelimit={timelimit}\n")
             fd.write(f"random_seed={random_seed}\nnum_seeds={n_seed}\n")
             fd.write("========================================\n")
@@ -128,15 +128,22 @@ def solve(
             fd.write(f"u_min={mu}\ncn_max={cn_max}\nampdel={ampdel}\n")
             fd.write(f"base={min(2, len(copy_numbers))}\n")
             fd.write(f"d={d}\n")
+            fd.write("========================================\n")
             for sample in sample_ids:
-                fd.write("========================================\n")
-                fd.write(str(sample) + "\n")
-                fd.write(f"gamma={gamma[sample].tolist()}\n")
-                fd.write("rdr:" + ','.join(str(v) for v in rdr[sample].tolist()) + "\n")
-                fd.write("fcn:" + ','.join(str(v) for v in fcn[sample].tolist()) + "\n")
-                fd.write("f_a:" + ','.join(str(v) for v in f_a[sample].tolist()) + "\n")
-                fd.write("f_b:" + ','.join(str(v) for v in f_b[sample].tolist()) + "\n")
-        fd.close()
+                fd.write(f"{sample}\tgamma={gamma[sample].tolist()}\n")
+            fd.close()
+
+            with open(f"{tempdir}/input.tsv", 'w') as fd:
+                fd.write("CLUSTER\tSAMPLE\tRDR\tFCN\tF_A\tF_B\n")
+                for sample in sample_ids:
+                    for cID in df["#ID"].unique().tolist():
+                        fd.write('\t'.join(
+                            [str(cID), str(sample),
+                             str(rdr.loc[cID, sample]),
+                             str(fcn.loc[cID, sample]),
+                             str(f_a.loc[cID, sample]),
+                             str(f_b.loc[cID, sample])]))
+                fd.close()
 
         if solve_mode == "cd" or solve_mode == "both":
             cd = CoordinateDescent(
