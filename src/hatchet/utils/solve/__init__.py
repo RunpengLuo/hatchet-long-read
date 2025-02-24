@@ -97,6 +97,7 @@ def solve(
     )
 
     fcn = rdr * gamma
+    rdr_ = rdr.copy(deep=True)
     rdr = rdr * gamma
     f_b = rdr * baf
     f_a = rdr - f_b
@@ -105,12 +106,18 @@ def solve(
         # TODO HT941
         if sample_ids[0] == "HT941" and n == 3:
             copy_numbers_fixed = {1: [(1,1),(1,1)], 
-                                  6: [(1,0),(1,0)]}
+                                  3: [(1,0),(1,1)],
+                                  6: [(1,0),(1,0)],
+                                  10:[(1,0),(1,1)]}
             for cluster_id in list(copy_numbers_fixed.keys()):
                 if cluster_id in copy_numbers:
                     copy_numbers_fixed.pop(cluster_id)
+            purities_fixed = [[0.14493346464758428,
+                              0.4181006416932036,
+                              0.4369658936592121]]
         else:
             copy_numbers_fixed = None
+            purities_fixed = None
         # store detailed config
         with open(f"{tempdir}/config.txt", 'w') as fd:
             fd.write("========================================\n")
@@ -121,6 +128,8 @@ def solve(
             fd.write(f"clonal={list(copy_numbers.items())}\n")
             if copy_numbers_fixed != None:
                 fd.write(f"cn_fixed={list(copy_numbers_fixed.items())}\n")
+            if purities_fixed != None:
+                fd.write(f"u_fixed={purities_fixed}\n")
             fd.write(f"purity={purities}\n")
             fd.write("========================================\n")
             fd.write(f"(m,n,k)=({f_a.shape[0]},{n},{f_a.shape[1]})\n")
@@ -139,7 +148,7 @@ def solve(
                         fd.write('\t'.join(
                             [str(cID), str(sample),
                              str(baf.loc[cID, sample]),
-                             str(rdr.loc[cID, sample]),
+                             str(rdr_.loc[cID, sample]),
                              str(fcn.loc[cID, sample]),
                              str(f_a.loc[cID, sample]),
                              str(f_b.loc[cID, sample]),
@@ -160,7 +169,8 @@ def solve(
                 cn=copy_numbers,
                 purities=purities,
                 baf=baf,
-                copy_numbers_fixed=copy_numbers_fixed
+                copy_numbers_fixed=copy_numbers_fixed,
+                purities_fixed=purities_fixed
             )
             obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
                 solver_type=solver,
@@ -185,7 +195,8 @@ def solve(
                 w=weights,
                 purities=purities,
                 baf=baf,
-                copy_numbers_fixed=copy_numbers_fixed
+                copy_numbers_fixed=copy_numbers_fixed,
+                purities_fixed=purities_fixed
             )
             if solve_mode == "ilp":
                 ilp.create_model(pprint=True)

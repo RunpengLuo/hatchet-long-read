@@ -8,7 +8,8 @@ from hatchet.utils.solve.utils import Random
 
 
 class ILPSubset:
-    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, baf, copy_numbers_fixed):
+    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, 
+                 baf, copy_numbers_fixed, purities_fixed):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
 
@@ -29,6 +30,7 @@ class ILPSubset:
         self.ampdel = ampdel
         self.copy_numbers = copy_numbers
         self.copy_numbers_fixed = copy_numbers_fixed  # TODO
+        self.purities_fixed = purities_fixed
         self.baf = baf
         self.w = w
         self.purities = purities
@@ -63,7 +65,8 @@ class ILPSubset:
             w=self.w,
             purities=self.purities,
             baf = self.baf,
-            copy_numbers_fixed=self.copy_numbers_fixed # TODO
+            copy_numbers_fixed=self.copy_numbers_fixed, # TODO
+            purities_fixed = self.purities_fixed
         )
 
     def __str__(self):
@@ -123,6 +126,7 @@ class ILPSubset:
         ampdel = self.ampdel
         copy_numbers = self.copy_numbers
         copy_numbers_fixed = self.copy_numbers_fixed # TODO
+        purities_fixed = self.purities_fixed
         mode_t = self.mode
         d = self.d
         _M = self.M
@@ -449,8 +453,13 @@ class ILPSubset:
                 if cluster_id in copy_numbers_fixed:
                     for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
                         # +1 to skip normal clone.
-                        self.cA[_m][_n + 1].fix(_cnA)
-                        self.cB[_m][_n + 1].fix(_cnB)
+                        model.constraints.add(self.cA[_m][_n+1] == _cnA)
+                        model.constraints.add(self.cB[_m][_n+1] == _cnB)
+        if purities_fixed != None and mode_t in ("FULL", "UARCH"):
+            for sID, cprops in enumerate(purities_fixed):
+                for cID, cprop in enumerate(cprops):
+                    model.constraints.add(self.u[cID][sID] == cprop)
+
         # add a BAF penalty term here, test 
         baf_vars = {}
         for _m in range(m):
