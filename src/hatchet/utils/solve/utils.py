@@ -210,7 +210,7 @@ def store_temp_result(result: dict, cluster_ids: pd.Index, sample_ids: pd.Index,
                             exp_fcn += (cA[ci][oi] + cB[ci][oi]) * u[oi][si]
                             exp_bcount += cB[ci][oi] * u[oi][si]
                         exp_baf = exp_bcount / exp_fcn
-                        row += f"{exp_baf}\t{exp_fcn}\t"
+                        row += f"{exp_baf}\t{exp_fcn}"
                         for oi in range(n):
                             row += f"\t{cA[ci][oi]}|{cB[ci][oi]}\t{u[oi][si]}"
                         fd2.write(row + '\n')
