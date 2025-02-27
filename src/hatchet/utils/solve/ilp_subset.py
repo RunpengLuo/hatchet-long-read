@@ -488,48 +488,30 @@ class ILPSubset:
                     model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
                     model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
 
-
-        # # add a BAF penalty term here, test 
-        # baf_vars = {}
-        # for _m in range(m):
-        #     cluster_id = self.baf.index[_m]
-        #     baf_values = self.baf.loc[cluster_id].values
-        #     for _k in range(k):
-        #         baf_vars[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-        #         model.add_component(f"baf_{_m + 1}_{_k + 1}", baf_vars[(_m, _k)])
-                
-        #         _fA, _fB = fA[(_m, _k)], fB[(_m, _k)]
-        #         model.constraints.add(float(baf_values[_k]) * (_fA + _fB) - _fB <= baf_vars[(_m, _k)])
-        #         model.constraints.add(_fB - float(baf_values[_k]) * (_fA + _fB) <= baf_vars[(_m, _k)])
-
         if mode_t == "FULL":
             self.hot_start()
 
+        # TODO
+        ow = [0.6, 0.2, 0.2]
         obj = 0
         for _m in range(m):
             for _k in range(k):
                 cluster_id = self.cluster_ids[_m]
-                obj += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[cluster_id]
-        
-        # add a BAF penalty term here, test 
-        # for _m in range(m):
-        #     for _k in range(k):
-        #         cluster_id = self.cluster_ids[_m]
-                # obj += baf_vars[(_m, _k)] * self.w[cluster_id]
+                obj += ow[0] * (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[cluster_id]
         
         # add distance penalty term here, text
         if manhat_vars != None:
             for _m in range(m):
                 cluster_id = self.cluster_ids[_m]
                 for _n in range(1, n):
-                    obj += self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
-                    obj += self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
+                    obj += ow[1] * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
+                    obj += ow[1] * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
         
         if hcn_vars != None:
             for _m in range(m):
                 cluster_id = self.cluster_ids[_m]
-                obj += self.w[cluster_id] * hcn_vars[(_m, "a")]
-                obj += self.w[cluster_id] * hcn_vars[(_m, "b")]
+                obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "a")]
+                obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "b")]
 
         model.obj = pe.Objective(expr=obj, sense=pe.minimize)
         self.model = model
