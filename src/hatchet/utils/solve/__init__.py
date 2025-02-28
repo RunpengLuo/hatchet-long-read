@@ -105,7 +105,7 @@ def solve(
     if not binwise:
         # TODO HT941
         if sample_ids[0] == "HT941" and n == 3:
-            copy_numbers = None
+            copy_numbers_fixed = None
             purities_fixed = None
             # copy_numbers_fixed = {1: [(1,1),(1,1)], 
             #                       3: [(1,0),(1,1)],
