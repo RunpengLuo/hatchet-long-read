@@ -9,7 +9,7 @@ from hatchet.utils.solve.utils import Random
 
 class ILPSubset:
     def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, 
-                 baf, copy_numbers_fixed, purities_fixed):
+                 baf, copy_numbers_fixed, purities_fixed, problem_param):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
 
@@ -31,6 +31,7 @@ class ILPSubset:
         self.copy_numbers = copy_numbers
         self.copy_numbers_fixed = copy_numbers_fixed  # TODO
         self.purities_fixed = purities_fixed
+        self.problem_param = problem_param
         self.baf = baf
         self.w = w
         self.purities = purities
@@ -66,7 +67,8 @@ class ILPSubset:
             purities=self.purities,
             baf = self.baf,
             copy_numbers_fixed=self.copy_numbers_fixed, # TODO
-            purities_fixed = self.purities_fixed
+            purities_fixed = self.purities_fixed,
+            problem_param = self.problem_param
         )
 
     def __str__(self):
@@ -491,8 +493,8 @@ class ILPSubset:
         if mode_t == "FULL":
             self.hot_start()
 
-        # TODO
-        ow = [0.6, 0.2, 0.2]
+        # TODO 
+        ow = self.problem_param
         obj = 0
         for _m in range(m):
             for _k in range(k):

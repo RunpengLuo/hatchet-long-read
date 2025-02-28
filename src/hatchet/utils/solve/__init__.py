@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
 from hatchet.utils.solve.cd import CoordinateDescent, CoordinateDescentSplit
-from hatchet.utils.solve.utils import parse_clonal, scale_rdr, store_temp_result
+from hatchet.utils.solve.utils import parse_clonal, scale_rdr, store_temp_result, parse_purity_fixed, parse_cn_fixed, parse_problem_param
 from hatchet import config
 import hatchet.utils.Supporting as sp
 
@@ -103,10 +103,20 @@ def solve(
     f_a = rdr - f_b
 
     if not binwise:
+        # TODO allow fixed cn and purity in optimization
+        problem_param = [1, 0, 0]
+        purities_fixed = None
+        copy_numbers_fixed = None
+        if os.path.exists(f"{tempdir}/pre-config.txt"):
+            with open(f"{tempdir}/pre-config.txt", 'r') as fd:
+                problem_param = parse_problem_param(fd.readline().strip())
+                purities_fixed = parse_purity_fixed(fd.readline().strip())
+                copy_numbers_fixed = parse_cn_fixed(fd.readline().strip())
+                fd.close()
         # TODO HT941
-        if sample_ids[0] == "HT941" and n == 3:
-            copy_numbers_fixed = None
-            purities_fixed = None
+        # if sample_ids[0] == "HT941" and n == 3:
+        #     copy_numbers_fixed = None
+        #     purities_fixed = None
             # copy_numbers_fixed = {1: [(1,1),(1,1)], 
             #                       3: [(1,0),(1,1)],
             #                       6: [(1,0),(1,0)],
@@ -117,9 +127,9 @@ def solve(
             # purities_fixed = [[0.14493346464758428,
             #                   0.4181006416932036,
             #                   0.4369658936592121]]
-        else:
-            copy_numbers_fixed = None
-            purities_fixed = None
+        # else:
+        #     copy_numbers_fixed = None
+        #     purities_fixed = None
         # store detailed config
         with open(f"{tempdir}/config.txt", 'w') as fd:
             fd.write("========================================\n")
@@ -138,6 +148,7 @@ def solve(
             fd.write(f"u_min={mu}\ncn_max={cn_max}\nampdel={ampdel}\n")
             fd.write(f"base={min(2, len(copy_numbers))}\n")
             fd.write(f"d={d}\n")
+            fd.write(f"problem_param={problem_param}\n")
             fd.write("========================================\n")
             for sample in sample_ids:
                 fd.write(f"{sample}\tgamma={gamma[sample].tolist()}\n")
@@ -172,7 +183,8 @@ def solve(
                 purities=purities,
                 baf=baf,
                 copy_numbers_fixed=copy_numbers_fixed,
-                purities_fixed=purities_fixed
+                purities_fixed=purities_fixed,
+                problem_param=problem_param
             )
             obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
                 solver_type=solver,
@@ -198,7 +210,8 @@ def solve(
                 purities=purities,
                 baf=baf,
                 copy_numbers_fixed=copy_numbers_fixed,
-                purities_fixed=purities_fixed
+                purities_fixed=purities_fixed,
+                problem_param=problem_param
             )
             if solve_mode == "ilp":
                 ilp.create_model(pprint=True)

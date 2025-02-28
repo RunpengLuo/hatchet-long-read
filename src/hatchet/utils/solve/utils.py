@@ -218,7 +218,31 @@ def store_temp_result(result: dict, cluster_ids: pd.Index, sample_ids: pd.Index,
         fd1.close()
     return
 
-# A = np.array([x[0] for x in cns])
-# B = np.array([x[1] for x in cns])
-# y_fcn = np.sum((A + B) * props)
-# y_baf = np.sum(B * props) / np.sum((A + B) * props)
+def parse_problem_param(pstr: str):
+    if pstr == None or len(pstr) == 0:
+        return None
+    ps = pstr.split(';')
+    return list(float(p) for p in ps)
+
+# 1:1|1,1|2;
+def parse_cn_fixed(fixed_cns: str):
+    if fixed_cns == None or len(fixed_cns) == 0:
+        return None
+    cn_fixed = {}
+    for seg in fixed_cns.split(';'):
+        segID, cns_str = seg.split(':')
+        segID = int(segID)
+        cn_fixed[segID] = []
+        for cn_str in cns_str.split(','):
+            a, b = cn_str.split('|')
+            cn_fixed[segID].append((int(a), int(b)))
+    return cn_fixed
+
+def parse_purity_fixed(fixed_ps: str):
+    if fixed_ps == None or len(fixed_ps) == 0:
+        return None
+    purities_fixed = []
+    for pstr in fixed_ps.split(';'):
+        purities_fixed.append([float(p) for p in pstr.split(',')])
+    return purities_fixed
+
