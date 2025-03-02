@@ -121,6 +121,36 @@ class ILPSubset:
         else:
             return self.u
 
+    # TODO metin's cn penalty
+    def large_cn_penalty(self, model, beta, ub):
+        if self.mode == 'UARCH':
+            cA = self._fixed_cA
+            cB = self._fixed_cB
+            u = self.u
+        else:
+            cA = self.cA
+            cB = self.cB
+            u = self._fixed_u
+        bM = {}
+        aMb = {}
+        penalty = 0
+        for _m in range(self.m): # cluster
+            cluster_id = self.f_a.index[_m] # clone
+            for _n in range(1, self.n):
+                bM[(_m, _n)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
+                model.add_component(f'bM_{_m + 1}_{_n + 1}', bM[(_m, _n)])
+                aMb[(_m, _n)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
+                model.add_component(f'aMb_{_m + 1}_{_n + 1}', aMb[(_m, _n)])
+
+                model.constraints.add(cB[_m][_n] - 1 <= bM[(_m, _n)])
+                model.constraints.add(1 - cB[_m][_n] <= bM[(_m, _n)])
+                model.constraints.add(cA[_m][_n] - cB[_m][_n] <= aMb[(_m, _n)])
+                model.constraints.add(cB[_m][_n] - cA[_m][_n] <= aMb[(_m, _n)])
+                for _k in range(self.k): # sample
+                    penalty += self.w[cluster_id] * beta * u[_n][_k] * (bM[(_m, _n)] + 0.5 * aMb[(_m, _n)])
+
+        return penalty
+
     def create_model(self, pprint=False):
         m, n, k = self.m, self.n, self.k
         f_a, f_b = self.f_a, self.f_b
@@ -514,6 +544,9 @@ class ILPSubset:
                 cluster_id = self.cluster_ids[_m]
                 obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "a")]
                 obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "b")]
+        
+        # TODO metin's penalty
+        obj += self.large_cn_penalty(model, 1, ub)
 
         model.obj = pe.Objective(expr=obj, sense=pe.minimize)
         self.model = model

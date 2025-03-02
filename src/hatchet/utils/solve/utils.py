@@ -218,6 +218,7 @@ def store_temp_result(result: dict, cluster_ids: pd.Index, sample_ids: pd.Index,
         fd1.close()
     return
 
+# 1;0;0
 def parse_problem_param(pstr: str):
     if pstr == None or len(pstr) == 0:
         return None
@@ -238,6 +239,7 @@ def parse_cn_fixed(fixed_cns: str):
             cn_fixed[segID].append((int(a), int(b)))
     return cn_fixed
 
+# 0.8,0.2,0.0;0.6,0.1,0.3
 def parse_purity_fixed(fixed_ps: str):
     if fixed_ps == None or len(fixed_ps) == 0:
         return None
