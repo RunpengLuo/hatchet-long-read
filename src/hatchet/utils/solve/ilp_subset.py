@@ -123,9 +123,13 @@ class ILPSubset:
 
     # TODO metin's cn penalty
     def large_cn_penalty(self, model, beta, ub):
-        if self.mode == 'UARCH':
+        if self.mode == "UARCH":
             cA = self._fixed_cA
             cB = self._fixed_cB
+            u = self.u
+        elif self.mode == "FULL":
+            cA = self.cA
+            cB = self.cB
             u = self.u
         else:
             cA = self.cA
@@ -492,9 +496,10 @@ class ILPSubset:
                 for cID, cprop in enumerate(cprops):
                     model.constraints.add(self.u[cID][sID] == cprop)
 
+        ow = self.problem_param
         # TODO add manhattan distance penalty to restrict potential tree size
         manhat_vars = None
-        if mode_t in ("FULL", "CARCH"):
+        if mode_t in ("FULL", "CARCH") and ow[1] != 0:
             manhat_vars = {}
             for _m in range(m):
                 for _n in range(1, n):
@@ -509,7 +514,7 @@ class ILPSubset:
         
         # TODO add penalty on having high copy number
         hcn_vars = None
-        if mode_t in ("FULL", "CARCH"):
+        if mode_t in ("FULL", "CARCH") and ow[2] != 0:
             hcn_vars = {}
             for _m in range(m):
                 hcn_vars[(_m, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
@@ -523,8 +528,6 @@ class ILPSubset:
         if mode_t == "FULL":
             self.hot_start()
 
-        # TODO 
-        ow = self.problem_param
         obj = 0
         for _m in range(m):
             for _k in range(k):
