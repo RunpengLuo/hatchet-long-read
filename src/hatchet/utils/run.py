@@ -21,7 +21,7 @@ from hatchet.utils.plot_cn_1d2d import main as plot_cn_1d2d
 from hatchet.utils.download_panel import main as download_panel
 from hatchet.utils.phase_snps import main as phase_snps
 from hatchet.utils.phase_snps_lr import main as phase_snps_lr
-from hatchet.utils.Supporting import log, error
+from hatchet.utils.Supporting import log, error, to_tuple
 
 
 def main(args=None):
@@ -53,7 +53,7 @@ def main(args=None):
     if config.run.run_lr is not None:
         if config.run.run_lr:
             run_lr = True
-    
+
     if run_lr:
         log(msg="Running HATCHet in long read mode\n", level="INFO")
     else:
@@ -88,24 +88,18 @@ def main(args=None):
         if config.genotype_snps.snps:
             snps = config.genotype_snps.snps
         elif config.genotype_snps.reference_version:
-            snps_mapping = {
-                (
-                    "hg19",
-                    True,
-                ): "https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh37p13/VCF/GATK/00-All.vcf.gz",
-                (
-                    "hg19",
-                    False,
-                ): "https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh37p13/VCF/00-All.vcf.gz",
-                (
-                    "hg38",
-                    True,
-                ): "https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/VCF/GATK/00-All.vcf.gz",
-                (
-                    "hg38",
-                    False,
-                ): "https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/VCF/00-All.vcf.gz",
-            }
+            # load builtin supported refvers and SNPs URLs
+            supported_refvers = to_tuple(
+                config.genotype_snps.builtin_refvers, n=None, typ=str
+            )
+            snps_mapping = {}
+            for refver in supported_refvers:
+                snps_mapping[(refver, True)] = config.genotype_snps[
+                    f"{refver}_snps_chrnot"
+                ]
+                snps_mapping[(refver, False)] = config.genotype_snps[
+                    f"{refver}_snps_nochr"
+                ]
 
             if (
                 config.genotype_snps.reference_version,
@@ -166,7 +160,7 @@ def main(args=None):
             )
 
         os.makedirs(f"{output}/phase", exist_ok=True)
-        if not run_lr: #default mode
+        if not run_lr:  # default mode
             phase_snps(
                 args=[
                     "-D",

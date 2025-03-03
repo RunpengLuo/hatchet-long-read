@@ -12,6 +12,7 @@ from hatchet.utils.Supporting import (
     url_exists,
     bcolors,
     numericOrder,
+    to_tuple,
 )
 from hatchet import config, __version__
 
@@ -632,10 +633,13 @@ def parse_count_reads_args(args=None):
     else:
         use_chr = False
 
+    # list all builtin supported refvers
+    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
     ver = args.refversion
     ensure(
-        ver in ("hg19", "hg38"),
-        "Invalid reference genome version. Supported versions are hg38 and hg19.",
+        ver in supported_refvers,
+        "Invalid reference genome version. Supported versions are "
+        + ",".join(supported_refvers),
     )
     ensure(os.path.exists(args.baffile), f"BAF file not found: {args.baffile}")
     ensure(
@@ -876,10 +880,13 @@ def parse_combine_counts_args(args=None):
     )
     ensure(args.mtr > 0, "The minimum number of total reads must be positive.")
 
+    # list all builtin supported refvers
+    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
     ver = args.refversion
     ensure(
-        ver in ("hg19", "hg38"),
-        "Invalid reference genome version. Supported versions are hg38 and hg19.",
+        ver in supported_refvers,
+        "Invalid reference genome version. Supported versions are "
+        + ",".join(supported_refvers),
     )
 
     outdir = os.sep.join(args.outfile.split(os.sep)[:-1])
@@ -1161,6 +1168,7 @@ def parse_download_panel_arguments(args=None):
         "refpaneldir": os.path.abspath(args.refpaneldir),
     }
 
+
 def parse_phase_snps_lr_arguments(args=None):
     description = "Phase germline SNPs using read-based phasing"
     parser = argparse.ArgumentParser(description=description)
@@ -1227,11 +1235,11 @@ def parse_phase_snps_lr_arguments(args=None):
     bcftools = os.path.join(args.bcftools, "bcftools")
     if which(bcftools) is None:
         raise ValueError(error("bcftools has not been found or is not executable!"))
-    
+
     whatshap = os.path.join(args.whatshap, "whatshap")
     if which(whatshap) is None:
         raise ValueError(error("whatshap has not been found or is not executable!"))
-    
+
     snplists = {}
     for f in args.snps:
         if not isfile(f):
@@ -1249,7 +1257,7 @@ def parse_phase_snps_lr_arguments(args=None):
         "refgenome": args.refgenome,
         "outdir": os.path.abspath(args.outdir),
         "bcftools": bcftools,
-        "whatshap": whatshap
+        "whatshap": whatshap,
     }
 
 
@@ -1387,9 +1395,12 @@ def parse_phase_snps_arguments(args=None):
     if which(bcftools) is None:
         raise ValueError(error("bcftools has not been found or is not executable!"))
 
-    if args.refversion not in ("hg19", "hg38"):
+    # list all builtin supported refvers
+    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
+    if args.refversion not in supported_refvers:
         error(
-            'The reference genome version of your samples is not "hg19" or "hg38".',
+            "The reference genome version of your samples is not in "
+            + ",".join(supported_refvers),
             raise_exception=True,
         )
 
@@ -2572,17 +2583,19 @@ def parse_plot_bins_args(args=None):
         "dpi": args.dpi,
     }
 
+
 def sort_chroms(chromosomes: list):
     assert len(chromosomes) != 0
-    use_chr  = True if str(chromosomes[0]).startswith("chr") else False
+    use_chr = True if str(chromosomes[0]).startswith("chr") else False
     if not use_chr:
         return sorted(chromosomes)
     chr2ord = {}
-    for i in range(1,23):
+    for i in range(1, 23):
         chr2ord[f"chr{i}"] = i
     chr2ord["chrX"] = 23
     chr2ord["chrY"] = 24
     return sorted(chromosomes, key=lambda x: chr2ord[x])
+
 
 def extractChromosomes(samtools, normal, tumors, reference=None):
     """
