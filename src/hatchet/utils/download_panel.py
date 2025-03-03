@@ -30,9 +30,9 @@ def main(args=None):
         )
 
     # download necessary liftover files; 1000GP in hg19 coordinates
-    # if users aligned reads to the <refver> other than hg19, 
+    # if users aligned reads to the <refver> other than hg19,
     # we need to liftover coordinates to the reference panel (<refver> -> hg19)
-    # since the 1000GP panel is in hg19 coordinates, we need to download 
+    # since the 1000GP panel is in hg19 coordinates, we need to download
     # (1) hg19 genome
     # (2) chain files for liftover via picard
     dwnld_refpanel_genome(path=args["refpaneldir"])
@@ -48,6 +48,7 @@ def dwnld_chains(dirpath):
     """
     Download liftover files for all supported reference versions.
     """
+
     def mod_chain(infile, sample_chr, refpanel_index, sample_index):
         if sample_chr:
             name = infile.strip(".gz").replace("over", "chr")
@@ -69,9 +70,9 @@ def dwnld_chains(dirpath):
                     else:
                         new.write(line)
         return name
-    
+
     supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
-    
+
     for refver in supported_refvers:
         log(msg=f"Download chain file for {refver}\n", level="STEP")
         if refver == "hg19":
@@ -102,6 +103,7 @@ def dwnld_chains(dirpath):
         mod_chain(from_hg19, sample_chr=False, refpanel_index=2, sample_index=7)
     return
 
+
 def dwnld_refpanel_genome(path):
     """
     Download hg19 reference with no-chr notation, used in 1000 genome panel.
@@ -116,7 +118,9 @@ def dwnld_refpanel_genome(path):
         ):
             tmp_ref_file = usr_ref_file
         else:
-            tmp_ref_file = download(config.urls.refpanel_genome, dirpath=path, extract=False)
+            tmp_ref_file = download(
+                config.urls.refpanel_genome, dirpath=path, extract=False
+            )
 
         if tmp_ref_file.endswith(".gz"):
             tmp_fd = gzip.open(tmp_ref_file, "rt")
@@ -130,7 +134,7 @@ def dwnld_refpanel_genome(path):
                     ref_fd.write(line)
             ref_fd.close()
         tmp_fd.close()
-    
+
     dict_file = os.path.join(path, "hg19_no_chr.dict")
     if not os.path.isfile(dict_file):
         samtools = os.path.join(config.paths.samtools, "samtools")
@@ -155,13 +159,16 @@ def dwnld_refpanel_genome(path):
             os.remove(errname)
     return ref_file, dict_file
 
+
 def mk_rename_file(path):
     """
     makes rename_chrs1.txt for removing "chr", rename_chrs2.txt for adding "chr"
     """
 
-    names = [os.path.join(path, "rename_chrs1.txt"),
-             os.path.join(path, "rename_chrs2.txt")]
+    names = [
+        os.path.join(path, "rename_chrs1.txt"),
+        os.path.join(path, "rename_chrs2.txt"),
+    ]
     fd1 = open(names[0], "w")
     fd2 = open(names[1], "w")
     for j in range(1, 23):
