@@ -49,14 +49,7 @@ def dwnld_chains(dirpath):
     Download liftover files for all supported reference versions.
     """
 
-    def mod_chain(infile, sver, tver, sample_chr, refpanel_index, sample_index):
-        if sample_chr:
-            out_file = os.path.join(os.path.dirname(infile), f"{sver}_{tver}.chr.chain")
-        else:
-            out_file = os.path.join(
-                os.path.dirname(infile), f"{sver}_{tver}.no_chr.chain"
-            )
-
+    def mod_chain(infile, out_file, sample_chr, refpanel_index, sample_index):
         with open(out_file, "w") as new:
             with gzip.open(infile, "rt") as f:
                 for line in f:
@@ -102,16 +95,14 @@ def dwnld_chains(dirpath):
         # ref panel chr in 7th field, sample chr in 2nd field
         mod_chain(
             to_panel,
-            sver=refver,
-            tver=panel_refver,
+            os.path.join(dirpath, f"{refver}_{panel_refver}.chr.chain"),
             sample_chr=True,
             refpanel_index=7,
             sample_index=2,
         )
         mod_chain(
             to_panel,
-            sver=refver,
-            tver=panel_refver,
+            os.path.join(dirpath, f"{refver}_{panel_refver}.no_chr.chain"),
             sample_chr=False,
             refpanel_index=7,
             sample_index=2,
@@ -121,16 +112,14 @@ def dwnld_chains(dirpath):
         # ref panel chr in 2nd field, sample chr in 7th field
         mod_chain(
             from_panel,
-            sver=panel_refver,
-            tver=refver,
+            os.path.join(dirpath, f"{panel_refver}_{refver}.chr.chain"),
             sample_chr=True,
             refpanel_index=2,
             sample_index=7,
         )
         mod_chain(
             from_panel,
-            sver=panel_refver,
-            tver=refver,
+            os.path.join(dirpath, f"{panel_refver}_{refver}.no_chr.chain"),
             sample_chr=False,
             refpanel_index=2,
             sample_index=7,
