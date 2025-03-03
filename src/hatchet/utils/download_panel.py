@@ -29,11 +29,11 @@ def main(args=None):
             raise_exception=True,
         )
 
-    # download necessary liftover files; 1000GP in hg19 coordinates
-    # if users aligned reads to the <refver> other than hg19,
-    # we need to liftover coordinates to the reference panel (<refver> -> hg19)
-    # since the 1000GP panel is in hg19 coordinates, we need to download
-    # (1) hg19 genome
+    # download necessary liftover files; 1000GP in <refpanel_genome_refversion> coordinates
+    # if users aligned reads to the <refver> other than <refpanel_genome_refversion>,
+    # we need to liftover coordinates to the reference panel (<refver> -> <refpanel_genome_refversion>)
+    # since the 1000GP panel is in <refpanel_genome_refversion> coordinates, we need to download
+    # (1) <refpanel_genome_refversion> genome
     # (2) chain files for liftover via picard
     dwnld_refpanel_genome(path=args["refpaneldir"])
     dwnld_chains(dirpath=args["refpaneldir"])
@@ -72,44 +72,48 @@ def dwnld_chains(dirpath):
         return name
 
     supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
-
+    panel_refver = config.urls.refpanel_genome_refversion
     for refver in supported_refvers:
-        log(msg=f"Download chain file for {refver}\n", level="STEP")
-        if refver == "hg19":
+        if refver == panel_refver:
             continue
+        log(msg=f"Download chain file for {refver}\n", level="STEP")
 
-        to_hg19 = download(
-            url=config.urls[f"refpanel_{refver}tohg19"],
+        to_panel = download(
+            url=config.urls[f"refpanel_{refver}to{panel_refver}"],
             dirpath=dirpath,
             overwrite=False,
             extract=False,
         )
-        from_hg19 = download(
-            url=config.urls[f"refpanel_hg19to{refver}"],
+        from_panel = download(
+            url=config.urls[f"refpanel_{panel_refver}to{refver}"],
             dirpath=dirpath,
             overwrite=False,
             extract=False,
         )
 
-        # make all necessary chain files to convert from <refver> (w/ or w/out chr notation) to hg19 (no chr notation),
-        # and also to lift back over from hg19 (no chr notation) to <refver> (w/ or w/out chr notation).
+        # make all necessary chain files to convert from <refver> (w/ or w/out chr notation) 
+        # to <refpanel_genome_refversion> (no chr notation),
+        # and also to lift back over from <refpanel_genome_refversion> (no chr notation) 
+        # to <refver> (w/ or w/out chr notation).
 
-        # modify chr notation of <refver>ToHg19, ref panel chr in 7th field, sample chr in 2nd field
-        mod_chain(to_hg19, sample_chr=True, refpanel_index=7, sample_index=2)
-        mod_chain(to_hg19, sample_chr=False, refpanel_index=7, sample_index=2)
+        # modify chr notation of <refver>To<refpanel_genome_refversion>, 
+        # ref panel chr in 7th field, sample chr in 2nd field
+        mod_chain(to_panel, sample_chr=True, refpanel_index=7, sample_index=2)
+        mod_chain(to_panel, sample_chr=False, refpanel_index=7, sample_index=2)
 
-        # modify chr notation of hg19To<refver>, ref panel chr in 2nd field, sample chr in 7th field
-        mod_chain(from_hg19, sample_chr=True, refpanel_index=2, sample_index=7)
-        mod_chain(from_hg19, sample_chr=False, refpanel_index=2, sample_index=7)
+        # modify chr notation of <refpanel_genome_refversion>To<refver>, 
+        # ref panel chr in 2nd field, sample chr in 7th field
+        mod_chain(from_panel, sample_chr=True, refpanel_index=2, sample_index=7)
+        mod_chain(from_panel, sample_chr=False, refpanel_index=2, sample_index=7)
     return
 
 
 def dwnld_refpanel_genome(path):
     """
-    Download hg19 reference with no-chr notation, used in 1000 genome panel.
+    Download <refpanel_genome_refversion> reference with no-chr notation, used in 1000 genome panel.
     """
-
-    ref_file = os.path.join(path, "hg19_no_chr.fa")
+    panel_refver = config.urls.refpanel_genome_refversion
+    ref_file = os.path.join(path, f"{panel_refver}_no_chr.fa")
     if not os.path.isfile(ref_file):
         usr_ref_file = config.paths.reference
         if (
@@ -135,7 +139,7 @@ def dwnld_refpanel_genome(path):
             ref_fd.close()
         tmp_fd.close()
 
-    dict_file = os.path.join(path, "hg19_no_chr.dict")
+    dict_file = os.path.join(path, f"{panel_refver}_no_chr.dict")
     if not os.path.isfile(dict_file):
         samtools = os.path.join(config.paths.samtools, "samtools")
         cmd = f"{samtools} dict {ref_file} > {dict_file}"
