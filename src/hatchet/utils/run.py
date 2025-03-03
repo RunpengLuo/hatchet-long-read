@@ -149,7 +149,7 @@ def main(args=None):
                 )
             )
 
-        if not config.download_panel.refpaneldir:
+        if not config.download_panel.refpaneldir and not run_lr:
             raise ValueError(
                 error(
                     (
