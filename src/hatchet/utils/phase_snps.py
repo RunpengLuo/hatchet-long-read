@@ -20,40 +20,17 @@ def main(args=None):
     bgzip = args["bgzip"]
     outdir = args["outdir"]
 
+    ref_file = args["ref_genome"]
+    refvers = args["refvers"]
+    chrnot = args["chrnot"]
+
     rpd = args["refpaneldir"]
     panel = os.path.join(rpd, "1000GP_Phase3")
+    panel_refvers = args["panel_refvers"]
+    panel_reffile = args["panel_genome"]
+    chains = args["chains"]
+    rename_files = args["rename_files"]
 
-    # path to hg19, 1000GP in hg19 coords, potentially needed for liftover
-    hg19_path = ""
-    # chain files for liftover, chains['hg38_hg19']=path, chains['hg19_hg38']=path
-    chains = ""
-    # file for renaming chrs with bcftools, rename_files[0] for removing 'chr, rename_files[1] for adding 'chr'
-    rename_files = ""
-
-    if args["refvers"] == "hg38":
-        # Download reference panel genome and chain files
-        hg19_path = os.path.join(rpd, "hg19_no_chr.fa")
-        if args["chrnot"]:
-            chains = {
-                "hg38_hg19": os.path.join(rpd, "hg38ToHg19.chr.chain"),
-                "hg19_hg38": os.path.join(rpd, "hg19ToHg38.chr.chain"),
-            }
-        else:
-            chains = {
-                "hg38_hg19": os.path.join(rpd, "hg38ToHg19.no_chr.chain"),
-                "hg19_hg38": os.path.join(rpd, "hg19ToHg38.no_chr.chain"),
-            }
-
-        ensure(
-            os.path.isfile(chains["hg38_hg19"]) and os.path.isfile(chains["hg19_hg38"]),
-            "The appropriate liftover chain files could not be located! Please run the download-panel "
-            "command that downloads these",
-        )
-
-    elif args["refvers"] == "hg19" and args["chrnot"]:
-        rename_files = [os.path.join(rpd, f"rename_chrs{i}.txt") for i in range(1, 3)]
-
-    # liftover VCFs, phase, liftover again to original coordinates
     os.makedirs(outdir, exist_ok=True)
 
     chromosomes = []
@@ -70,12 +47,13 @@ def main(args=None):
     phaser = Phaser(
         panel,
         outdir=outdir,
-        hg19=hg19_path,
-        ref=args["refgenome"],
+        panel_ref=panel_reffile,
+        panel_refvers=panel_refvers,
+        ref=ref_file,
         chains=chains,
         rename=rename_files,
-        refvers=args["refvers"],
-        chrnot=args["chrnot"],
+        refvers=refvers,
+        chrnot=chrnot,
         verbose=False,
         bcftools=bcftools,
         shapeit=shapeit,
@@ -151,7 +129,8 @@ class Phaser(Worker):
         self,
         panel,
         outdir,
-        hg19,
+        panel_ref,
+        panel_refvers,
         ref,
         chains,
         rename,
@@ -165,7 +144,8 @@ class Phaser(Worker):
     ):
         self.panel = panel
         self.outdir = outdir
-        self.hg19 = hg19
+        self.panel_ref = panel_ref
+        self.panel_refvers = panel_refvers
         self.ref = ref
         self.chains = chains
         self.rename = rename
@@ -181,7 +161,7 @@ class Phaser(Worker):
         vcf, chromosome = args
 
         # (1) PREPROCESS
-        if self.refvers == "hg19":
+        if self.refvers == self.panel_refvers:
             # no need for liftover, just deal with chr annotation
             if self.chrnot:
                 vcf_toFilter = self.change_chr(
@@ -199,8 +179,8 @@ class Phaser(Worker):
                 infile=vcf,
                 chromosome=chromosome,
                 outname="toFilter",
-                chain=self.chains["hg38_hg19"],
-                refgen=self.hg19,
+                chain=self.chains[f"{self.refvers}_{self.panel_refvers}"],
+                refgen=self.panel_ref,
                 ch=False,
             )
 
@@ -212,7 +192,7 @@ class Phaser(Worker):
         )  # phase
 
         # (3) POSTPROCESS
-        if self.refvers == "hg19":
+        if self.refvers == self.panel_refvers:
             if self.chrnot:
                 vcf_to_concat = self.change_chr(
                     infile=vcf_phased,
@@ -231,7 +211,7 @@ class Phaser(Worker):
                 infile=vcf_phased,
                 chromosome=chromosome,
                 outname="toConcat",
-                chain=self.chains["hg19_hg38"],
+                chain=self.chains[f"{self.panel_refvers}_{self.refvers}"],
                 refgen=self.ref,
                 ch=self.chrnot,
             )
@@ -322,6 +302,7 @@ class Phaser(Worker):
         # use shapeit with reference panel to phase vcf files
         errname = os.path.join(self.outdir, f"{chromosome}_shapeit.log")
 
+        # TODO should factor out this constant panel name
         # define params used across shapeit functions
         inmap = f"{self.panel}/genetic_map_chr{chromosome}_combined_b37.txt"
         inref = (
