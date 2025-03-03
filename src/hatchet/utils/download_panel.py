@@ -4,7 +4,7 @@ import subprocess as pr
 import gzip
 
 import hatchet.utils.ArgParsing as ap
-from hatchet.utils.Supporting import log, logArgs, error, download, checksum
+from hatchet.utils.Supporting import log, logArgs, error, download, checksum, to_tuple
 from hatchet import config
 
 
@@ -30,9 +30,11 @@ def main(args=None):
         )
 
     # download necessary liftover files; 1000GP in hg19 coordinates
-    # if users aligned reads to the hg38 build, we need to liftover coordinates to the reference panel (hg38 -> hg19)
-    # since the 1000GP panel is in hg19 coordinates, we need to download (1) hg19  genome and (2) chain files
-    # for liftover via picard
+    # if users aligned reads to the <refver> other than hg19, 
+    # we need to liftover coordinates to the reference panel (<refver> -> hg19)
+    # since the 1000GP panel is in hg19 coordinates, we need to download 
+    # (1) hg19 genome
+    # (2) chain files for liftover via picard
     dwnld_refpanel_genome(path=args["refpaneldir"])
     dwnld_chains(dirpath=args["refpaneldir"])
 
@@ -43,6 +45,9 @@ def main(args=None):
 
 
 def dwnld_chains(dirpath):
+    """
+    Download liftover files for all supported reference versions.
+    """
     def mod_chain(infile, sample_chr, refpanel_index, sample_index):
         if sample_chr:
             name = infile.strip(".gz").replace("over", "chr")
@@ -64,62 +69,72 @@ def dwnld_chains(dirpath):
                     else:
                         new.write(line)
         return name
+    
+    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
+    
+    for refver in supported_refvers:
+        log(msg=f"Download chain file for {refver}\n", level="STEP")
+        if refver == "hg19":
+            continue
 
-    hg38tohg19 = download(
-        url=config.urls.refpanel_hg38tohg19,
-        dirpath=dirpath,
-        overwrite=False,
-        extract=False,
-    )
-    hg19tohg38 = download(
-        url=config.urls.refpanel_hg19tohg38,
-        dirpath=dirpath,
-        overwrite=False,
-        extract=False,
-    )
+        to_hg19 = download(
+            url=config.urls[f"refpanel_{refver}tohg19"],
+            dirpath=dirpath,
+            overwrite=False,
+            extract=False,
+        )
+        from_hg19 = download(
+            url=config.urls[f"refpanel_hg19to{refver}"],
+            dirpath=dirpath,
+            overwrite=False,
+            extract=False,
+        )
 
-    # make all necessary chain files to convert from hg38 (w/ or w/out chr notation) to hg19 (no chr notation),
-    # and also to lift back over from hg19 (no chr notation) to hg38 (w/ or w/out chr notation).
+        # make all necessary chain files to convert from <refver> (w/ or w/out chr notation) to hg19 (no chr notation),
+        # and also to lift back over from hg19 (no chr notation) to <refver> (w/ or w/out chr notation).
 
-    # modify chr notation of hg38ToHg19, ref panel chr in 7th field, sample chr in 2nd field
-    mod_chain(hg38tohg19, sample_chr=True, refpanel_index=7, sample_index=2)
-    mod_chain(hg38tohg19, sample_chr=False, refpanel_index=7, sample_index=2)
+        # modify chr notation of <refver>ToHg19, ref panel chr in 7th field, sample chr in 2nd field
+        mod_chain(to_hg19, sample_chr=True, refpanel_index=7, sample_index=2)
+        mod_chain(to_hg19, sample_chr=False, refpanel_index=7, sample_index=2)
 
-    # modify chr notation of hg19ToHg38, ref panel chr in 2nd field, sample chr in 7th field
-    mod_chain(hg19tohg38, sample_chr=True, refpanel_index=2, sample_index=7)
-    mod_chain(hg19tohg38, sample_chr=False, refpanel_index=2, sample_index=7)
-
+        # modify chr notation of hg19To<refver>, ref panel chr in 2nd field, sample chr in 7th field
+        mod_chain(from_hg19, sample_chr=True, refpanel_index=2, sample_index=7)
+        mod_chain(from_hg19, sample_chr=False, refpanel_index=2, sample_index=7)
+    return
 
 def dwnld_refpanel_genome(path):
-    newref = os.path.join(path, "hg19_no_chr.fa")
-    if not os.path.isfile(newref):
-        # If the genome reference file used in other parts of HATCHet matches the one we want, use it
-        reference_file = config.paths.reference
+    """
+    Download hg19 reference with no-chr notation, used in 1000 genome panel.
+    """
+
+    ref_file = os.path.join(path, "hg19_no_chr.fa")
+    if not os.path.isfile(ref_file):
+        usr_ref_file = config.paths.reference
         if (
-            os.path.isfile(reference_file)
-            and checksum(reference_file) == config.urls.refpanel_genome_checksum
+            os.path.isfile(usr_ref_file)
+            and checksum(usr_ref_file) == config.urls.refpanel_genome_checksum
         ):
-            out = reference_file
+            tmp_ref_file = usr_ref_file
         else:
-            out = download(config.urls.refpanel_genome, dirpath=path, extract=False)
+            tmp_ref_file = download(config.urls.refpanel_genome, dirpath=path, extract=False)
 
-        _open, _mode = open, "r"
-        if out.endswith("gz"):
-            _open, _mode = gzip.open, "rt"
-
-        # change chr notation
-        with open(newref, "w") as new:
-            with _open(out, _mode) as f:
-                for line in f:
-                    if line.startswith(">"):
-                        new.write(line.replace("chr", ""))
-                    else:
-                        new.write(line)
-
-        # make dict file
-        dict_file = newref.replace(".fa", ".dict")
+        if tmp_ref_file.endswith(".gz"):
+            tmp_fd = gzip.open(tmp_ref_file, "rt")
+        else:
+            tmp_fd = open(tmp_ref_file, "r")
+        with open(ref_file, "w") as ref_fd:
+            for line in tmp_fd:
+                if line.startswith(">"):
+                    ref_fd.write(line.replace("chr", ""))
+                else:
+                    ref_fd.write(line)
+            ref_fd.close()
+        tmp_fd.close()
+    
+    dict_file = os.path.join(path, "hg19_no_chr.dict")
+    if not os.path.isfile(dict_file):
         samtools = os.path.join(config.paths.samtools, "samtools")
-        cmd = f"{samtools} dict {newref} > {dict_file}"
+        cmd = f"{samtools} dict {ref_file} > {dict_file}"
         errname = os.path.join(path, "samtools.log")
         with open(errname, "w") as err:
             run = pr.run(
@@ -129,6 +144,7 @@ def dwnld_refpanel_genome(path):
                 shell=True,
                 universal_newlines=True,
             )
+            err.close()
         if run.returncode != 0:
             raise ValueError(
                 error(
@@ -137,16 +153,22 @@ def dwnld_refpanel_genome(path):
             )
         else:
             os.remove(errname)
-    return newref
-
+    return ref_file, dict_file
 
 def mk_rename_file(path):
-    # makes rename_chrs1.txt for removing "chr", rename_chrs2.txt for adding "chr"
-    names = [os.path.join(path, f"rename_chrs{i}.txt") for i in range(1, 3)]
-    for i, n in enumerate(names):
-        with open(n, "w") as f:
-            for j in range(1, 23):
-                f.write(f"chr{j} {j}\n") if i == 0 else f.write(f"{j} chr{j}\n")
+    """
+    makes rename_chrs1.txt for removing "chr", rename_chrs2.txt for adding "chr"
+    """
+
+    names = [os.path.join(path, "rename_chrs1.txt"),
+             os.path.join(path, "rename_chrs2.txt")]
+    fd1 = open(names[0], "w")
+    fd2 = open(names[1], "w")
+    for j in range(1, 23):
+        fd1.write(f"chr{j} {j}\n")
+        fd2.write(f"{j} chr{j}\n")
+    fd1.close()
+    fd2.close()
     return names
 
 
