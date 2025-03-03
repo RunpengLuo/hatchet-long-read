@@ -51,12 +51,10 @@ def dwnld_chains(dirpath):
 
     def mod_chain(infile, sver, tver, sample_chr, refpanel_index, sample_index):
         if sample_chr:
-            out_file = os.path.join(
-                os.path.dirname(infile), f"{sver}To{tver}.chr.chain"
-            )
+            out_file = os.path.join(os.path.dirname(infile), f"{sver}_{tver}.chr.chain")
         else:
             out_file = os.path.join(
-                os.path.dirname(infile), f"{sver}To{tver}.no_chr.chain"
+                os.path.dirname(infile), f"{sver}_{tver}.no_chr.chain"
             )
 
         with open(out_file, "w") as new:
@@ -100,7 +98,7 @@ def dwnld_chains(dirpath):
         # and also to lift back over from <refpanel_genome_refversion> (no chr notation)
         # to <refver> (w/ or w/out chr notation).
 
-        # modify chr notation of <refver>To<refpanel_genome_refversion>,
+        # modify chr notation of <refver>_<refpanel_genome_refversion>,
         # ref panel chr in 7th field, sample chr in 2nd field
         mod_chain(
             to_panel,
@@ -119,7 +117,7 @@ def dwnld_chains(dirpath):
             sample_index=2,
         )
 
-        # modify chr notation of <refpanel_genome_refversion>To<refver>,
+        # modify chr notation of <refpanel_genome_refversion>_<refver>,
         # ref panel chr in 2nd field, sample chr in 7th field
         mod_chain(
             from_panel,
@@ -145,7 +143,10 @@ def dwnld_refpanel_genome(path):
     Download <refpanel_genome_refversion> reference with no-chr notation, used in 1000 genome panel.
     """
     panel_refver = config.urls.refpanel_genome_refversion
-    ref_file = os.path.join(path, f"{panel_refver}_no_chr.fa")
+    if config.urls.refpanel_genome_chr_notation:
+        ref_file = os.path.join(path, f"{panel_refver}_chr.fa")
+    else:
+        ref_file = os.path.join(path, f"{panel_refver}_no_chr.fa")
     if not os.path.isfile(ref_file):
         usr_ref_file = config.paths.reference
         if (
