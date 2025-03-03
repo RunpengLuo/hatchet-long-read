@@ -49,13 +49,17 @@ def dwnld_chains(dirpath):
     Download liftover files for all supported reference versions.
     """
 
-    def mod_chain(infile, sample_chr, refpanel_index, sample_index):
+    def mod_chain(infile, sver, tver, sample_chr, refpanel_index, sample_index):
         if sample_chr:
-            name = infile.strip(".gz").replace("over", "chr")
+            out_file = os.path.join(
+                os.path.dirname(infile), f"{sver}To{tver}.chr.chain"
+            )
         else:
-            name = infile.strip(".gz").replace("over", "no_chr")
+            out_file = os.path.join(
+                os.path.dirname(infile), f"{sver}To{tver}.no_chr.chain"
+            )
 
-        with open(name, "w") as new:
+        with open(out_file, "w") as new:
             with gzip.open(infile, "rt") as f:
                 for line in f:
                     if line.startswith("chain"):
@@ -69,7 +73,7 @@ def dwnld_chains(dirpath):
                         new.write(" ".join(line) + "\n")
                     else:
                         new.write(line)
-        return name
+        return out_file
 
     supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
     panel_refver = config.urls.refpanel_genome_refversion
@@ -91,20 +95,48 @@ def dwnld_chains(dirpath):
             extract=False,
         )
 
-        # make all necessary chain files to convert from <refver> (w/ or w/out chr notation) 
+        # make all necessary chain files to convert from <refver> (w/ or w/out chr notation)
         # to <refpanel_genome_refversion> (no chr notation),
-        # and also to lift back over from <refpanel_genome_refversion> (no chr notation) 
+        # and also to lift back over from <refpanel_genome_refversion> (no chr notation)
         # to <refver> (w/ or w/out chr notation).
 
-        # modify chr notation of <refver>To<refpanel_genome_refversion>, 
+        # modify chr notation of <refver>To<refpanel_genome_refversion>,
         # ref panel chr in 7th field, sample chr in 2nd field
-        mod_chain(to_panel, sample_chr=True, refpanel_index=7, sample_index=2)
-        mod_chain(to_panel, sample_chr=False, refpanel_index=7, sample_index=2)
+        mod_chain(
+            to_panel,
+            sver=refver,
+            tver=panel_refver,
+            sample_chr=True,
+            refpanel_index=7,
+            sample_index=2,
+        )
+        mod_chain(
+            to_panel,
+            sver=refver,
+            tver=panel_refver,
+            sample_chr=False,
+            refpanel_index=7,
+            sample_index=2,
+        )
 
-        # modify chr notation of <refpanel_genome_refversion>To<refver>, 
+        # modify chr notation of <refpanel_genome_refversion>To<refver>,
         # ref panel chr in 2nd field, sample chr in 7th field
-        mod_chain(from_panel, sample_chr=True, refpanel_index=2, sample_index=7)
-        mod_chain(from_panel, sample_chr=False, refpanel_index=2, sample_index=7)
+        mod_chain(
+            from_panel,
+            sver=panel_refver,
+            tver=refver,
+            sample_chr=True,
+            refpanel_index=2,
+            sample_index=7,
+        )
+        mod_chain(
+            from_panel,
+            sver=panel_refver,
+            tver=refver,
+            sample_chr=False,
+            refpanel_index=2,
+            sample_index=7,
+        )
     return
 
 
