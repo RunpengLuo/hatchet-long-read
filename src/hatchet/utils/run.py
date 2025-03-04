@@ -48,7 +48,7 @@ def main(args=None):
             extra_args = ["-j", str(config.run.processes)]
     except KeyError:
         pass
-    
+
     run_modes = ["NGS", "TGS"]
     if config.run.run_mode not in run_modes:
         raise ValueError(
@@ -78,6 +78,12 @@ def main(args=None):
                 config.download_panel.refpaneldir,
                 "-R",
                 config.download_panel.refpanel,
+                "-V",
+                config.genotype_snps.reference_version,
+                "-L1",
+                config.download_panel.liftover1,
+                "-L2",
+                config.download_panel.liftover2,
             ]
         )
 

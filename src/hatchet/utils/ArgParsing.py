@@ -1156,6 +1156,27 @@ def parse_download_panel_arguments(args=None):
             "genomes project"
         ),
     )
+    parser.add_argument(
+        "-V",
+        "--refversion",
+        required=False,
+        type=str,
+        help="Version of reference genome used in BAM files",
+    )
+    parser.add_argument(
+        "-L1",
+        "--liftover1",
+        required=False,
+        type=str,
+        help="File path or URL to liftover file, reference to panel",
+    )
+    parser.add_argument(
+        "-L2",
+        "--liftover2",
+        required=False,
+        type=str,
+        help="File path or URL to liftover file, panel to reference",
+    )
     args = parser.parse_args(args)
 
     ensure(
@@ -1163,9 +1184,31 @@ def parse_download_panel_arguments(args=None):
         'The command "download_panel" requires a path for the variable "refpaneldir".',
     )
 
+    ver = args.refversion
+    lo1 = args.liftover1
+    lo2 = args.liftover2
+    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
+    if ver != None:
+        if ver not in supported_refvers:
+            # third-party reference, check liftover file path or URL
+            ensure(
+                lo1 != None and lo2 != None,
+                f"liftover file/URL must be provided for third-party reference {ver}",
+            )
+            ensure((isfile(lo1) or url_exists(lo1)), f"liftover1 is invalid {lo1}")
+            ensure((isfile(lo2) or url_exists(lo2)), f"liftover2 is invalid {lo2}")
+        else:
+            log(
+                msg=f"{ver} is natively supported by HATCHet, liftover files will be downloaded by default.\n",
+                level="INFO",
+            )
+
     return {
         "refpanel": args.refpanel,
         "refpaneldir": os.path.abspath(args.refpaneldir),
+        "refvers": ver,
+        "liftover1": lo1,
+        "liftover2": lo2,
     }
 
 

@@ -4,7 +4,15 @@ import subprocess as pr
 import gzip
 
 import hatchet.utils.ArgParsing as ap
-from hatchet.utils.Supporting import log, logArgs, error, download, checksum, to_tuple
+from hatchet.utils.Supporting import (
+    log,
+    logArgs,
+    error,
+    download,
+    checksum,
+    to_tuple,
+    url_exists,
+)
 from hatchet import config
 
 
@@ -36,7 +44,12 @@ def main(args=None):
     # (1) <refpanel_genome_refversion> genome
     # (2) chain files for liftover via picard
     dwnld_refpanel_genome(path=args["refpaneldir"])
-    dwnld_chains(dirpath=args["refpaneldir"])
+    dwnld_chains(
+        dirpath=args["refpaneldir"],
+        refvers=args["refvers"],
+        lo1=args["liftover1"],
+        lo2=args["liftover2"],
+    )
 
     # if users aligned reads to the same reference genome as used in the reference panel, liftover isn't required, but
     # there could be different naming conventions of chromosomes, with or without the 'chr' prefix. The 1000GP reference
@@ -44,9 +57,10 @@ def main(args=None):
     mk_rename_file(path=args["refpaneldir"])
 
 
-def dwnld_chains(dirpath):
+def dwnld_chains(dirpath, refvers, lo1, lo2):
     """
     Download liftover files for all supported reference versions.
+    if refvers is provided, download&convert its liftover1 and liftover2 as well.
     """
 
     def mod_chain(infile, out_file, sample_chr, refpanel_index, sample_index):
@@ -64,27 +78,51 @@ def dwnld_chains(dirpath):
                         new.write(" ".join(line) + "\n")
                     else:
                         new.write(line)
+                f.close()
+            new.close()
         return out_file
 
-    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
-    panel_refver = config.urls.refpanel_genome_refversion
-    for refver in supported_refvers:
-        if refver == panel_refver:
-            continue
-        log(msg=f"Download chain file for {refver}\n", level="STEP")
+    dwnld_queue = []
+    # refvers is unsupported, checked in parser.
+    if refvers != None:
+        dwnld_queue.append((refvers, lo1, lo2))
 
-        to_panel = download(
-            url=config.urls[f"refpanel_{refver}to{panel_refver}"],
-            dirpath=dirpath,
-            overwrite=False,
-            extract=False,
+    panel_refver = config.urls.refpanel_genome_refversion
+    supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
+    for _refvers in supported_refvers:
+        if _refvers == panel_refver:
+            continue
+        dwnld_queue.append(
+            (
+                _refvers,
+                config.urls[f"refpanel_{_refvers}to{panel_refver}"],
+                config.urls[f"refpanel_{panel_refver}to{_refvers}"],
+            )
         )
-        from_panel = download(
-            url=config.urls[f"refpanel_{panel_refver}to{refver}"],
-            dirpath=dirpath,
-            overwrite=False,
-            extract=False,
-        )
+
+    for _refvers, lo1, lo2 in dwnld_queue:
+        log(msg=f"Download chain file for {_refvers}\n", level="STEP")
+
+        if os.path.isfile(lo1):
+            to_panel = lo1
+        else:
+            assert url_exists(lo1)
+            to_panel = download(
+                url=lo1,
+                dirpath=dirpath,
+                overwrite=False,
+                extract=False,
+            )
+        if os.path.isfile(lo2):
+            from_panel = lo2
+        else:
+            assert url_exists(lo2)
+            from_panel = download(
+                url=lo2,
+                dirpath=dirpath,
+                overwrite=False,
+                extract=False,
+            )
 
         # make all necessary chain files to convert from <refver> (w/ or w/out chr notation)
         # to <refpanel_genome_refversion> (no chr notation),
@@ -95,14 +133,14 @@ def dwnld_chains(dirpath):
         # ref panel chr in 7th field, sample chr in 2nd field
         mod_chain(
             to_panel,
-            os.path.join(dirpath, f"{refver}_{panel_refver}.chr.chain"),
+            os.path.join(dirpath, f"{_refvers}_{panel_refver}.chr.chain"),
             sample_chr=True,
             refpanel_index=7,
             sample_index=2,
         )
         mod_chain(
             to_panel,
-            os.path.join(dirpath, f"{refver}_{panel_refver}.no_chr.chain"),
+            os.path.join(dirpath, f"{_refvers}_{panel_refver}.no_chr.chain"),
             sample_chr=False,
             refpanel_index=7,
             sample_index=2,
@@ -112,14 +150,14 @@ def dwnld_chains(dirpath):
         # ref panel chr in 2nd field, sample chr in 7th field
         mod_chain(
             from_panel,
-            os.path.join(dirpath, f"{panel_refver}_{refver}.chr.chain"),
+            os.path.join(dirpath, f"{panel_refver}_{_refvers}.chr.chain"),
             sample_chr=True,
             refpanel_index=2,
             sample_index=7,
         )
         mod_chain(
             from_panel,
-            os.path.join(dirpath, f"{panel_refver}_{refver}.no_chr.chain"),
+            os.path.join(dirpath, f"{panel_refver}_{_refvers}.no_chr.chain"),
             sample_chr=False,
             refpanel_index=2,
             sample_index=7,
