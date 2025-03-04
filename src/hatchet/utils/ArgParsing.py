@@ -1,8 +1,11 @@
 import sys
 import os.path
 from os.path import isfile, isdir
+from importlib.resources import path
 import argparse
 import subprocess
+
+import hatchet.data
 
 from hatchet.utils.Supporting import (
     ensure,
@@ -506,6 +509,13 @@ def parse_count_reads_args(args=None):
         help="Version of reference genome used in BAM files",
     )
     parser.add_argument(
+        "-CT",
+        "--centromere_file",
+        required=True,
+        type=str,
+        help="1-based inclusive centromere file, required if -V is unsupported by HATCHet.",
+    )
+    parser.add_argument(
         "-O",
         "--outdir",
         required=True,
@@ -636,11 +646,20 @@ def parse_count_reads_args(args=None):
     # list all builtin supported refvers
     supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
     ver = args.refversion
-    ensure(
-        ver in supported_refvers,
-        "Invalid reference genome version. Supported versions are "
-        + ",".join(supported_refvers),
-    )
+    cent_file = args.centromere_file
+    if ver not in supported_refvers:
+        ensure(
+            cent_file != None,
+            f"Centromere file is required for third-party reference {ver}.",
+        )
+        ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
+    else:
+        cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
+        ensure(
+            isfile(cent_file),
+            f"ERROR! HATCHet data is corrupted! {cent_file} is invalid/missing!",
+        )
+
     ensure(os.path.exists(args.baffile), f"BAF file not found: {args.baffile}")
     ensure(
         args.processes > 0,
@@ -679,6 +698,7 @@ def parse_count_reads_args(args=None):
         "outdir": args.outdir,
         "use_chr": use_chr,
         "refversion": ver,
+        "cent_file": cent_file,
         "baf_file": args.baffile,
         "readquality": args.readquality,
     }
@@ -798,6 +818,13 @@ def parse_combine_counts_args(args=None):
         type=str,
         help="Version of reference genome used in BAM files",
     )
+    parser.add_argument(
+        "-CT",
+        "--centromere_file",
+        required=True,
+        type=str,
+        help="1-based inclusive centromere file, required if -V is unsupported by HATCHet.",
+    )
     args = parser.parse_args(args)
 
     ensure(os.path.exists(args.baffile), f"BAF file not found: {args.baffile}")
@@ -883,11 +910,19 @@ def parse_combine_counts_args(args=None):
     # list all builtin supported refvers
     supported_refvers = to_tuple(config.genotype_snps.builtin_refvers, n=None, typ=str)
     ver = args.refversion
-    ensure(
-        ver in supported_refvers,
-        "Invalid reference genome version. Supported versions are "
-        + ",".join(supported_refvers),
-    )
+    cent_file = args.centromere_file
+    if ver not in supported_refvers:
+        ensure(
+            cent_file != None,
+            f"Centromere file is required for third-party reference {ver}.",
+        )
+        ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
+    else:
+        cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
+        ensure(
+            isfile(cent_file),
+            f"ERROR! HATCHet data is corrupted! {cent_file} is invalid/missing!",
+        )
 
     outdir = os.sep.join(args.outfile.split(os.sep)[:-1])
     ensure(
@@ -913,6 +948,7 @@ def parse_combine_counts_args(args=None):
         "test_alpha": args.alpha,
         "multisample": not args.ss_em,
         "ref_version": ver,
+        "cent_file": cent_file,
     }
 
 

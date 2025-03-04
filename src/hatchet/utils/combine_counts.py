@@ -2,13 +2,11 @@ from multiprocessing import Pool
 import os
 import subprocess
 import traceback
-from importlib.resources import path
 import numpy as np
 import pandas as pd
 from scipy.stats import binom, norm
 from scipy.special import softmax
 
-import hatchet.data
 from hatchet.utils.ArgParsing import parse_combine_counts_args
 import hatchet.utils.Supporting as sp
 from hatchet.utils.rd_gccorrect import rd_gccorrect
@@ -37,12 +35,12 @@ def main(args=None):
     n_workers = min(len(chromosomes), threads)
 
     # Read in centromere locations table
-    with path(hatchet.data, f'{args["ref_version"]}.centromeres.txt') as centromeres:
-        centromeres = pd.read_table(
-            centromeres,
-            header=None,
-            names=["CHR", "START", "END", "NAME", "gieStain"],
-        )
+    centromeres = pd.read_table(
+        args["cent_file"],
+        header=None,
+        names=["CHR", "START", "END", "NAME", "gieStain"],
+    )
+
     chr2centro = {}
     for ch in centromeres.CHR.unique():
         my_df = centromeres[centromeres.CHR == ch]

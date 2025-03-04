@@ -7,8 +7,6 @@ import pandas as pd
 import gzip
 import subprocess
 import traceback
-from importlib.resources import path
-import hatchet.data
 
 from hatchet.utils.ArgParsing import parse_count_reads_args
 from hatchet.utils.Supporting import log, logArgs, error
@@ -105,12 +103,11 @@ def main(args=None):
         n_workers = min(len(chromosomes), processes)
 
         # Read in centromere locations table
-        with path(hatchet.data, f'{args["refversion"]}.centromeres.txt') as centromeres:
-            centromeres = pd.read_table(
-                centromeres,
-                header=None,
-                names=["CHR", "START", "END", "NAME", "gieStain"],
-            )
+        centromeres = pd.read_table(
+            args["cent_file"],
+            header=None,
+            names=["CHR", "START", "END", "NAME", "gieStain"],
+        )
 
         chr2centro = {}
         for ch in centromeres.CHR.unique():

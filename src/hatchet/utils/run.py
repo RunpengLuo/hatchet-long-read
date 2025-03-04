@@ -238,6 +238,8 @@ def main(args=None):
                 + [
                     "-V",
                     config.genotype_snps.reference_version,
+                    "-CD",
+                    config.genotype_snps.centromere_file,
                     "-b",
                     f"{output}/baf/tumor.1bed",
                     "-O",
@@ -267,6 +269,8 @@ def main(args=None):
                 f"{output}/rdr/total.tsv",
                 "-V",
                 config.genotype_snps.reference_version,
+                "-CD",
+                config.genotype_snps.centromere_file,
                 "-o",
                 f"{output}/bb/bulk.bb",
                 "-r",
