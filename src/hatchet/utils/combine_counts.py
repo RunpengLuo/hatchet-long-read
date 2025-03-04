@@ -41,6 +41,7 @@ def main(args=None):
         names=["CHR", "START", "END", "NAME", "gieStain"],
     )
 
+    # TODO add a feature to handle indepedent regions, via BED format cent_file
     chr2centro = {}
     for ch in centromeres.CHR.unique():
         my_df = centromeres[centromeres.CHR == ch]
