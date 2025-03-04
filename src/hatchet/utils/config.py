@@ -51,6 +51,9 @@ class ConfigSection(object):
             env_var = os.getenv(env_varname)
             return env_var or self.d[item]
 
+    def __getitem__(self, key):
+        return self.__getattr__(key)
+
     def items(self):
         return self.d.items()
 
