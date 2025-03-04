@@ -654,6 +654,8 @@ def parse_count_reads_args(args=None):
         )
         ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
     else:
+        if cent_file != None:
+            log(msg=f"external centromere file is ignored, since {ver} is natively supported by HATCHet.", level="WARN")
         cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
         ensure(
             isfile(cent_file),
@@ -912,10 +914,9 @@ def parse_combine_counts_args(args=None):
     ver = args.refversion
     cent_file = args.centromere_file
     if ver not in supported_refvers:
-        ensure(
-            cent_file != None,
-            f"Centromere file is required for third-party reference {ver}.",
-        )
+        if cent_file != None:
+            log(msg=f"external centromere file is ignored, since {ver} is natively supported by HATCHet.", level="WARN")
+        cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
         ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
     else:
         cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
