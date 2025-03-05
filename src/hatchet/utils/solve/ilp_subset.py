@@ -549,7 +549,7 @@ class ILPSubset:
                 obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "b")]
         
         # TODO metin's penalty
-        obj += self.large_cn_penalty(model, 1, ub)
+        # obj += self.large_cn_penalty(model, 1, ub)
 
         model.obj = pe.Objective(expr=obj, sense=pe.minimize)
         self.model = model
