@@ -182,6 +182,8 @@ def solve(
                 tempdir_ = (
                     f"{tempdir}/instances/solve_{param[0]}_{param[1]}"
                 )
+                if os.path.exists(tempdir_):
+                    continue
                 os.makedirs(tempdir_, exist_ok=True)
                 # obj, cA, cB, u, cluster_ids, sample_ids
                 instances[tuple(param)] = solve_instance(
@@ -417,7 +419,7 @@ def solve_instance(
             problem_param=param,
         )
         if solve_mode == "ilp":
-            ilp.create_model(pprint=True)
+            ilp.create_model(pprint=False)
         else:
             # run coordinate-descent first to get local-opt cA and cB
             # use cA and cB to hot start the model.
