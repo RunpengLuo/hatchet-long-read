@@ -468,14 +468,16 @@ def model_selection(f_a, f_b, weights, instances, tempdir):
 
     assert len(df) > 0, "ERROR! there is no solution to be selected"
 
+    x_interest = "MAXCN-objective"
+
     # find elbow point
-    xs = df["MAXCN-objective"].to_numpy()
+    xs = df[x_interest].to_numpy()
     ys = df["IMF-objective"].to_numpy()
     kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
     elbow_x, elbow_y = kl.elbow, kl.elbow_y
     kl.plot_knee(
         title="Model Selection Pareto Curve",
-        xlabel="MAXCN-objective",
+        xlabel=x_interest,
         ylabel="IMF-objective",
     )
     plt.savefig(f"{tempdir}/pareto_curve.png", dpi=300)
