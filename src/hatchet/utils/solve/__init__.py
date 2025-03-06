@@ -112,7 +112,7 @@ def solve(
 
     if not binwise:
         # TODO run varying parameter, plot curves, and select eblow via kneedle
-        problem_params = [[0, 0, 0], [0, 0, 0]]
+        problem_params = [[0, 0.01], [0, 0.01]]
         purities_fixed = None
         copy_numbers_fixed = None
         pre_config_txt = f"{tempdir}/pre-config.txt"
