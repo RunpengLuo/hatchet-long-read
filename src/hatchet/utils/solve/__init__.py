@@ -182,8 +182,8 @@ def solve(
                 tempdir_ = (
                     f"{tempdir}/instances/solve_{param[0]}_{param[1]}"
                 )
-                if os.path.exists(tempdir_):
-                    continue
+                # if os.path.exists(tempdir_):
+                #     continue TODO read intermediate result?
                 os.makedirs(tempdir_, exist_ok=True)
                 # obj, cA, cB, u, cluster_ids, sample_ids
                 instances[tuple(param)] = solve_instance(
