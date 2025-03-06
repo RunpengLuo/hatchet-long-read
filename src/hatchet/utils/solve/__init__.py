@@ -450,7 +450,7 @@ def model_selection(f_a, f_b, weights, instances, tempdir):
         instances.items(), key=lambda tp: tp[0]
     ):
         [obj, obj0, obj1] = compute_individual_objs(weights, f_a, f_b, cA, cB, u)
-        errv = tobj - (obj + obj0 + obj1)
+        errv = tobj - (obj + p0 * obj0 + p1 * obj1)
         data.append([p0, p1, tobj, obj, obj0, obj1, errv])
 
     df = pd.DataFrame(
