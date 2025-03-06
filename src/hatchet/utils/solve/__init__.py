@@ -121,10 +121,10 @@ def solve(
             problem_params, purities_fixed, copy_numbers_fixed = load_pre_config_txt(
                 pre_config_txt
             )
-
-            for cluster_id in list(copy_numbers_fixed.keys()):
-                if cluster_id in copy_numbers:
-                    copy_numbers_fixed.pop(cluster_id)
+            if copy_numbers_fixed != None:
+                for cluster_id in list(copy_numbers_fixed.keys()):
+                    if cluster_id in copy_numbers:
+                        copy_numbers_fixed.pop(cluster_id)
 
         # store detailed config
         with open(f"{tempdir}/config.txt", "w") as fd:
