@@ -194,6 +194,7 @@ def store_temp_result(result: dict, cluster_ids: pd.Index, sample_ids: pd.Index,
     fd2_header += '\t'.join(f"cn_clone{i}\tu_clone{i}" for i in range(1, n)) + '\n'
     with open(f"{tempdir}/{solve_mode}_objs.tsv", 'w') as fd1:
         fd1.write("sol_id\tobjective\n")
+        # TODO also write the sub-objective values
         for i, obj in enumerate(sorted(result.keys())):
             fd1.write(f"{i}\t{obj}\n")
             with open(f"{tempdir}/{solve_mode}_sol{i}.tsv", 'w') as fd2:
@@ -218,33 +219,77 @@ def store_temp_result(result: dict, cluster_ids: pd.Index, sample_ids: pd.Index,
         fd1.close()
     return
 
-# 1;0;0
-def parse_problem_param(pstr: str):
-    if pstr == None or len(pstr) == 0:
-        return None
-    ps = pstr.split(';')
-    return list(float(p) for p in ps)
+def load_pre_config_txt(pre_config_txt: str):
+    """
+    load pre_config.txt for optimization \\
+    example: \\
+    30-0.01;30-0.01 <steps-step_size;> only for penalty term \\
+    0.8,0.2,0.0;0.6,0.1,0.3  <uprop_i;> one per sample \\
+    1:1|1,1|2; <segID:<cA|cB>,<cA|cB>;> one per cluster
+    """
+    problem_params = None
+    purities_fixed = None
+    copy_numbers_fixed = None
+    with open(pre_config_txt, 'r') as fd:
+        lines = fd.readlines()
+        assert len(lines) == 3
+        pstr = lines[0].strip()
+        if len(pstr) != 0:
+            problem_params = []
+            for subs in pstr.split(';'):
+                steps, step_size = [float(p) for p in subs.split('-')]
+                steps = int(steps)
+                assert steps >= 0 and step_size >= 0
+                problem_params.append([steps, step_size])
+            assert len(problem_params) == 2
+        else:
+            problem_params = [[0, 0], [0, 0]]
+        
+        fixed_ps = lines[1].strip()
+        if len(fixed_ps) != 0:
+            purities_fixed = []
+            for pstr in fixed_ps.split(';'):
+                purities_fixed.append([float(p) for p in pstr.split(',')])
+        
+        fixed_cns = lines[2].strip()
+        if len(fixed_cns) != 0:
+            copy_numbers_fixed = {}
+            for seg in fixed_cns.split(';'):
+                segID, cns_str = seg.split(':')
+                segID = int(segID)
+                copy_numbers_fixed[segID] = []
+                for cn_str in cns_str.split(','):
+                    a, b = cn_str.split('|')
+                    copy_numbers_fixed[segID].append((int(a), int(b)))
+        fd.close()
+    return problem_params, purities_fixed, copy_numbers_fixed
 
-# 1:1|1,1|2;
-def parse_cn_fixed(fixed_cns: str):
-    if fixed_cns == None or len(fixed_cns) == 0:
-        return None
-    cn_fixed = {}
-    for seg in fixed_cns.split(';'):
-        segID, cns_str = seg.split(':')
-        segID = int(segID)
-        cn_fixed[segID] = []
-        for cn_str in cns_str.split(','):
-            a, b = cn_str.split('|')
-            cn_fixed[segID].append((int(a), int(b)))
-    return cn_fixed
+def compute_individual_objs(weights, fA, fB, cA, cB, u):
+    """
+    Compute individual objectives from scalarized solution
+    """
+    obj1 = compute_obj1(weights, fA, fB, cA, cB, u)
+    obj2 = compute_obj2(weights, fA, fB, cA, cB, u)
+    obj3 = compute_obj3(weights, fA, fB, cA, cB, u)
+    return [obj1, obj2, obj3]
 
-# 0.8,0.2,0.0;0.6,0.1,0.3
-def parse_purity_fixed(fixed_ps: str):
-    if fixed_ps == None or len(fixed_ps) == 0:
-        return None
-    purities_fixed = []
-    for pstr in fixed_ps.split(';'):
-        purities_fixed.append([float(p) for p in pstr.split(',')])
-    return purities_fixed
+def compute_obj1(weights, fA, fB, cA, cB, u):
+    """
+    compute weighted IMF objective
+    """
+    leftA_w = weights * np.abs(fA - cA @ u)
+    leftB_w = weights * np.abs(fB - cB @ u)
+    obj = np.sum(leftA_w) + np.sum(leftB_w)
+    return obj
 
+# TODO
+def compute_obj2(weights, fA, fB, cA, cB, u):
+    return 0
+
+def compute_obj3(weights, fA, fB, cA, cB, u):
+    """
+    compute weighted max cn-state objective
+    """
+    maxA_w = np.dot(np.max(cA[:, 1:], axis=1), weights)[0]
+    maxB_w = np.dot(np.max(cB[:, 1:], axis=1), weights)[0]
+    return maxA_w + maxB_w

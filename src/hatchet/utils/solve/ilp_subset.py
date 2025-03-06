@@ -499,7 +499,7 @@ class ILPSubset:
         ow = self.problem_param
         # TODO add manhattan distance penalty to restrict potential tree size
         manhat_vars = None
-        if mode_t in ("FULL", "CARCH") and ow[1] != 0:
+        if mode_t in ("FULL", "CARCH") and ow[0] != 0:
             manhat_vars = {}
             for _m in range(m):
                 for _n in range(1, n):
@@ -514,14 +514,14 @@ class ILPSubset:
         
         # TODO add penalty on having high copy number
         hcn_vars = None
-        if mode_t in ("FULL", "CARCH") and ow[2] != 0:
+        if mode_t in ("FULL", "CARCH") and ow[1] != 0:
             hcn_vars = {}
             for _m in range(m):
                 hcn_vars[(_m, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                 model.add_component(f"HCA_{_m}", hcn_vars[(_m, "a")])
                 hcn_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                 model.add_component(f"HCB_{_m}", hcn_vars[(_m, "b")])
-                for _n in range(1, n):
+                for _n in range(1, n): #TODO I didn't add penalty for normal clone, will it matter?
                     model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
                     model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
 
@@ -532,21 +532,22 @@ class ILPSubset:
         for _m in range(m):
             for _k in range(k):
                 cluster_id = self.cluster_ids[_m]
-                obj += ow[0] * (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[cluster_id]
+                obj += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[cluster_id]
         
-        # add distance penalty term here, text
+        # add distance penalty term
         if manhat_vars != None:
             for _m in range(m):
                 cluster_id = self.cluster_ids[_m]
                 for _n in range(1, n):
-                    obj += ow[1] * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
-                    obj += ow[1] * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
+                    obj += ow[0] * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
+                    obj += ow[0] * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
         
+        # add max-cn penalty term
         if hcn_vars != None:
             for _m in range(m):
                 cluster_id = self.cluster_ids[_m]
-                obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "a")]
-                obj += ow[2] * self.w[cluster_id] * hcn_vars[(_m, "b")]
+                obj += ow[1] * self.w[cluster_id] * hcn_vars[(_m, "a")]
+                obj += ow[1] * self.w[cluster_id] * hcn_vars[(_m, "b")]
         
         # TODO metin's penalty
         # obj += self.large_cn_penalty(model, 1, ub)

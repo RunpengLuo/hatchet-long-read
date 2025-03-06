@@ -3,10 +3,18 @@ import numpy as np
 import pandas as pd
 from pyomo import environ as pe
 from collections import OrderedDict
+import kneed
+import matplotlib.pyplot as plt
 
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
 from hatchet.utils.solve.cd import CoordinateDescent, CoordinateDescentSplit
-from hatchet.utils.solve.utils import parse_clonal, scale_rdr, store_temp_result, parse_purity_fixed, parse_cn_fixed, parse_problem_param
+from hatchet.utils.solve.utils import (
+    parse_clonal,
+    scale_rdr,
+    store_temp_result,
+    load_pre_config_txt,
+    compute_individual_objs,
+)
 from hatchet import config
 import hatchet.utils.Supporting as sp
 
@@ -26,18 +34,18 @@ def solve(
     clonal,
     bbc_file,
     seg_file,
-    n, # n_clones
+    n,  # n_clones
     solver="gurobi",
     solve_mode="cd",
-    d=-1, # number of distinct states per segment
-    cn_max=-1, # threshold, max cA + cB per segment
-    mu=0.01, #u_min
-    diploid_threshold=0.1, # constant TODO
-    ampdel=True, # all amp or all del
+    d=-1,  # number of distinct states per segment
+    cn_max=-1,  # threshold, max cA + cB per segment
+    mu=0.01,  # u_min
+    diploid_threshold=0.1,  # constant TODO
+    ampdel=True,  # all amp or all del
     n_seed=400,
     n_worker=8,
     random_seed=None,
-    max_iters=None, # cd
+    max_iters=None,  # cd
     timelimit=None,
     binwise=False,
     purities=None,
@@ -103,35 +111,23 @@ def solve(
     f_a = rdr - f_b
 
     if not binwise:
-        # TODO allow fixed cn and purity in optimization
-        problem_param = [1, 0, 0]
+        # TODO run varying parameter, plot curves, and select eblow via kneedle
+        problem_params = [[0, 0, 0], [0, 0, 0]]
         purities_fixed = None
         copy_numbers_fixed = None
-        if os.path.exists(f"{tempdir}/pre-config.txt"):
-            with open(f"{tempdir}/pre-config.txt", 'r') as fd:
-                problem_param = parse_problem_param(fd.readline().strip())
-                purities_fixed = parse_purity_fixed(fd.readline().strip())
-                copy_numbers_fixed = parse_cn_fixed(fd.readline().strip())
-                fd.close()
-        # TODO HT941
-        # if sample_ids[0] == "HT941" and n == 3:
-        #     copy_numbers_fixed = None
-        #     purities_fixed = None
-            # copy_numbers_fixed = {1: [(1,1),(1,1)], 
-            #                       3: [(1,0),(1,1)],
-            #                       6: [(1,0),(1,0)],
-            #                       10:[(1,0),(1,1)]}
-            # for cluster_id in list(copy_numbers_fixed.keys()):
-            #     if cluster_id in copy_numbers:
-            #         copy_numbers_fixed.pop(cluster_id)
-            # purities_fixed = [[0.14493346464758428,
-            #                   0.4181006416932036,
-            #                   0.4369658936592121]]
-        # else:
-        #     copy_numbers_fixed = None
-        #     purities_fixed = None
+        pre_config_txt = f"{tempdir}/pre-config.txt"
+        # load pre-input config
+        if os.path.exists(pre_config_txt):
+            problem_params, purities_fixed, copy_numbers_fixed = load_pre_config_txt(
+                pre_config_txt
+            )
+
+            for cluster_id in list(copy_numbers_fixed.keys()):
+                if cluster_id in copy_numbers:
+                    copy_numbers_fixed.pop(cluster_id)
+
         # store detailed config
-        with open(f"{tempdir}/config.txt", 'w') as fd:
+        with open(f"{tempdir}/config.txt", "w") as fd:
             fd.write("========================================\n")
             fd.write(f"mode={solve_mode}\nsolver={solver}\nbinwise={binwise}\n")
             fd.write(f"max_iters={max_iters}\ntimelimit={timelimit}\n")
@@ -148,85 +144,73 @@ def solve(
             fd.write(f"u_min={mu}\ncn_max={cn_max}\nampdel={ampdel}\n")
             fd.write(f"base={min(2, len(copy_numbers))}\n")
             fd.write(f"d={d}\n")
-            fd.write(f"problem_param={problem_param}\n")
+            fd.write(f"problem_param={problem_params}\n")
             fd.write("========================================\n")
             for sample in sample_ids:
                 fd.write(f"{sample}\tgamma={gamma[sample].tolist()}\n")
             fd.close()
 
-            with open(f"{tempdir}/input.tsv", 'w') as fd:
-                fd.write("CLUSTER\tSAMPLE\tBAF\tRDR\tFCN\tF_A\tF_B\tweight\n")
-                for sample in sample_ids:
-                    for cID in df["#ID"].unique().tolist():
-                        fd.write('\t'.join(
-                            [str(cID), str(sample),
-                             str(baf.loc[cID, sample]),
-                             str(rdr_.loc[cID, sample]),
-                             str(fcn.loc[cID, sample]),
-                             str(f_a.loc[cID, sample]),
-                             str(f_b.loc[cID, sample]),
-                             str(weights[cID])
-                            ]) + '\n')
-                fd.close()
+        with open(f"{tempdir}/input.tsv", "w") as fd:
+            fd.write("CLUSTER\tSAMPLE\tBAF\tRDR\tFCN\tF_A\tF_B\tweight\n")
+            for sample in sample_ids:
+                for cID in df["#ID"].unique().tolist():
+                    fd.write(
+                        "\t".join(
+                            [
+                                str(cID),
+                                str(sample),
+                                str(baf.loc[cID, sample]),
+                                str(rdr_.loc[cID, sample]),
+                                str(fcn.loc[cID, sample]),
+                                str(f_a.loc[cID, sample]),
+                                str(f_b.loc[cID, sample]),
+                                str(weights[cID]),
+                            ]
+                        )
+                        + "\n"
+                    )
+            fd.close()
 
-        if solve_mode == "cd" or solve_mode == "both":
-            cd = CoordinateDescent(
-                f_a=f_a,
-                f_b=f_b,
-                n=n,
-                mu=mu,
-                d=d,
-                cn_max=cn_max,
-                w=weights,
-                ampdel=ampdel,
-                cn=copy_numbers,
-                purities=purities,
-                baf=baf,
-                copy_numbers_fixed=copy_numbers_fixed,
-                purities_fixed=purities_fixed,
-                problem_param=problem_param
-            )
-            obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
-                solver_type=solver,
-                max_iters=max_iters,
-                n_seed=n_seed,
-                j=n_worker,
-                random_seed=random_seed,
-                timelimit=timelimit,
-                tempdir=tempdir,
-            )
+        # all instances
+        instances = {}
+        os.makedirs(f"{tempdir}/instances", exist_ok=True)
+        [ns0, ss0] = problem_params[0]
+        [ns1, ss1] = problem_params[1]
+        for i0 in range(0, ns0 + 1):
+            for i1 in range(0, ns1 + 1):
+                param = [ss0 * i0, ss1 * i1]
+                tempdir_ = (
+                    f"{tempdir}/instances/solve_{param[0]}_{param[1]}"
+                )
+                os.makedirs(tempdir_, exist_ok=True)
+                # obj, cA, cB, u, cluster_ids, sample_ids
+                instances[tuple(param)] = solve_instance(
+                    f_a,
+                    f_b,
+                    n,
+                    mu,
+                    d,
+                    cn_max,
+                    weights,
+                    ampdel,
+                    copy_numbers,
+                    purities,
+                    baf,
+                    copy_numbers_fixed,
+                    purities_fixed,
+                    param,
+                    solver,
+                    max_iters,
+                    n_seed,
+                    n_worker,
+                    random_seed,
+                    timelimit,
+                    tempdir_,
+                    solve_mode,
+                )
         
-        if solve_mode == "ilp" or solve_mode == "both":
-            ilp = ILPSubset(
-                n,
-                cn_max,
-                d=d,
-                mu=mu,
-                ampdel=ampdel,
-                copy_numbers=copy_numbers,
-                f_a=f_a,
-                f_b=f_b,
-                w=weights,
-                purities=purities,
-                baf=baf,
-                copy_numbers_fixed=copy_numbers_fixed,
-                purities_fixed=purities_fixed,
-                problem_param=problem_param
-            )
-            if solve_mode == "ilp":
-                ilp.create_model(pprint=True)
-            else:
-                # run coordinate-descent first to get local-opt cA and cB
-                # use cA and cB to hot start the model.
-                ilp.create_model()
-                ilp.hot_start(cA, cB)
-
-            obj, cA, cB, u, cluster_ids, sample_ids = ilp.run(
-                solver_type=solver, timelimit=timelimit)
-            store_temp_result({obj: [cA, cB, u]}, cluster_ids, sample_ids, f_a, f_b, 
-                              baf, tempdir, solve_mode, n)
-        return obj, cA, cB, u, cluster_ids, sample_ids
-
+        # model selection and return best result
+        return model_selection(f_a, f_b, weights, instances, tempdir)
     else:
         bins = OrderedDict()  # cluster_id => RDR for cluster
         for cluster_id, _df in df.groupby("#ID"):
@@ -358,3 +342,155 @@ def solve(
             ilp.create_model()
             ilp.hot_start(cA, cB)
             return ilp.run(solver_type=solver, timelimit=timelimit)
+
+
+def solve_instance(
+    f_a,
+    f_b,
+    n,
+    mu,
+    d,
+    cn_max,
+    weights,
+    ampdel,
+    copy_numbers,
+    purities,
+    baf,
+    copy_numbers_fixed,
+    purities_fixed,
+    param,
+    solver,
+    max_iters,
+    n_seed,
+    n_worker,
+    random_seed,
+    timelimit,
+    tempdir,
+    solve_mode,
+):
+    """
+    solve optimization with specific problem parameter setting
+    """
+    assert solve_mode in ("ilp", "cd", "both"), "Unrecognized solve_mode"
+    if solve_mode == "cd" or solve_mode == "both":
+        cd = CoordinateDescent(
+            f_a=f_a,
+            f_b=f_b,
+            n=n,
+            mu=mu,
+            d=d,
+            cn_max=cn_max,
+            w=weights,
+            ampdel=ampdel,
+            cn=copy_numbers,
+            purities=purities,
+            baf=baf,
+            copy_numbers_fixed=copy_numbers_fixed,
+            purities_fixed=purities_fixed,
+            problem_param=param,
+        )
+        obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
+            solver_type=solver,
+            max_iters=max_iters,
+            n_seed=n_seed,
+            j=n_worker,
+            random_seed=random_seed,
+            timelimit=timelimit,
+            tempdir=tempdir,
+        )
+
+    if solve_mode == "ilp" or solve_mode == "both":
+        ilp = ILPSubset(
+            n,
+            cn_max,
+            d=d,
+            mu=mu,
+            ampdel=ampdel,
+            copy_numbers=copy_numbers,
+            f_a=f_a,
+            f_b=f_b,
+            w=weights,
+            purities=purities,
+            baf=baf,
+            copy_numbers_fixed=copy_numbers_fixed,
+            purities_fixed=purities_fixed,
+            problem_param=param,
+        )
+        if solve_mode == "ilp":
+            ilp.create_model(pprint=True)
+        else:
+            # run coordinate-descent first to get local-opt cA and cB
+            # use cA and cB to hot start the model.
+            ilp.create_model()
+            ilp.hot_start(cA, cB)
+
+        obj, cA, cB, u, cluster_ids, sample_ids = ilp.run(
+            solver_type=solver, timelimit=timelimit
+        )
+        store_temp_result(
+            {obj: [cA, cB, u]},
+            cluster_ids,
+            sample_ids,
+            f_a,
+            f_b,
+            baf,
+            tempdir,
+            solve_mode,
+            n,
+        )
+    return obj, cA, cB, u, cluster_ids, sample_ids
+
+
+def model_selection(f_a, f_b, weights, instances, tempdir):
+    """
+    select best instance among all scalarized solutions
+    """
+    data = []
+    for [p0, p1], [tobj, cA, cB, u, _, _] in sorted(instances.items(), key=lambda tp: tp[0]):
+        [obj, obj0, obj1] = compute_individual_objs(weights, f_a, f_b, cA, cB, u)
+        errv = tobj - (obj + obj0 + obj1)
+        data.append([p0, p1, tobj, obj, obj0, obj1, errv])
+
+    df = pd.DataFrame(
+        data=data,
+        columns=[
+            "lambda-DROOT",
+            "lambda-MAXCN",
+            "objective",
+            "IMF-objective",
+            "DROOT-objective",
+            "MAXCN-objective",
+            "float-error",
+        ],
+    )
+
+    assert len(df) > 0, "ERROR! there is no solution to be selected"
+
+    # find elbow point
+    xs = df["MAXCN-objective"].to_numpy()
+    ys = df["IMF-objective"].to_numpy()
+    kl = kneed.KneeLocator(x=xs, 
+                           y=ys, 
+                           curve="convex", direction="decreasing")
+    elbow_x, elbow_y = kl.elbow, kl.elbow_y
+    kl.plot_knee(title="Model Selection Pareto Curve", xlabel="MAXCN-objective", ylabel="IMF-objective")
+    plt.savefig(f"{tempdir}/pareto_curve.png", dpi=300)
+
+    sol_index = 0
+    if elbow_x == None:
+        print(f"Failed to identify elbow in model selection step, use result without penalty.")
+    else:    
+        sol_indices = np.where(ys >= elbow_y)[0]
+        if len(sol_indices) == 0:
+            print(f"Failed to locate result in model selection step, use result without penalty.")
+        else:
+            # multiple instance may yield same objective values, pick the one with minimum penalty
+            sol_index = sol_indices[0]
+            print(f"Model selection found solution with index={sol_index}")
+    df.loc[:, "selected"] = ""
+    df.loc[sol_index, "selected"] = "*"
+    df.to_csv(f"{tempdir}/model_selections.tsv", sep='\t', header=True, index=False)
+
+    [l0, l1] = df.loc[sol_index, ["lambda-DROOT", "lambda-MAXCN"]]
+    return instances[(l0, l1)]
+
