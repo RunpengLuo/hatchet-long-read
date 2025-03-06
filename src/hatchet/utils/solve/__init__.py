@@ -179,9 +179,7 @@ def solve(
         for i0 in range(0, ns0 + 1):
             for i1 in range(0, ns1 + 1):
                 param = [ss0 * i0, ss1 * i1]
-                tempdir_ = (
-                    f"{tempdir}/instances/solve_{param[0]}_{param[1]}"
-                )
+                tempdir_ = f"{tempdir}/instances/solve_{param[0]}_{param[1]}"
                 # if os.path.exists(tempdir_):
                 #     continue TODO read intermediate result?
                 os.makedirs(tempdir_, exist_ok=True)
@@ -210,7 +208,7 @@ def solve(
                     tempdir_,
                     solve_mode,
                 )
-        
+
         # model selection and return best result
         return model_selection(f_a, f_b, weights, instances, tempdir)
     else:
@@ -448,7 +446,9 @@ def model_selection(f_a, f_b, weights, instances, tempdir):
     select best instance among all scalarized solutions
     """
     data = []
-    for [p0, p1], [tobj, cA, cB, u, _, _] in sorted(instances.items(), key=lambda tp: tp[0]):
+    for [p0, p1], [tobj, cA, cB, u, _, _] in sorted(
+        instances.items(), key=lambda tp: tp[0]
+    ):
         [obj, obj0, obj1] = compute_individual_objs(weights, f_a, f_b, cA, cB, u)
         errv = tobj - (obj + obj0 + obj1)
         data.append([p0, p1, tobj, obj, obj0, obj1, errv])
@@ -471,28 +471,33 @@ def model_selection(f_a, f_b, weights, instances, tempdir):
     # find elbow point
     xs = df["MAXCN-objective"].to_numpy()
     ys = df["IMF-objective"].to_numpy()
-    kl = kneed.KneeLocator(x=xs, 
-                           y=ys, 
-                           curve="convex", direction="decreasing")
+    kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
     elbow_x, elbow_y = kl.elbow, kl.elbow_y
-    kl.plot_knee(title="Model Selection Pareto Curve", xlabel="MAXCN-objective", ylabel="IMF-objective")
+    kl.plot_knee(
+        title="Model Selection Pareto Curve",
+        xlabel="MAXCN-objective",
+        ylabel="IMF-objective",
+    )
     plt.savefig(f"{tempdir}/pareto_curve.png", dpi=300)
 
     sol_index = 0
     if elbow_x == None:
-        print(f"Failed to identify elbow in model selection step, use result without penalty.")
-    else:    
+        print(
+            f"Failed to identify elbow in model selection step, use result without penalty."
+        )
+    else:
         sol_indices = np.where(ys >= elbow_y)[0]
         if len(sol_indices) == 0:
-            print(f"Failed to locate result in model selection step, use result without penalty.")
+            print(
+                f"Failed to locate result in model selection step, use result without penalty."
+            )
         else:
             # multiple instance may yield same objective values, pick the one with minimum penalty
             sol_index = sol_indices[0]
             print(f"Model selection found solution with index={sol_index}")
     df.loc[:, "selected"] = ""
     df.loc[sol_index, "selected"] = "*"
-    df.to_csv(f"{tempdir}/model_selections.tsv", sep='\t', header=True, index=False)
+    df.to_csv(f"{tempdir}/model_selections.tsv", sep="\t", header=True, index=False)
 
     [l0, l1] = df.loc[sol_index, ["lambda-DROOT", "lambda-MAXCN"]]
     return instances[(l0, l1)]
-

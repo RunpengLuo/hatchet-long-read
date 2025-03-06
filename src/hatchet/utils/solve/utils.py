@@ -264,13 +264,21 @@ def load_pre_config_txt(pre_config_txt: str):
         fd.close()
     return problem_params, purities_fixed, copy_numbers_fixed
 
-def compute_individual_objs(weights, fA, fB, cA, cB, u):
+def compute_individual_objs(weights: pd.Series, fA: pd.DataFrame, fB: pd.DataFrame, 
+                            cA: list, cB: list, u: list):
     """
     Compute individual objectives from scalarized solution
     """
-    obj1 = compute_obj1(weights, fA, fB, cA, cB, u)
-    obj2 = compute_obj2(weights, fA, fB, cA, cB, u)
-    obj3 = compute_obj3(weights, fA, fB, cA, cB, u)
+    w_  = weights.to_numpy().reshape((len(weights), 1))
+    fA_ = fA.to_numpy()
+    fB_ = fB.to_numpy()
+    cA_ = np.array(cA)
+    cB_ = np.array(cB)
+    u_ = np.array(u)
+
+    obj1 = compute_obj1(w_, fA_, fB_, cA_, cB_, u_)
+    obj2 = compute_obj2(w_, fA_, fB_, cA_, cB_, u_)
+    obj3 = compute_obj3(w_, fA_, fB_, cA_, cB_, u_)
     return [obj1, obj2, obj3]
 
 def compute_obj1(weights, fA, fB, cA, cB, u):
