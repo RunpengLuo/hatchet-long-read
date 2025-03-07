@@ -301,10 +301,11 @@ def compute_obj_DROOT(weights, fA, fB, cA, cB, u):
     DADJ: hamming distance between (a,b) and (a',b'), for all clones, per cluster
     """
     (m, n) = cA.shape
-
-
-
-    return 0
+    assert n > 1, "at least one tumor clone is needed"
+    distA = weights * np.abs(cA[:, 1:] - cA[:, :1])
+    distB = weights * np.abs(cB[:, 1:] - cB[:, :1])
+    obj = np.sum(distA) + np.sum(distB)
+    return obj
 
 def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     """
