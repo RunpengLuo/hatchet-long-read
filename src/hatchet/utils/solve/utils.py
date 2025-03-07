@@ -238,9 +238,7 @@ def load_pre_config_txt(pre_config_txt: str):
             pname, pval = pstr.split(":")
             assert pname in ["MAXCN", "DROOT", "DADJ"], "unsupported penalty term"
             steps, step_size = [float(p) for p in pval.split('-')]
-            problem_params = [pname, steps, step_size]
-        else:
-            problem_params = None
+            problem_params = [pname, int(steps), step_size]
         
         fixed_ps = lines[1].strip()
         if len(fixed_ps) != 0:

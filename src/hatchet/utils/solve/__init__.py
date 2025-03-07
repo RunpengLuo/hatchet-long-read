@@ -175,7 +175,7 @@ def solve(
         instances = {}
         os.makedirs(f"{tempdir}/instances", exist_ok=True)
         if problem_params == None: # no penalty
-            [pname, num_steps, step_size] = ["RAW", 0, 0]
+            [pname, num_steps, step_size] = ["RAW", 0, 0.0]
         else:
             [pname, num_steps, step_size] = problem_params
             assert num_steps > 0, "num_steps should be at least 1"
