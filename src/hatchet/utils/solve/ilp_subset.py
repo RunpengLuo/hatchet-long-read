@@ -9,7 +9,7 @@ from hatchet.utils.solve.utils import Random
 
 class ILPSubset:
     def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, 
-                 baf, copy_numbers_fixed, purities_fixed, problem_param):
+                 baf, copy_numbers_fixed, purities_fixed, penalty_param):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
 
@@ -31,7 +31,7 @@ class ILPSubset:
         self.copy_numbers = copy_numbers
         self.copy_numbers_fixed = copy_numbers_fixed  # TODO
         self.purities_fixed = purities_fixed
-        self.problem_param = problem_param
+        self.penalty_param = penalty_param
         self.baf = baf
         self.w = w
         self.purities = purities
@@ -68,7 +68,7 @@ class ILPSubset:
             baf = self.baf,
             copy_numbers_fixed=self.copy_numbers_fixed, # TODO
             purities_fixed = self.purities_fixed,
-            problem_param = self.problem_param
+            penalty_param = self.penalty_param
         )
 
     def __str__(self):
@@ -496,67 +496,64 @@ class ILPSubset:
                 for cID, cprop in enumerate(cprops):
                     model.constraints.add(self.u[cID][sID] == cprop)
 
-        ow = self.problem_param
-        # TODO add manhattan distance penalty to restrict potential tree size
-        manhat_vars = None
-        if mode_t in ("FULL", "CARCH") and ow[0] != 0:
-            manhat_vars = {}
-            for _m in range(m):
-                for _n in range(1, n):
-                    manhat_vars[(_m, _n, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                    model.add_component(f"MDA_{_m}_{_n}", manhat_vars[(_m, _n, "a")])
-                    manhat_vars[(_m, _n, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                    model.add_component(f"MDB_{_m}_{_n}", manhat_vars[(_m, _n, "b")])
-                    model.constraints.add(self.cA[_m][_n] - self.cA[_m][0] <= manhat_vars[(_m, _n, "a")])
-                    model.constraints.add(self.cA[_m][0] - self.cA[_m][_n] <= manhat_vars[(_m, _n, "a")])
-                    model.constraints.add(self.cB[_m][_n] - self.cB[_m][0] <= manhat_vars[(_m, _n, "b")])
-                    model.constraints.add(self.cB[_m][0] - self.cB[_m][_n] <= manhat_vars[(_m, _n, "b")])
-        
-        # TODO add penalty on having high copy number
-        hcn_vars = None
-        if mode_t in ("FULL", "CARCH") and ow[1] != 0:
-            hcn_vars = {}
-            for _m in range(m):
-                hcn_vars[(_m, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                model.add_component(f"HCA_{_m}", hcn_vars[(_m, "a")])
-                hcn_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                model.add_component(f"HCB_{_m}", hcn_vars[(_m, "b")])
-                for _n in range(1, n): #TODO I didn't add penalty for normal clone, will it matter?
-                    model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
-                    model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
+        # add objective & regularization terms
+        objective = 0
+        for _m in range(m):
+            for _k in range(k):
+                objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[self.cluster_ids[_m]]
+
+        [pname, pparam] = self.penalty_param
+        if pname != "RAW" and mode_t in ("FULL", "CARCH"):
+            if pname == "MAXCN":
+                # constrain maximum copy-number states per cluster
+                hcn_vars = {}
+                for _m in range(m):
+                    hcn_vars[(_m, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                    model.add_component(f"HCA_{_m}", hcn_vars[(_m, "a")])
+                    hcn_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                    model.add_component(f"HCB_{_m}", hcn_vars[(_m, "b")])
+                    for _n in range(1, n): #TODO I didn't add penalty for normal clone, will it matter?
+                        model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
+                        model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
+                # add objective
+                for _m in range(m):
+                    cluster_id = self.cluster_ids[_m]
+                    objective += pparam * self.w[cluster_id] * hcn_vars[(_m, "a")]
+                    objective += pparam * self.w[cluster_id] * hcn_vars[(_m, "b")]
+            elif pname == "DROOT":
+                # distance from tumor clone to normal clone state per cluster
+                manhat_vars = {}
+                for _m in range(m):
+                    for _n in range(1, n):
+                        manhat_vars[(_m, _n, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                        model.add_component(f"MDA_{_m}_{_n}", manhat_vars[(_m, _n, "a")])
+                        manhat_vars[(_m, _n, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                        model.add_component(f"MDB_{_m}_{_n}", manhat_vars[(_m, _n, "b")])
+                        model.constraints.add(self.cA[_m][_n] - self.cA[_m][0] <= manhat_vars[(_m, _n, "a")])
+                        model.constraints.add(self.cA[_m][0] - self.cA[_m][_n] <= manhat_vars[(_m, _n, "a")])
+                        model.constraints.add(self.cB[_m][_n] - self.cB[_m][0] <= manhat_vars[(_m, _n, "b")])
+                        model.constraints.add(self.cB[_m][0] - self.cB[_m][_n] <= manhat_vars[(_m, _n, "b")])
+                # add objective
+                for _m in range(m):
+                    cluster_id = self.cluster_ids[_m]
+                    for _n in range(1, n):
+                        objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
+                        objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
+            # DADJ
+            else:
+                pass
+                # TODO metin's penalty
+                # objective += self.large_cn_penalty(model, 1, ub)
 
         if mode_t == "FULL":
             self.hot_start()
 
-        obj = 0
-        for _m in range(m):
-            for _k in range(k):
-                cluster_id = self.cluster_ids[_m]
-                obj += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[cluster_id]
-        
-        # add distance penalty term
-        if manhat_vars != None:
-            for _m in range(m):
-                cluster_id = self.cluster_ids[_m]
-                for _n in range(1, n):
-                    obj += ow[0] * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
-                    obj += ow[0] * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
-        
-        # add max-cn penalty term
-        if hcn_vars != None:
-            for _m in range(m):
-                cluster_id = self.cluster_ids[_m]
-                obj += ow[1] * self.w[cluster_id] * hcn_vars[(_m, "a")]
-                obj += ow[1] * self.w[cluster_id] * hcn_vars[(_m, "b")]
-        
-        # TODO metin's penalty
-        # obj += self.large_cn_penalty(model, 1, ub)
-
-        model.obj = pe.Objective(expr=obj, sense=pe.minimize)
+        model.obj = pe.Objective(expr=objective, sense=pe.minimize)
         self.model = model
 
         if pprint:
             print(str(self))
+        return
 
     def build_symmetry_breaking(self, model):
         for i in range(1, self.n - 1):

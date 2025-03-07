@@ -68,7 +68,7 @@ def _work(cd, u, solver_type, max_iters, max_convergence_iters, timelimit):
 
 class CoordinateDescent:
     def __init__(self, f_a, f_b, n, mu, d, cn_max, cn, w, purities, baf, ampdel=True, 
-                 copy_numbers_fixed=None, purities_fixed=None, problem_param=None):
+                 copy_numbers_fixed=None, purities_fixed=None, penalty_param=None):
         # ilp attribute used here as a convenient storage container for properties
         self.ilp = ILPSubset(
             n=n,
@@ -84,7 +84,7 @@ class CoordinateDescent:
             baf=baf,
             copy_numbers_fixed=copy_numbers_fixed, # TODO
             purities_fixed=purities_fixed,
-            problem_param=problem_param
+            penalty_param=penalty_param
         )
         # Building the model here is not strictly necessary, as, during execution,
         #   self.carch and c.uarch will copy self.ilp and create+run those models.

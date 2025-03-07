@@ -223,7 +223,7 @@ def load_pre_config_txt(pre_config_txt: str):
     """
     load pre_config.txt for optimization \\
     example: \\
-    30-0.01;30-0.01 <steps-step_size;> only for penalty term \\
+    MAXCN:30-0.01 <type-steps-step_size> one penalty term \\
     0.8,0.2,0.0;0.6,0.1,0.3  <uprop_i;> one per sample \\
     1:1|1,1|2; <segID:<cA|cB>,<cA|cB>;> one per cluster
     """
@@ -235,15 +235,12 @@ def load_pre_config_txt(pre_config_txt: str):
         assert len(lines) == 3
         pstr = lines[0].strip()
         if len(pstr) != 0:
-            problem_params = []
-            for subs in pstr.split(';'):
-                steps, step_size = [float(p) for p in subs.split('-')]
-                steps = int(steps)
-                assert steps >= 0 and step_size >= 0
-                problem_params.append([steps, step_size])
-            assert len(problem_params) == 2
+            pname, pval = pstr.split(":")
+            assert pname in ["MAXCN", "DROOT", "DADJ"], "unsupported penalty term"
+            steps, step_size = [float(p) for p in pval.split('-')]
+            problem_params = [pname, steps, step_size]
         else:
-            problem_params = [[0, 0], [0, 0]]
+            problem_params = None
         
         fixed_ps = lines[1].strip()
         if len(fixed_ps) != 0:
@@ -264,7 +261,7 @@ def load_pre_config_txt(pre_config_txt: str):
         fd.close()
     return problem_params, purities_fixed, copy_numbers_fixed
 
-def compute_individual_objs(weights: pd.Series, fA: pd.DataFrame, fB: pd.DataFrame, 
+def compute_individual_objs(pname: str, weights: pd.Series, fA: pd.DataFrame, fB: pd.DataFrame, 
                             cA: list, cB: list, u: list):
     """
     Compute individual objectives from scalarized solution
@@ -276,12 +273,19 @@ def compute_individual_objs(weights: pd.Series, fA: pd.DataFrame, fB: pd.DataFra
     cB_ = np.array(cB)
     u_ = np.array(u)
 
-    obj1 = compute_obj1(w_, fA_, fB_, cA_, cB_, u_)
-    obj2 = compute_obj2(w_, fA_, fB_, cA_, cB_, u_)
-    obj3 = compute_obj3(w_, fA_, fB_, cA_, cB_, u_)
-    return [obj1, obj2, obj3]
+    imf_obj = compute_obj_IMF(w_, fA_, fB_, cA_, cB_, u_)
+    sub_obj = 0.0
+    if pname == "MAXCN":
+        sub_obj = compute_obj_MAXCN(w_, fA_, fB_, cA_, cB_, u_)
+    elif pname == "DROOT":
+        sub_obj = compute_obj_DROOT(w_, fA_, fB_, cA_, cB_, u_)
+    elif pname == "DADJ":
+        sub_obj = -1
+    else:
+        pass
+    return [imf_obj, sub_obj]
 
-def compute_obj1(weights, fA, fB, cA, cB, u):
+def compute_obj_IMF(weights, fA, fB, cA, cB, u):
     """
     compute weighted IMF objective
     """
@@ -291,10 +295,20 @@ def compute_obj1(weights, fA, fB, cA, cB, u):
     return obj
 
 # TODO
-def compute_obj2(weights, fA, fB, cA, cB, u):
+def compute_obj_DROOT(weights, fA, fB, cA, cB, u):
+    """
+    compute weighted DROOT objective
+
+    DROOT: hamming distance between (a,b) and (1,1), for tumor clones, per cluster
+    DADJ: hamming distance between (a,b) and (a',b'), for all clones, per cluster
+    """
+    (m, n) = cA.shape
+
+
+
     return 0
 
-def compute_obj3(weights, fA, fB, cA, cB, u):
+def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     """
     compute weighted max cn-state objective
     """
