@@ -251,6 +251,14 @@ def execute_python(
         weights,
     )
 
+    # pre-process some args
+    if problem_type == "diploid":
+        cn_max = args["eD"]
+    else:
+        cn_max = args["eT"]
+    arg_d = -1 if args["d"] == None else args["d"]
+    max_iters = 10 if args["f"] == None else args["f"]
+
     best_instance = None
     if args["binwise"]:
         assert False, "binwise mode is unsupported"
@@ -266,8 +274,8 @@ def execute_python(
                 f_b=f_b,
                 n=n,
                 mu=args["u"],
-                d=-1 if args["d"] == None else args["d"],
-                cn_max=args["e"],
+                d=arg_d,
+                cn_max=cn_max,
                 weights=weights,
                 ampdel=args["ampdel"],
                 clonal=clonal,
@@ -277,7 +285,7 @@ def execute_python(
                 purities_fixed=purities_fixed,
                 penalty_param=[pname, param],
                 solver=args["solver"],
-                max_iters=10 if args["f"] == None else args["f"],
+                max_iters=max_iters,
                 n_seed=args["p"],
                 n_worker=args["j"],
                 random_seed=args["r"],
