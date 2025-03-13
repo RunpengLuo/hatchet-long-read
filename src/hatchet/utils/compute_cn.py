@@ -73,7 +73,7 @@ def main(args=None):
         fbbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
         args["bbc"] = fbbc_path
         clusters = fclusters
-        sp.log(msg=f"Clusters after filtering is stored in {args["seg"]} and {args["bbv"]}\n", level="STEP")
+        sp.log(msg=f"Clusters after filtering is stored in {fseg_path} and {fbbc_path}\n", level="STEP")
     else:
         sp.log(msg="No cluster is filtered\n", level="STEP")
     
