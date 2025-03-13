@@ -189,7 +189,7 @@ def filtering(
         chrs_per_cluster[cid] = bbc.loc[bbc["CLUSTER"] == cid, "#CHR"].unique().tolist()
 
     # merge clusters
-    sp.log(msg="filtering is not implemented yet!", level="INFO")
+    sp.log(msg="filtering is not implemented yet!\n", level="INFO")
 
     # for cid, csize in sorted(cluster_sizes.items(), key=lambda tp: tp[1], reverse=True):
     return bbc, seg, cluster_sizes
@@ -211,6 +211,7 @@ def execute_python(
     solver_mode = ("both", "ilp", "cd")[args["M"]]
     out_dir = args["x"]
     sol_dir = os.path.join(out_dir, f"sols/{problem_type}_n{n}")
+    os.makedirs(sol_dir, exist_ok=True)
     out_bbc = os.path.join(out_dir, f"results.{problem_type}.n{n}.bbc.ucn.tsv")
     out_seg = os.path.join(out_dir, f"results.{problem_type}.n{n}.seg.ucn.tsv")
 
@@ -311,10 +312,10 @@ def execute_cpp(
     args: dict,
     problem_type: str,
 ):
-    sp.log(msg="cpp optimization is not implemented yet!", level="INFO")
+    sp.log(msg="cpp optimization is not implemented yet!\n", level="INFO")
     return -1
 
 def model_selection(diploid_sols: dict, tetraploid_sols: dict, v=1):
-    sp.log(msg="model selection is not implemented yet!", level="INFO")
+    sp.log(msg="model selection is not implemented yet!\n", level="INFO")
     # TODO
     return 2, 2, "diploid"
