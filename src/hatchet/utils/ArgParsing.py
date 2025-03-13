@@ -2831,7 +2831,7 @@ def parse_compute_cn_args(args=None):
         action="store_true",
         default=config.compute_cn.tetraploid,
         required=False,
-        hhelp="Run tetraploid mode with WGD (default: true)",
+        help="Run tetraploid mode with WGD (default: true)",
     )
     parser.add_argument(
         "-v",
