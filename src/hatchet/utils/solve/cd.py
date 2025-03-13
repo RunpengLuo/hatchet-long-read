@@ -2,7 +2,7 @@ from copy import copy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
-from hatchet.utils.solve.utils import Random, store_temp_result
+from hatchet.utils.solve.utils import Random, store_instance_tofile
 
 
 class Worker:
@@ -134,7 +134,7 @@ class CoordinateDescent:
 
         # TODO store all results
         if tempdir != None:
-            store_temp_result(result, self.ilp.cluster_ids, self.ilp.sample_ids, 
+            store_instance_tofile(result, self.ilp.cluster_ids, self.ilp.sample_ids, 
                               self.ilp.f_a, self.ilp.f_b, self.ilp.baf, tempdir, "cd", self.ilp.n)
 
         best = min(result)
