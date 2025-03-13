@@ -37,7 +37,7 @@ from hatchet.utils.run import main as run  # noqa: F401
 from hatchet.utils.download_panel import main as download_panel  # noqa: F401
 from hatchet.utils.phase_snps import main as phase_snps  # noqa: F401
 
-from hatchet.utils.check import main as check  # noqa: F401
+# from hatchet.utils.check import main as check  # noqa: F401
 
 
 def print_usage():
