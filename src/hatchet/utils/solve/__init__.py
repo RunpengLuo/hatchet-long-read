@@ -84,7 +84,7 @@ def solve_instance(
             d=d,
             mu=mu,
             ampdel=ampdel,
-            clonal=clonal,
+            copy_numbers=clonal,
             f_a=f_a,
             f_b=f_b,
             w=weights,
