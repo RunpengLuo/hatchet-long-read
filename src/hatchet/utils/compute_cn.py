@@ -252,8 +252,8 @@ def execute_python(
     )
 
     best_instance = None
-    if args["bin_wise"]:
-        assert False, "bin_wise mode is unsupported"
+    if args["binwise"]:
+        assert False, "binwise mode is unsupported"
     else:
         instances = {}
         os.makedirs(os.path.join(sol_dir, "instances"), exist_ok=True)
