@@ -15,7 +15,8 @@ from hatchet.utils.cluster_bins_gmm import main as cluster_bins_gmm
 from hatchet.utils.cluster_bins import main as cluster_bins
 from hatchet.utils.plot_bins import main as plot_bins
 from hatchet.utils.plot_bins_1d2d import main as plot_bins_1d2d
-from hatchet.bin.HATCHet import main as hatchet_main
+# from hatchet.bin.HATCHet import main as hatchet_main
+from hatchet.utils.compute_cn import main as compute_cn
 from hatchet.utils.plot_cn import main as plot_cn
 from hatchet.utils.plot_cn_1d2d import main as plot_cn_1d2d
 from hatchet.utils.download_panel import main as download_panel
@@ -381,9 +382,12 @@ def main(args=None):
 
     if config.run.compute_cn:
         os.makedirs(f"{output}/results", exist_ok=True)
-        hatchet_main(
+        compute_cn(
             args=["-x", f"{output}/results", "-i", f"{output}/bbc/bulk"] + extra_args
         )
+        # hatchet_main(
+        #     args=["-x", f"{output}/results", "-i", f"{output}/bbc/bulk"] + extra_args
+        # )
 
     # ----------------------------------------------------
 

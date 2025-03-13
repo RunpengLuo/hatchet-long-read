@@ -18,6 +18,8 @@ from hatchet.utils.additional_features import (
     sort_chroms,
     get_array_file_path
 )
+
+import hatchet
 from hatchet import config, __version__
 
 
@@ -2576,6 +2578,520 @@ def parse_plot_bins_args(args=None):
         "dpi": args.dpi,
     }
 
+
+def parse_compute_cn_args(args=None):
+    description = ""
+    parser = argparse.ArgumentParser(
+        prog="hatchet compute-cn",
+        description=description,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "SOLVER", type=str, nargs="?", help="Path to the executable solver"
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=str,
+        required=True,
+        help="Prefix path to seg and bbc input files (required)",
+    )
+    parser.add_argument(
+        "-x",
+        "--runningdir",
+        type=str,
+        required=False,
+        default=config.compute_cn.runningdir,
+        help="Running directory (default: ./)",
+    )
+    parser.add_argument(
+        "-n",
+        "--clones",
+        type=str,
+        required=False,
+        default=config.compute_cn.clones,
+        help=(
+            "Either an estimated number of clones or an interval where the\nnumber of clones should be looked for "
+            "given in the form LOWER,UPPER where LOWER and UPPER are two integer defining the interval "
+            "(default: 2,8)"
+        ),
+    )
+    parser.add_argument(
+        "-f",
+        "--noampdel",
+        action="store_true",
+        default=config.compute_cn.noampdel,
+        required=False,
+        help=(
+            "Remove amp-del assumption where each mutated allele of every segment can be either amplified or "
+            "deleted in all tumor clones w.r.t. base (2 for diploid and 4 for tetraploid) (default: use assumption)"
+        ),
+    )
+    parser.add_argument(
+        "-c",
+        "--clonal",
+        type=str,
+        required=False,
+        default=config.compute_cn.clonal,
+        help="Clonal clusters to fix for tetraploid (default: automatically inferred)",
+    )
+    parser.add_argument(
+        "-d",
+        "--cnstates",
+        type=int,
+        required=False,
+        default=config.compute_cn.cnstates,
+        help="Maximum number of distinct copy-number states for each segment (default: None, no limit)",
+    )
+    parser.add_argument(
+        "-eD",
+        "--diploidcmax",
+        type=int,
+        required=False,
+        default=config.compute_cn.diploidcmax,
+        help=(
+            "Maximum copy-number value overall segments (default: 6, 0 means inferred from scaled fractional copy "
+            "numbers)"
+        ),
+    )
+    parser.add_argument(
+        "-eT",
+        "--tetraploidcmax",
+        type=int,
+        required=False,
+        default=config.compute_cn.tetraploidcmax,
+        help=(
+            "Maximum copy-number value overall segments (default: 12, 0 means inferred from scaled fractional "
+            "copy numbers)"
+        ),
+    )
+    parser.add_argument(
+        "-ts",
+        "--minsize",
+        type=float,
+        required=False,
+        default=config.compute_cn.minsize,
+        help="The minimum proportion of covered genome for potential clonal clusters (default: 0.008)",
+    )
+    parser.add_argument(
+        "-tc",
+        "--minchrs",
+        type=int,
+        required=False,
+        default=config.compute_cn.minchrs,
+        help="The minimum number of covered chromosomes for potential clonal clusters (default: 1)",
+    )
+    parser.add_argument(
+        "-td",
+        "--maxneutralshift",
+        type=float,
+        required=False,
+        default=config.compute_cn.maxneutralshift,
+        help=(
+            "Maximum BAF shift for neutral cluster used to automatically infer the diploid/tetraploid cluster "
+            "(default: 0.1)"
+        ),
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        default=config.compute_cn.merge,
+        required=False,
+        help="Merge the clusters (default: false)",
+    )
+    parser.add_argument(
+        "-mR",
+        "--mergeRDR",
+        type=float,
+        required=False,
+        default=config.compute_cn.mergerdr,
+        help="RDR tolerance used for finding the clonal copy numbers (default: 0.08)",
+    )
+    parser.add_argument(
+        "-mB",
+        "--mergeBAF",
+        type=float,
+        required=False,
+        default=config.compute_cn.mergebaf,
+        help="BAF tolerance used for finding the clonal copy numbers (default: 0.04)",
+    )
+    parser.add_argument(
+        "-l",
+        "--limitinc",
+        type=float,
+        required=False,
+        default=config.compute_cn.limitinc,
+        help=(
+            "Upper bound to the relative increase of objective function. When there are significant small CNAs, "
+            "their effect on the objective function may be confounded by only larger events, use this value to "
+            "limit the relative increase of OBJ so that fitting small CNAs is more considered (default: None)"
+        ),
+    )
+    parser.add_argument(
+        "-g",
+        "--ghostprop",
+        type=float,
+        required=False,
+        default=config.compute_cn.ghostprop,
+        help=(
+            "Increasing proportion used to compute the value of the first ghost point added in the solution "
+            "selection (default: 0.3)"
+        ),
+    )
+    parser.add_argument(
+        "-tR",
+        "--toleranceRDR",
+        type=float,
+        required=False,
+        default=config.compute_cn.tolerancerdr,
+        help="RDR tolerance used for finding the clonal copy numbers (default: 0.08)",
+    )
+    parser.add_argument(
+        "-tB",
+        "--toleranceBAF",
+        type=float,
+        required=False,
+        default=config.compute_cn.tolerancebaf,
+        help="BAF tolerance used for finding the clonal copy numbers (default: 0.04)",
+    )
+    parser.add_argument(
+        "-p",
+        "--seeds",
+        type=int,
+        required=False,
+        default=config.compute_cn.seeds,
+        help="Number of seeds for coordinate-descent method (default: 400)",
+    )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        required=False,
+        default=config.compute_cn.jobs,
+        help="Number of parallel jobs (default: maximum available on the machine)",
+    )
+    parser.add_argument(
+        "-r",
+        "--randomseed",
+        type=int,
+        required=False,
+        default=config.compute_cn.randomseed,
+        help="Random seed (default: None)",
+    )
+    parser.add_argument(
+        "-s",
+        "--timelimit",
+        type=int,
+        required=False,
+        default=config.compute_cn.timelimit,
+        help="Time limit for each ILP run (default: None)",
+    )
+    parser.add_argument(
+        "-m",
+        "--memlimit",
+        type=int,
+        required=False,
+        default=config.compute_cn.memlimit,
+        help="Memory limit for each ILP run (default: None)",
+    )
+    parser.add_argument(
+        "-u",
+        "--minprop",
+        type=float,
+        required=False,
+        default=config.compute_cn.minprop,
+        help="Minimum clone proporion in each sample (default: 0.03)",
+    )
+    parser.add_argument(
+        "--maxiterations",
+        type=int,
+        required=False,
+        default=config.compute_cn.maxiterations,
+        help="Maximum number of iterations composed of C-step/U-step for each seed (default: 10)",
+    )
+    parser.add_argument(
+        "--mode",
+        type=int,
+        required=False,
+        default=config.compute_cn.mode,
+        help=(
+            "Solving mode among: Coordinate Descent + exact ILP (0), exact ILP only (1), and Coordinate-descent "
+            "only (2) (default: 2)"
+        ),
+    )
+    parser.add_argument(
+        "--diploid",
+        action="store_true",
+        default=config.compute_cn.diploid,
+        required=False,
+        help="Run diploid mode without WGD (default: true)",
+    )
+    parser.add_argument(
+        "--tetraploid",
+        action="store_true",
+        default=config.compute_cn.tetraploid,
+        required=False,
+        hhelp="Run tetraploid mode with WGD (default: true)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbosity",
+        type=int,
+        required=False,
+        default=config.compute_cn.verbosity,
+        help="Level of verbosity among: none (0), essential (1), verbose (2), and debug (3) (default: 1)",
+    )
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+    parser.add_argument(
+        "-b",
+        "--binwise",
+        action="store_true",
+        default=config.compute_cn.binwise,
+        required=False,
+        help=(
+            "Use bin-wise objective function which requires more variables and constraints but accounts for cluster "
+            "variances (default False). Only works with non-cpp solvers."
+        ),
+    )
+    parser.add_argument(
+        "-P",
+        "--purities",
+        type=str,
+        default=config.compute_cn.purities,
+        required=False,
+        help="Fix purities for each sample, space-delimited tuple: <sample>=<purity>",
+    )
+    parser.add_argument(
+        "--reg_term",
+        type=str,
+        default=config.compute_cn.reg_term,
+        required=False,
+        help="Regularization term <type>=<steps>,<step_size>, type=[RAW,MAXCN]",
+    )
+    parser.add_argument(
+        "-mP",
+        "--min_purity",
+        type=float,
+        default=config.compute_cn.min_purity,
+        required=False,
+        help="When eetimate WGD clonal cluster, inferred tumor purity must above <min_purity>",
+    )
+    # TODO "fixed_cn" "fixed_purity"
+    # 0.8,0.2,0.0;0.6,0.1,0.3  <uprop_i;> one per sample, dict type \\
+    # 1:1|1,1|2; <segID:<cA|cB>,<cA|cB>;> one per cluster, dict type
+    args = parser.parse_args(args)
+
+    solver_name = config.compute_cn.solver
+    solver_path = args.SOLVER
+    if solver_name == "cpp":
+        if solver_path == None:
+            solver_path = os.path.join(os.path.dirname(hatchet.__file__), "solve")
+        ensure(os.path.isfile(solver_path), f"Solver not found in {solver_path}!")
+        ensure(
+            not args.binwise,
+            "The bin-wise objective is not supported for the solver 'cpp'. Please use a pyomo solver.",
+        )
+
+    seg_file = args.input + ".seg"
+    ensure(os.path.isfile(seg_file), f"SEG file {seg_file} not found!")
+    bbc_file = args.input + ".bbc"
+    ensure(os.path.isfile(bbc_file), f"BBC file {bbc_file} not found!")
+
+    cbound = args.clones.split(",")
+    ensure(
+        len(cbound) >= 1 and len(cbound) <= 2 and all(c.isdigit() for c in cbound),
+        "Wrong format for interval of clone numbers!",
+    )
+    ln = un = int(cbound[0])
+    if len(cbound) == 2:
+        un = int(cbound[1])
+    ensure(
+        ln >= 2 and ln <= un,
+        "#clones must at least 2, lower-bound cannot exceed upper-bound",
+    )
+
+    ensure(
+        args.cnstates == None or args.cnstates > 0,
+        "The maximum number of copy-number states should be default None or a positive non-zero integer!",
+    )
+
+    if args.diploidcmax == 0:
+        args.diploidcmax = None
+    ensure(
+        args.diploidcmax == None or args.diploidcmax > 0,
+        "The maximum diploid copy number must be an integer >= 1!",
+    )
+
+    if args.tetraploidcmax == 0:
+        args.tetraploidcmax = None
+    ensure(
+        args.tetraploidcmax == None or args.tetraploidcmax > 0,
+        "The maximum tetraploid copy number must be an integer >= 1!",
+    )
+
+    ensure(
+        args.minsize >= 0.0 and args.minsize <= 1.0,
+        "The genome-size proportions for potential clonal clusters must be in [0, 1]!",
+    )
+
+    # TODO generalize to non-human?
+    ensure(
+        args.minchrs >= 0 and args.minchrs <= 22,
+        "#chromosomes for potential clonal clusters must be in [0, 22]!",
+    )
+
+    ensure(
+        args.maxneutralshift >= 0.0 and args.maxneutralshift <= 1.0,
+        "The maximum BAF shift for neutral cluster must be in [0, 1]!",
+    )
+
+    ensure(
+        args.toleranceRDR >= 0.0 and args.toleranceRDR <= 1.0,
+        "The RDR tolerance for finding clonal copy numbers must be in [0, 1]!",
+    )
+
+    ensure(
+        args.toleranceBAF >= 0.0 and args.toleranceBAF <= 1.0,
+        "The BAF tolerance for finding clonal copy numbers must be in [0, 1]!",
+    )
+
+    ensure(
+        args.mergeRDR >= 0.0 and args.mergeRDR <= 1.0,
+        "The RDR tolerance for merging clusters must be in [0, 1]!",
+    )
+
+    ensure(
+        args.mergeBAF >= 0.0 and args.mergeBAF <= 1.0,
+        "The BAF tolerance for merging clusters must be in [0, 1]!",
+    )
+
+    ensure(
+        args.limitinc == None or (args.limitinc >= 0.0 and args.limitinc <= 1.0),
+        "The increasing limit must be in [0, 1]!",
+    )
+
+    ensure(
+        args.ghostprop >= 0.0 and args.ghostprop <= 1.0,
+        "The increasing proportion of the ghost point must be in [0, 1]!",
+    )
+
+    ensure(args.seeds > 0, "The number of seeds should be a positive non-zero integer")
+
+    ensure(
+        args.jobs == None or args.jobs > 0,
+        "The number of jobs should be a positive non-zero integer",
+    )
+
+    ensure(
+        args.randomseed == None or args.randomseed > 0,
+        "The random seed should be a positive non-zero integer or default None!",
+    )
+
+    ensure(
+        args.timelimit == None or args.timelimit > 0,
+        "The time limit should be a positive non-zero integer or default None!",
+    )
+
+    ensure(
+        args.memlimit == None or args.memlimit > 0,
+        "The memory limit should be a positive non-zero integer or default None!",
+    )
+
+    ensure(
+        args.minprop == None or (args.minprop >= 0.0 and args.minprop <= 0.3),
+        "The minimum proportion of clones on each sample must be in [0, 0.3]",
+    )
+
+    ensure(
+        args.maxiterations == None or args.maxiterations > 0,
+        "The max-iteration number must be a positive integer!",
+    )
+
+    ensure(args.mode in (None, 0, 1, 2), "The mode integer must be in (0, 1, 2)!")
+
+    ensure(
+        args.diploid or args.tetraploid,
+        "At least one type is required [diploid, tetraploid]",
+    )
+
+    ensure(
+        0 <= args.verbosity <= 3, "The verbosity level must be a value within 0,1,2,3!"
+    )
+
+    if args.purities != None:
+        purities = {}
+        for tp in args.purities.split():
+            sample, purity = tp.split("=")
+            purities[sample] = float(purity)
+            ensure(
+                0.0 <= purities[sample] <= 1.0,
+                f"{sample} has purity out of bound [0,1]!",
+            )
+        args.purities = purities
+
+    ensure(0.0 <= args.min_purity <= 1.0, "min_purity is out of bound [0, 1]")
+    if args.reg_term != None:
+        reg_type, reg_val = args.reg_term.split("=")
+        ensure(
+            reg_type in ["RAW", "MAXCN", "DROOT_SUM", "DADJ"],
+            "unsupported penalty term",
+        )
+        if reg_type == "RAW":
+            args.reg_term = [reg_type, 0, 0.0]
+        else:
+            [reg_steps, reg_ssize] = reg_val.split(",")
+            args.reg_term = [reg_type, int(reg_steps), float(reg_ssize)]
+            ensure(
+                args.reg_term[1] > 0, "#steps for penalized optimization must be > 0"
+            )
+            ensure(
+                args.reg_term[2] > 0.0,
+                "step-size for penalized optimization must be > 0.0",
+            )
+    else:
+        args.reg_term = ["RAW", 0, 0.0]
+
+    return {
+        "solver": solver_name,
+        "solver_path": solver_path,
+        "input": args.input,
+        "seg": seg_file,
+        "bbc": bbc_file,
+        "ln": ln,
+        "un": un,
+        "clonal": args.clonal,
+        "ampdel": not args.noampdel,
+        "d": args.cnstates,
+        "eD": args.diploidcmax,
+        "eT": args.tetraploidcmax,
+        "ts": args.minsize,
+        "tc": args.minchrs,
+        "td": args.maxneutralshift,
+        "tR": args.toleranceRDR,
+        "tB": args.toleranceBAF,
+        "mR": args.mergeRDR,
+        "mB": args.mergeBAF,
+        "limit": args.limitinc,
+        "g": args.ghostprop,
+        "p": args.seeds,
+        "j": args.jobs,
+        "r": args.randomseed,
+        "s": args.timelimit,
+        "m": args.memlimit,
+        "u": args.minprop,
+        "f": args.maxiterations,
+        "M": args.mode,
+        "x": args.runningdir,
+        "diploid": args.diploid,
+        "tetraploid": args.tetraploid,
+        "v": args.verbosity,
+        "binwise": args.binwise,
+        "purities": args.purities,
+        "mP": args.min_purity,
+        "reg_term": args.reg_term,
+    }
 
 def extractChromosomes(samtools, normal, tumors, reference=None):
     """

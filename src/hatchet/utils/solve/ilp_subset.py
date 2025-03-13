@@ -502,6 +502,7 @@ class ILPSubset:
             for _k in range(k):
                 objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[self.cluster_ids[_m]]
 
+        # TODO make this more efficient by pyomo.Param to reuse states
         [pname, pparam] = self.penalty_param
         if pname != "RAW" and mode_t in ("FULL", "CARCH"):
             if pname == "MAXCN":
@@ -520,8 +521,8 @@ class ILPSubset:
                     cluster_id = self.cluster_ids[_m]
                     objective += pparam * self.w[cluster_id] * hcn_vars[(_m, "a")]
                     objective += pparam * self.w[cluster_id] * hcn_vars[(_m, "b")]
-            elif pname == "DROOT":
-                # distance from tumor clone to normal clone state per cluster
+            elif pname == "DROOT_SUM":
+                # total distance from tumor clone to normal clone state per cluster
                 manhat_vars = {}
                 for _m in range(m):
                     for _n in range(1, n):
@@ -539,10 +540,48 @@ class ILPSubset:
                     for _n in range(1, n):
                         objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
                         objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
-            # DADJ
+            elif pname == "DROOT_MAX":
+                # max distance from tumor clone to normal clone per cluster
+                droot_vars = {}
+                for _m in range(m):
+                    droot_vars[(_m, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                    model.add_component(f"DRA_{_m}", droot_vars[(_m, "a")])
+                    droot_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                    model.add_component(f"DRB_{_m}", droot_vars[(_m, "b")])
+                    for _n in range(1, n):
+                        model.constraints.add(self.cA[_m][_n] - self.cA[_m][0] <= droot_vars[(_m, "a")])
+                        model.constraints.add(self.cA[_m][0] - self.cA[_m][_n] <= droot_vars[(_m, "a")])
+                        model.constraints.add(self.cB[_m][_n] - self.cB[_m][0] <= droot_vars[(_m, "b")])
+                        model.constraints.add(self.cB[_m][0] - self.cB[_m][_n] <= droot_vars[(_m, "b")])
+                # add objective
+                for _m in range(m):
+                    cluster_id = self.cluster_ids[_m]
+                    objective += pparam * self.w[cluster_id] * droot_vars[(_m, "a")]
+                    objective += pparam * self.w[cluster_id] * droot_vars[(_m, "b")]
+            elif pname == "DADJ_SUM":
+                # total distance for all pairs of clones per cluster
+                manhat_vars = {}
+                for _m in range(m):
+                    for _n1 in range(n - 1):
+                        for _n2 in range(_n1 + 1, n):
+                            manhat_vars[(_m, _n1, _n2, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                            model.add_component(f"MDA_{_m}_{_n1}_{_n2}", manhat_vars[(_m, _n1, _n2, "a")])
+                            manhat_vars[(_m, _n1, _n2, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+                            model.add_component(f"MDB_{_m}_{_n1}_{_n2}", manhat_vars[(_m, _n1, _n2, "b")])
+                        model.constraints.add(self.cA[_m][_n1] - self.cA[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "a")])
+                        model.constraints.add(self.cA[_m][_n2] - self.cA[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "a")])
+                        model.constraints.add(self.cB[_m][_n1] - self.cB[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "b")])
+                        model.constraints.add(self.cB[_m][_n2] - self.cB[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "b")])
+                # add objective
+                for _m in range(m):
+                    cluster_id = self.cluster_ids[_m]
+                    for _n1 in range(n - 1):
+                        for _n2 in range(_n1 + 1, n):
+                            objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n1, _n2, "a")]
+                            objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n1, _n2, "b")]
             else:
                 pass
-                # TODO metin's penalty
+                # TODO metin's penalty or else
                 # objective += self.large_cn_penalty(model, 1, ub)
 
         if mode_t == "FULL":

@@ -28,7 +28,8 @@ from hatchet.utils.cluster_bins import main as cluster_bins  # noqa: F401
 
 from hatchet.utils.plot_bins import main as plot_bins  # noqa: F401
 from hatchet.utils.plot_bins_1d2d import main as plot_bins_1d2d  # noqa: F401
-from hatchet.bin.HATCHet import main as compute_cn  # noqa: F401
+# from hatchet.bin.HATCHet import main as compute_cn  # noqa: F401
+from hatchet.utils.compute_cn import main as compute_cn  # noqa: F401
 from hatchet.utils.plot_cn import main as plot_cn  # noqa: F401
 from hatchet.utils.plot_cn_1d2d import main as plot_cn_1d2d  # noqa: F401
 
