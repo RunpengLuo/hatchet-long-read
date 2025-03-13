@@ -216,7 +216,8 @@ def execute_python(
 
     # bbc = pd.read_table(args["bbc"])
     seg = pd.read_table(args["seg"]).sort_values(["#ID", "SAMPLE"])
-    sample_ids = np.sort(seg["SAMPLE"].unique())
+    sample_ids = sorted(seg["SAMPLE"].unique().tolist())
+    cluster_ids = sorted(seg["#ID"].unique().tolist())
 
     rdr = seg.pivot(index="#ID", columns="SAMPLE", values="RD")
     baf = seg.pivot(index="#ID", columns="SAMPLE", values="BAF")
