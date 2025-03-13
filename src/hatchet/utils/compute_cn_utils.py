@@ -121,7 +121,7 @@ def get_scaling_factor_WGD(
             clonals[p][pz_result[0]] = pz_result
 
     # find maximum-weighted clonal cluster z that appears as candidate to all samples
-    for zid in sorted(cluster_sizes.keys(), lambda z_: cluster_sizes[z_], reverse=True):
+    for zid in sorted(cluster_sizes.keys(), key=lambda z_: cluster_sizes[z_], reverse=True):
         if all(zid in clonals[p] for p in samples):
             final_clonals = {}  # may also be useful.
             gammas = {}

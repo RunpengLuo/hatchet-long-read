@@ -80,7 +80,7 @@ def main(args=None):
     sp.log(msg="General cluster statistics\n", level="INFO")
     sp.log(msg="#ID\tSIZE(bp)\n")
     for cid, csize in cluster_sizes.items():
-        sp.log(msg=f"{cid}\t{csize}\n", level="INFO")
+        sp.log(msg=f"#{cid}\t{csize}\n", level="INFO")
 
     s, gammas_dip = get_scaling_factor_no_WGD(
         seg=fseg,
@@ -102,9 +102,11 @@ def main(args=None):
         clonal_dip = {s: (1, 1)}
         sp.log(msg=f"running diploid with clonal clusters={str(clonal_dip)}\n", level="STEP")
         for n in range(first_n, last_n):
-            diploid_sols[n] = solve_func(
+            obj = solve_func(
                 n, clonal_dip, gammas_dip, cluster_sizes, args, "diploid"
             )
+            diploid_sols[n] = obj
+            sp.log(msg=f"diploid n={n} objective={obj}\n", level="STEP")
 
     tetraploid_sols = {}
     if args["tetraploid"]:
@@ -128,9 +130,11 @@ def main(args=None):
             clonal_tet = {s: (2, 2), zid: cz}
             sp.log(msg=f"running tetraploid with clonal clusters={str(clonal_tet)}\n", level="STEP")
             for n in range(first_n, last_n):
-                tetraploid_sols[n] = solve_func(
+                obj = solve_func(
                     n, clonal_tet, gammas_wgd, cluster_sizes, args, "tetraploid"
                 )
+                tetraploid_sols[n] = obj
+                sp.log(msg=f"tetraploid n={n} objective={obj}\n", level="STEP")
 
     # final model selection between diploid and tetraploid with varying n.
     n_dip, n_tet, best_type = model_selection(diploid_sols, tetraploid_sols, args["v"])
