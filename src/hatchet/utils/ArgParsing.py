@@ -2861,14 +2861,14 @@ def parse_compute_cn_args(args=None):
         type=str,
         default=config.compute_cn.purities,
         required=False,
-        help="Fix purities for each sample, space-delimited tuple: <sample>=<purity>",
+        help="Fix purities for each sample, space-delimited tuple: <sample>:<purity>",
     )
     parser.add_argument(
         "--reg_term",
         type=str,
         default=config.compute_cn.reg_term,
         required=False,
-        help="Regularization term <type>=<steps>,<step_size>, type=[RAW,MAXCN]",
+        help="Regularization term <type>:<steps>,<step_size>, type=[RAW,MAXCN]",
     )
     parser.add_argument(
         "-mP",
@@ -3023,7 +3023,7 @@ def parse_compute_cn_args(args=None):
     if args.purities != None:
         purities = {}
         for tp in args.purities.split():
-            sample, purity = tp.split("=")
+            sample, purity = tp.split(":")
             purities[sample] = float(purity)
             ensure(
                 0.0 <= purities[sample] <= 1.0,
@@ -3033,7 +3033,7 @@ def parse_compute_cn_args(args=None):
 
     ensure(0.0 <= args.min_purity <= 1.0, "min_purity is out of bound [0, 1]")
     if args.reg_term != None:
-        reg_type, reg_val = args.reg_term.split("=")
+        reg_type, reg_val = args.reg_term.split(":")
         ensure(
             reg_type in ["RAW", "MAXCN", "DROOT_SUM", "DADJ"],
             "unsupported penalty term",
