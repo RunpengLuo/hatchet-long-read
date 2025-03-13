@@ -4,6 +4,8 @@ import sys
 import pandas as pd
 import numpy as np
 
+import hatchet.utils.Supporting as sp
+
 
 def get_scaling_factor_no_WGD(
     seg: pd.DataFrame, samples: list, cluster_sizes: dict, tol_baf: float, v=1
@@ -17,9 +19,10 @@ def get_scaling_factor_no_WGD(
         if all(abs(seg.loc[seg["#ID"] == cid, "BAF"] - 0.5) <= tol_baf):
             s = cid
             break
-
-    # if s == None: TODO
-    assert s != None, "cannot determine netural cluster"
+    
+    if s == None:
+        sp.log(msg=f"ERROR! unable to locate netural cluster with td={tol_baf}\n", level="ERROR")
+        assert s != None
 
     gammas = {}
     for p in samples:
@@ -50,8 +53,10 @@ def get_scaling_factor_WGD(
         3. cz=5..<max_cn> if RD(z, p) > RD(s, p)
         4. for any cz, inferred tumor purity must above <lb_purity>,
         5. and have minimum BAF-error < <baf_tol>
-        6. z has minimum copy-number cz satisfies (4) and (5).
-    3. among all candidate clonal cluster, the most weighted one is more confident.
+        6. z has lowest copy-number cz that satisfies (4) and (5).
+    3. among all candidate clonal cluster, the most weighted 
+       cluster z that appears in all samples are chosen.
+    4. cz is selected as the lowest value among all samples.
     """
 
     def get_gamma(rds: float, rdz: float, cz: int):
@@ -97,6 +102,7 @@ def get_scaling_factor_WGD(
                 # similar RD as netural cluster is not informative
                 continue
 
+            # all possible cz that passes baf-tol threshold
             cz_stats = []
             for cz in czs:
                 # for fixed cz, we can compute gamma and purity.
@@ -116,8 +122,8 @@ def get_scaling_factor_WGD(
             if len(cz_stats) == 0:
                 continue
 
-            # pick the result that has BAF-error in tolerence with minimum cz
-            pz_result = min(cz_stats, key=lambda elem: elem[-1])
+            # pick the lowest cz among all candidate czs
+            pz_result = min(cz_stats, key=lambda elem: elem[1])
             clonals[p][pz_result[0]] = pz_result
 
     # find maximum-weighted clonal cluster z that appears as candidate to all samples
@@ -128,8 +134,7 @@ def get_scaling_factor_WGD(
             for p in samples:
                 final_clonals[p] = clonals[p][zid]
                 gammas[p] = final_clonals[p][2]
-            cz = min(final_clonals.values(), key=lambda val: val[-1])[4]  # (az, bz)
+            # pick the lowest cz=(az, bz) among all samples
+            cz = min(final_clonals.values(), key=lambda val: val[1])[4]  # (az, bz)
             return zid, cz, gammas
-
-    print(clonals)
     return None, None, None

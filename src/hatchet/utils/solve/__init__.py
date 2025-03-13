@@ -6,6 +6,8 @@ from collections import OrderedDict
 import kneed
 import matplotlib.pyplot as plt
 
+import hatchet.utils.Supporting as sp
+
 from hatchet.utils.solve.utils import *
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
 from hatchet.utils.solve.cd import CoordinateDescent, CoordinateDescentSplit
@@ -169,19 +171,15 @@ def model_selection_instance(
 
     sol_index = 0
     if elbow_x == None:
-        print(
-            f"Failed to identify elbow in model selection step, use result without penalty."
-        )
+        sp.log(msg=f"Failed to identify elbow in model selection step, use result without penalty.\n", level="WARN")
     else:
         sol_indices = np.where(ys >= elbow_y)[0]
         if len(sol_indices) == 0:
-            print(
-                f"Failed to locate result in model selection step, use result without penalty."
-            )
+            sp.log(msg=f"Failed to locate result in model selection step, use result without penalty.\n", level="WARN")
         else:
             # multiple instance may yield same objective values, pick the one with minimum penalty
             sol_index = sol_indices[0]
-            print(f"Model selection found solution with index={sol_index}")
+            sp.log(msg=f"Model selection found solution with index={sol_index}!\n", level="INFO")
     df.loc[:, "selected"] = ""
     df.loc[sol_index, "selected"] = "*"
     df.to_csv(f"{outdir}/model_selections.tsv", sep="\t", header=True, index=False)
