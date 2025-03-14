@@ -284,6 +284,8 @@ def execute_python(
             param = step_size * i0
             instance_dir = os.path.join(sol_dir, f"instances/solve_{pname}_{param}")
             os.makedirs(instance_dir, exist_ok=True)
+            if args["v"] >= 2:
+                sp.log(msg=f"running instance {i0}/{num_steps} for {problem_type}\n", level="STEP")
             instances[param] = solve_instance(
                 f_a=f_a,
                 f_b=f_b,
@@ -360,6 +362,7 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
             ylabel="IMF-objective",
         )
         plt.savefig(os.path.join(out_dir, f"pareto_curve.{problem_type}.png"), dpi=300)
+        sp.log(msg=f"Pareto curve can be found at <outdir>/pareto_curve.{problem_type}.png\n", level="INFO")
         
         if elbow_x == None:
             sp.log(msg=f"Failed to identify elbow in model selection step, use result with minimum IMF-objective\n", level="WARN")

@@ -504,7 +504,7 @@ class ILPSubset:
 
         # TODO make this more efficient by pyomo.Param to reuse states
         [pname, pparam] = self.penalty_param
-        if pname != "RAW" and mode_t in ("FULL", "CARCH"):
+        if pname != "RAW" and pparam > 0.0 and mode_t in ("FULL", "CARCH"):
             if pname == "MAXCN":
                 # constrain maximum copy-number states per cluster
                 hcn_vars = {}
