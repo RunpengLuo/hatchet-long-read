@@ -136,7 +136,8 @@ def model_selection_instance(
     assert len(instances) > 0, "ERROR! there is no solution to be selected"
 
     if pname == "RAW" or len(instances) == 1:
-        return instances[0]
+        return instances[0], instances[0][1]
+
     data = []
     for param, [tobj, cA, cB, u, _, _] in sorted(
         instances.items(), key=lambda tp: tp[0]
@@ -185,4 +186,4 @@ def model_selection_instance(
     df.loc[sol_index, "selected"] = "*"
     df.to_csv(f"{outdir}/model_selections.tsv", sep="\t", header=True, index=False)
 
-    return instances[df.loc[sol_index, "Lambda"]]
+    return instances[df.loc[sol_index, "Lambda"]], df.loc[sol_index, "IMF-objective"]

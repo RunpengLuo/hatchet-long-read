@@ -4,6 +4,8 @@ import shutil
 
 import numpy as np
 import pandas as pd
+import kneed
+import matplotlib.pyplot as plt
 
 import hatchet.utils.Supporting as sp
 from hatchet.utils.ArgParsing import parse_compute_cn_args
@@ -102,11 +104,11 @@ def main(args=None):
         clonal_dip = {s: (1, 1)}
         sp.log(msg=f"running diploid with clonal clusters={str(clonal_dip)}\n", level="STEP")
         for n in range(first_n, last_n):
-            obj = solve_func(
+            (obj, imf_obj) = solve_func(
                 n, clonal_dip, gammas_dip, cluster_sizes, args, "diploid"
             )
-            diploid_sols[n] = obj
-            sp.log(msg=f"diploid n={n} objective={obj}\n", level="STEP")
+            diploid_sols[n] = (obj, imf_obj)
+            sp.log(msg=f"diploid n={n} objective={obj} imf-objective={imf_obj}\n", level="STEP")
 
     tetraploid_sols = {}
     if args["tetraploid"]:
@@ -130,14 +132,14 @@ def main(args=None):
             clonal_tet = {s: (2, 2), zid: cz}
             sp.log(msg=f"running tetraploid with clonal clusters={str(clonal_tet)}\n", level="STEP")
             for n in range(first_n, last_n):
-                obj = solve_func(
+                (obj, imf_obj) = solve_func(
                     n, clonal_tet, gammas_wgd, cluster_sizes, args, "tetraploid"
                 )
-                tetraploid_sols[n] = obj
-                sp.log(msg=f"tetraploid n={n} objective={obj}\n", level="STEP")
+                tetraploid_sols[n] = (obj, imf_obj)
+                sp.log(msg=f"tetraploid n={n} objective={obj} imf-objective={imf_obj}\n", level="STEP")
 
     # final model selection between diploid and tetraploid with varying n.
-    n_dip, n_tet, best_type = model_selection(diploid_sols, tetraploid_sols, args["v"])
+    n_dip, n_tet, best_type = model_selection_final(diploid_sols, tetraploid_sols, out_dir, args["v"])
 
     # save model selected result here
     if n_dip > 0:
@@ -272,6 +274,7 @@ def execute_python(
     max_iters = 10 if args["f"] == None else args["f"]
 
     best_instance = None
+    imf_obj = 0.0
     if args["binwise"]:
         assert False, "binwise mode is unsupported"
     else:
@@ -305,7 +308,7 @@ def execute_python(
                 instance_dir=instance_dir,
                 solve_mode=solver_mode,
             )
-        best_instance = model_selection_instance(
+        best_instance, imf_obj = model_selection_instance(
             f_a, f_b, weights, instances, pname, sol_dir
         )
 
@@ -321,7 +324,7 @@ def execute_python(
         bbc_out_file=out_bbc,
         seg_out_file=out_seg,
     )
-    return obj
+    return obj, imf_obj
 
 
 def execute_cpp(
@@ -333,9 +336,53 @@ def execute_cpp(
     problem_type: str,
 ):
     sp.log(msg="cpp optimization is not implemented yet!\n", level="INFO")
-    return -1
+    return -1, -1
 
-def model_selection(diploid_sols: dict, tetraploid_sols: dict, v=1):
-    sp.log(msg="model selection is not implemented yet!\n", level="INFO")
-    # TODO
-    return 2, 2, "diploid"
+def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: str, v=1):
+    """
+    1. select n based on elbow criterion for either WGD/no WGD
+    2. then select the final solution based on principle of parsimony (lowest n)
+    """
+    def select_best_n(data: list, problem_type: str):
+        sp.log(msg=f"running model selection for {problem_type}\n", level="INFO")
+        # pick init solution with minimum IMF-objective
+        best_res = min(data, key=lambda d: d[1])
+        if len(data) <= 2:
+            return best_res
+        df = pd.DataFrame(data=data, columns=["n", "IMF-objective"])
+        xs, ys = df["n"].to_numpy(), df["IMF-objective"].to_numpy()
+        kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
+        elbow_x, elbow_y = kl.elbow, kl.elbow_y
+        kl.plot_knee(
+            title=f"Model Selection Pareto Curve - {problem_type}",
+            xlabel=f"#clones",
+            ylabel="IMF-objective",
+        )
+        plt.savefig(os.path.join(out_dir, f"pareto_curve.{problem_type}.png"), dpi=300)
+        
+        if elbow_x == None:
+            sp.log(msg=f"Failed to identify elbow in model selection step, use result with minimum IMF-objective\n", level="WARN")
+        else:
+            sol_indices = np.where(ys >= elbow_y)[0]
+            if len(sol_indices) == 0:
+                sp.log(msg=f"Failed to locate result in model selection step, use result with minimum IMF-objective\n", level="WARN")
+            else:
+                sol_index = sol_indices[0]
+                best_res = (df.loc[sol_index, "n"], df.loc[sol_index, "IMF-objective"])
+        return best_res
+    
+
+    if len(diploid_sols) == 0 and len(tetraploid_sols) == 0:
+        sp.log(msg="ERROR! no solution found for either diploid or tetraploid setting!\n", level="ERROR")
+        raise ValueError(sp.error(f"final model selection error"))
+    
+    data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
+    (n2, obj2) = select_best_n(sorted(data_diploid, key=lambda a: a[0]), "diploid")
+    sp.log(msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO")
+    
+    data_tetraploid = [[n, imf_obj] for n, (_, imf_obj) in tetraploid_sols.items()]
+    (n4, obj4) = select_best_n(sorted(data_tetraploid, key=lambda a: a[0]), "tetraploid")
+    sp.log(msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n", level="INFO")
+
+    # pick best solution by principle of parsimony
+    return n2, n4, "diploid" if n2 <= n4 else "tetraploid"
