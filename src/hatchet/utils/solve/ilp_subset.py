@@ -568,10 +568,11 @@ class ILPSubset:
                             model.add_component(f"MDA_{_m}_{_n1}_{_n2}", manhat_vars[(_m, _n1, _n2, "a")])
                             manhat_vars[(_m, _n1, _n2, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                             model.add_component(f"MDB_{_m}_{_n1}_{_n2}", manhat_vars[(_m, _n1, _n2, "b")])
-                        model.constraints.add(self.cA[_m][_n1] - self.cA[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "a")])
-                        model.constraints.add(self.cA[_m][_n2] - self.cA[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "a")])
-                        model.constraints.add(self.cB[_m][_n1] - self.cB[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "b")])
-                        model.constraints.add(self.cB[_m][_n2] - self.cB[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "b")])
+
+                            model.constraints.add(self.cA[_m][_n1] - self.cA[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "a")])
+                            model.constraints.add(self.cA[_m][_n2] - self.cA[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "a")])
+                            model.constraints.add(self.cB[_m][_n1] - self.cB[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "b")])
+                            model.constraints.add(self.cB[_m][_n2] - self.cB[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "b")])
                 # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
