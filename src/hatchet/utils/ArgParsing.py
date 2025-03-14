@@ -2837,6 +2837,7 @@ def parse_compute_cn_args(args=None):
         "-v",
         "--verbosity",
         type=int,
+        choices=[0, 1, 2, 3],
         required=False,
         default=config.compute_cn.verbosity,
         help="Level of verbosity among: none (0), essential (1), verbose (2), and debug (3) (default: 1)",
@@ -3014,10 +3015,6 @@ def parse_compute_cn_args(args=None):
     ensure(
         args.diploid or args.tetraploid,
         "At least one type is required [diploid, tetraploid]",
-    )
-
-    ensure(
-        0 <= args.verbosity <= 3, "The verbosity level must be a value within 0,1,2,3!"
     )
 
     if args.purities != None:

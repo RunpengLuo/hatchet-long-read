@@ -48,6 +48,7 @@ def solve_instance(
     timelimit,
     instance_dir,
     solve_mode,
+    verbose=False
 ):
     """
     solve optimization with specific problem parameter setting
@@ -98,7 +99,7 @@ def solve_instance(
             penalty_param=penalty_param,
         )
         if solve_mode == "ilp":
-            ilp.create_model(pprint=False)
+            ilp.create_model(pprint=verbose)
         else:
             # run coordinate-descent first to get local-opt cA and cB
             # use cA and cB to hot start the model.

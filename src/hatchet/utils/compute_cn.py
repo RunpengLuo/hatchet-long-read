@@ -307,6 +307,7 @@ def execute_python(
                 timelimit=args["s"],
                 instance_dir=instance_dir,
                 solve_mode=solver_mode,
+                verbose=args["v"] >= 2
             )
         best_instance, imf_obj = model_selection_instance(
             f_a, f_b, weights, instances, pname, sol_dir
