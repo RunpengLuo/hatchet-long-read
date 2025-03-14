@@ -98,7 +98,9 @@ def store_instance_tofile(
                         for oi in range(n):
                             exp_fcn += (cA[ci][oi] + cB[ci][oi]) * u[oi][si]
                             exp_bcount += cB[ci][oi] * u[oi][si]
-                        exp_baf = exp_bcount / exp_fcn
+                        exp_baf = -1
+                        if exp_fcn != 0:
+                            exp_baf = exp_bcount / exp_fcn
                         row += f"{exp_baf}\t{exp_fcn}"
                         for oi in range(n):
                             row += f"\t{cA[ci][oi]}|{cB[ci][oi]}\t{u[oi][si]}"
@@ -128,15 +130,12 @@ def compute_individual_objs(
     u_ = np.array(u)
 
     imf_obj = compute_obj_IMF(w_, fA_, fB_, cA_, cB_, u_)
-    sub_obj = 0.0
-    if pname == "MAXCN":
-        sub_obj = compute_obj_MAXCN(w_, fA_, fB_, cA_, cB_, u_)
-    elif pname == "DROOT_SUM":
-        sub_obj = compute_obj_DROOT_SUM(w_, fA_, fB_, cA_, cB_, u_)
-    elif pname == "DADJ":
-        sub_obj = -1
-    else:
-        pass
+    reg_objs = {
+        "MAXCN": compute_obj_MAXCN,
+        "DROOT_SUM": compute_obj_DROOT_SUM,
+        "DADJ_SUM": compute_obj_DADJ_SUM,
+    }
+    sub_obj = reg_objs[pname](w_, fA_, fB_, cA_, cB_, u_)
     return [imf_obj, sub_obj]
 
 
@@ -149,26 +148,34 @@ def compute_obj_IMF(weights, fA, fB, cA, cB, u):
     obj = np.sum(leftA_w) + np.sum(leftB_w)
     return obj
 
-
-# TODO
 def compute_obj_DROOT_SUM(weights, fA, fB, cA, cB, u):
     """
-    compute weighted DROOT objective
-
     DROOT: hamming distance between (a,b) and (1,1), for tumor clones, per cluster
-    DADJ: hamming distance between (a,b) and (a',b'), for all clones, per cluster
     """
-    (m, n) = cA.shape
-    assert n > 1, "at least one tumor clone is needed"
     distA = weights * np.abs(cA[:, 1:] - cA[:, :1])
     distB = weights * np.abs(cB[:, 1:] - cB[:, :1])
     obj = np.sum(distA) + np.sum(distB)
     return obj
 
+# TODO
+def compute_obj_DADJ_SUM(weights, fA, fB, cA, cB, u):
+    """
+    DADJ: hamming distance between (a,b) and (a',b'), for all clones, per cluster
+    """
+    obj = 0
+    (m, n) = cA.shape
+    for _m in range(m):
+        obj_m = 0.0
+        for _n1 in range(n - 1):
+            for _n2 in range(_n1 + 1, n):
+                obj_m += abs(cA[_m, _n1] - cA[_m, _n2])
+                obj_m += abs(cB[_m, _n1] - cB[_m, _n2]) 
+        obj += weights[_m, 0] * obj_m
+    return obj
 
 def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     """
-    compute weighted max cn-state objective
+    MAXCN: weighted sum of cn-state per clsuter
     """
     maxA_w = np.dot(np.max(cA[:, 1:], axis=1), weights)[0]
     maxB_w = np.dot(np.max(cB[:, 1:], axis=1), weights)[0]

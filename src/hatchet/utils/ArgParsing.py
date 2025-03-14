@@ -2868,7 +2868,7 @@ def parse_compute_cn_args(args=None):
         type=str,
         default=config.compute_cn.reg_term,
         required=False,
-        help="Regularization term <type>:<steps>,<step_size>, type=[RAW,MAXCN]",
+        help="Regularization term <type>:<steps>,<step_size>, type=[RAW,MAXCN,DROOT_SUM,DADJ_SUM]",
     )
     parser.add_argument(
         "-mP",
@@ -3035,7 +3035,7 @@ def parse_compute_cn_args(args=None):
     if args.reg_term != None:
         reg_type, reg_val = args.reg_term.split(":")
         ensure(
-            reg_type in ["RAW", "MAXCN", "DROOT_SUM", "DADJ"],
+            reg_type in ["RAW", "MAXCN", "DROOT_SUM", "DADJ_SUM"],
             "unsupported penalty term",
         )
         if reg_type == "RAW":

@@ -78,7 +78,7 @@ def main(args=None):
         sp.log(msg="No cluster is filtered\n", level="STEP")
     
     sp.log(msg="General cluster statistics\n", level="INFO")
-    sp.log(msg="#ID\tSIZE(bp)\n")
+    sp.log(msg="#ID\tSIZE(bp)\n", level="INFO")
     for cid, csize in cluster_sizes.items():
         sp.log(msg=f"#{cid}\t{csize}\n", level="INFO")
 
@@ -185,9 +185,17 @@ def filtering(
     v=1,
 ):
     """
-    filter clusters before optimization step
+    filter&merge clusters before optimization step
     TODO we can also check variance of cluster and filter sparse ones
     """
+    cluster_maps = {}
+    for cid in cluster_sizes.keys():
+        cluster_maps[cid] = [cid]
+
+    # check sparsity for each cluster
+    # for cid in cluster_sizes.keys():
+    #     bbc_ = bbc[bbc["CLUSTER"] == cid]
+
     chrs_per_cluster = {}
     for cid in cluster_sizes.keys():
         chrs_per_cluster[cid] = bbc.loc[bbc["CLUSTER"] == cid, "#CHR"].unique().tolist()

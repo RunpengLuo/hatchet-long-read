@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import hatchet.utils.Supporting as sp
 
 from hatchet.utils.solve.utils import *
-from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
+from hatchet.utils.solve.ilp_subset import ILPSubset
+from hatchet.utils.solve.ilp_subset_split import ILPSubsetSplit
 from hatchet.utils.solve.cd import CoordinateDescent, CoordinateDescentSplit
 
 def solver_available(solver: str):
