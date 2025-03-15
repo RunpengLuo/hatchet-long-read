@@ -26,6 +26,7 @@ class Random:
         if self.seed is not None:
             np.random.set_state(random_states.pop())
 
+
 def store_solve_input(
     out_file: str,
     samples: list,
@@ -148,6 +149,7 @@ def compute_obj_IMF(weights, fA, fB, cA, cB, u):
     obj = np.sum(leftA_w) + np.sum(leftB_w)
     return obj
 
+
 def compute_obj_DROOT_SUM(weights, fA, fB, cA, cB, u):
     """
     DROOT: hamming distance between (a,b) and (1,1), for tumor clones, per cluster
@@ -156,6 +158,7 @@ def compute_obj_DROOT_SUM(weights, fA, fB, cA, cB, u):
     distB = weights * np.abs(cB[:, 1:] - cB[:, :1])
     obj = np.sum(distA) + np.sum(distB)
     return obj
+
 
 # TODO
 def compute_obj_DADJ_SUM(weights, fA, fB, cA, cB, u):
@@ -169,9 +172,10 @@ def compute_obj_DADJ_SUM(weights, fA, fB, cA, cB, u):
         for _n1 in range(n - 1):
             for _n2 in range(_n1 + 1, n):
                 obj_m += abs(cA[_m, _n1] - cA[_m, _n2])
-                obj_m += abs(cB[_m, _n1] - cB[_m, _n2]) 
+                obj_m += abs(cB[_m, _n1] - cB[_m, _n2])
         obj += weights[_m, 0] * obj_m
     return obj
+
 
 def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     """

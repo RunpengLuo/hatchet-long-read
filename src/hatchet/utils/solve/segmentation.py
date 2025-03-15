@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def segmentation(
     cA,
     cB,

@@ -19,9 +19,12 @@ def get_scaling_factor_no_WGD(
         if all(abs(seg.loc[seg["#ID"] == cid, "BAF"] - 0.5) <= tol_baf):
             s = cid
             break
-    
+
     if s == None:
-        sp.log(msg=f"ERROR! unable to locate netural cluster with td={tol_baf}\n", level="ERROR")
+        sp.log(
+            msg=f"ERROR! unable to locate netural cluster with td={tol_baf}\n",
+            level="ERROR",
+        )
         assert s != None
 
     gammas = {}
@@ -54,7 +57,7 @@ def get_scaling_factor_WGD(
         4. for any cz, inferred tumor purity must above <lb_purity>,
         5. and have minimum BAF-error < <baf_tol>
         6. z has lowest copy-number cz that satisfies (4) and (5).
-    3. among all candidate clonal cluster, the most weighted 
+    3. among all candidate clonal cluster, the most weighted
        cluster z that appears in all samples are chosen.
     4. cz is selected as the lowest value among all samples.
     """
@@ -127,7 +130,9 @@ def get_scaling_factor_WGD(
             clonals[p][pz_result[0]] = pz_result
 
     # find maximum-weighted clonal cluster z that appears as candidate to all samples
-    for zid in sorted(cluster_sizes.keys(), key=lambda z_: cluster_sizes[z_], reverse=True):
+    for zid in sorted(
+        cluster_sizes.keys(), key=lambda z_: cluster_sizes[z_], reverse=True
+    ):
         if all(zid in clonals[p] for p in samples):
             final_clonals = {}  # may also be useful.
             gammas = {}

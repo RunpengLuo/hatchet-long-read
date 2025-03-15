@@ -11,11 +11,12 @@ import hatchet.utils.Supporting as sp
 from hatchet.utils.ArgParsing import parse_compute_cn_args
 from hatchet.utils.compute_cn_utils import (
     get_scaling_factor_no_WGD,
-    get_scaling_factor_WGD
+    get_scaling_factor_WGD,
 )
 from hatchet.utils.solve import *
 from hatchet.utils.solve.utils import *
 from hatchet.utils.solve.segmentation import segmentation
+
 
 def main(args=None):
     sp.log(msg="# Parsing and checking input arguments\n", level="STEP")
@@ -75,10 +76,13 @@ def main(args=None):
         fbbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
         args["bbc"] = fbbc_path
         clusters = fclusters
-        sp.log(msg=f"Clusters after filtering is stored in {fseg_path} and {fbbc_path}\n", level="STEP")
+        sp.log(
+            msg=f"Clusters after filtering is stored in {fseg_path} and {fbbc_path}\n",
+            level="STEP",
+        )
     else:
         sp.log(msg="No cluster is filtered\n", level="STEP")
-    
+
     sp.log(msg="General cluster statistics\n", level="INFO")
     sp.log(msg="#ID\tSIZE(bp)\n", level="INFO")
     for cid, csize in cluster_sizes.items():
@@ -102,13 +106,19 @@ def main(args=None):
     diploid_sols = {}
     if args["diploid"]:
         clonal_dip = {s: (1, 1)}
-        sp.log(msg=f"running diploid with clonal clusters={str(clonal_dip)}\n", level="STEP")
+        sp.log(
+            msg=f"running diploid with clonal clusters={str(clonal_dip)}\n",
+            level="STEP",
+        )
         for n in range(first_n, last_n):
             (obj, imf_obj) = solve_func(
                 n, clonal_dip, gammas_dip, cluster_sizes, args, "diploid"
             )
             diploid_sols[n] = (obj, imf_obj)
-            sp.log(msg=f"diploid n={n} objective={obj} imf-objective={imf_obj}\n", level="STEP")
+            sp.log(
+                msg=f"diploid n={n} objective={obj} imf-objective={imf_obj}\n",
+                level="STEP",
+            )
 
     tetraploid_sols = {}
     if args["tetraploid"]:
@@ -123,23 +133,37 @@ def main(args=None):
             v=args["v"],
         )
         if zid == None:
-            sp.log(f"Cannot infer WGD clonal cluster, try increase <baf_tol> or <lb_purity>.\n", level="WARN")
+            sp.log(
+                f"Cannot infer WGD clonal cluster, try increase <baf_tol> or <lb_purity>.\n",
+                level="WARN",
+            )
         else:
             sp.log(msg=f"Inferred tetraploid clonal cluster={zid}\n", level="INFO")
-            sp.log(msg="Inferred tetraploid RD scaling factor gamma per sample:\n", level="INFO")
+            sp.log(
+                msg="Inferred tetraploid RD scaling factor gamma per sample:\n",
+                level="INFO",
+            )
             for sname, gamma in gammas_wgd.items():
                 sp.log(msg=f"{sname}\tgamma={gamma}\n", level="INFO")
             clonal_tet = {s: (2, 2), zid: cz}
-            sp.log(msg=f"running tetraploid with clonal clusters={str(clonal_tet)}\n", level="STEP")
+            sp.log(
+                msg=f"running tetraploid with clonal clusters={str(clonal_tet)}\n",
+                level="STEP",
+            )
             for n in range(first_n, last_n):
                 (obj, imf_obj) = solve_func(
                     n, clonal_tet, gammas_wgd, cluster_sizes, args, "tetraploid"
                 )
                 tetraploid_sols[n] = (obj, imf_obj)
-                sp.log(msg=f"tetraploid n={n} objective={obj} imf-objective={imf_obj}\n", level="STEP")
+                sp.log(
+                    msg=f"tetraploid n={n} objective={obj} imf-objective={imf_obj}\n",
+                    level="STEP",
+                )
 
     # final model selection between diploid and tetraploid with varying n.
-    n_dip, n_tet, best_type = model_selection_final(diploid_sols, tetraploid_sols, out_dir, args["v"])
+    n_dip, n_tet, best_type = model_selection_final(
+        diploid_sols, tetraploid_sols, out_dir, args["v"]
+    )
 
     # save model selected result here
     if n_dip > 0:
@@ -270,7 +294,7 @@ def execute_python(
         cn_max = args["eD"]
     else:
         cn_max = args["eT"]
-    arg_d = -1 if args["d"] == None else args["d"]
+    max_ncns_seg = -1 if args["d"] == None else args["d"]
     max_iters = 10 if args["f"] == None else args["f"]
 
     best_instance = None
@@ -285,13 +309,16 @@ def execute_python(
             instance_dir = os.path.join(sol_dir, f"instances/solve_{pname}_{param}")
             os.makedirs(instance_dir, exist_ok=True)
             if args["v"] >= 2:
-                sp.log(msg=f"running instance {i0}/{num_steps} for {problem_type}\n", level="STEP")
+                sp.log(
+                    msg=f"running instance {i0}/{num_steps} for {problem_type}\n",
+                    level="STEP",
+                )
             instances[param] = solve_instance(
                 f_a=f_a,
                 f_b=f_b,
                 n=n,
-                mu=args["u"],
-                d=arg_d,
+                minprop=args["u"],
+                max_ncns_seg=max_ncns_seg,
                 cn_max=cn_max,
                 weights=weights,
                 ampdel=args["ampdel"],
@@ -309,7 +336,7 @@ def execute_python(
                 timelimit=args["s"],
                 instance_dir=instance_dir,
                 solve_mode=solver_mode,
-                verbose=args["v"] >= 2
+                verbose=args["v"] >= 2,
             )
         best_instance, imf_obj = model_selection_instance(
             f_a, f_b, weights, instances, pname, sol_dir
@@ -341,11 +368,13 @@ def execute_cpp(
     sp.log(msg="cpp optimization is not implemented yet!\n", level="INFO")
     return -1, -1
 
+
 def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: str, v=1):
     """
     1. select n based on elbow criterion for either WGD/no WGD
     2. then select the final solution based on principle of parsimony (lowest n)
     """
+
     def select_best_n(data: list, problem_type: str):
         sp.log(msg=f"running model selection for {problem_type}\n", level="INFO")
         # pick init solution with minimum IMF-objective
@@ -362,31 +391,49 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
             ylabel="IMF-objective",
         )
         plt.savefig(os.path.join(out_dir, f"pareto_curve.{problem_type}.png"), dpi=300)
-        sp.log(msg=f"Pareto curve can be found at <outdir>/pareto_curve.{problem_type}.png\n", level="INFO")
-        
+        sp.log(
+            msg=f"Pareto curve can be found at <outdir>/pareto_curve.{problem_type}.png\n",
+            level="INFO",
+        )
+
         if elbow_x == None:
-            sp.log(msg=f"Failed to identify elbow in model selection step, use result with minimum IMF-objective\n", level="WARN")
+            sp.log(
+                msg=f"Failed to identify elbow in model selection step, use result with minimum IMF-objective\n",
+                level="WARN",
+            )
         else:
             sol_indices = np.where(ys >= elbow_y)[0]
             if len(sol_indices) == 0:
-                sp.log(msg=f"Failed to locate result in model selection step, use result with minimum IMF-objective\n", level="WARN")
+                sp.log(
+                    msg=f"Failed to locate result in model selection step, use result with minimum IMF-objective\n",
+                    level="WARN",
+                )
             else:
                 sol_index = sol_indices[0]
                 best_res = (df.loc[sol_index, "n"], df.loc[sol_index, "IMF-objective"])
         return best_res
-    
 
     if len(diploid_sols) == 0 and len(tetraploid_sols) == 0:
-        sp.log(msg="ERROR! no solution found for either diploid or tetraploid setting!\n", level="ERROR")
+        sp.log(
+            msg="ERROR! no solution found for either diploid or tetraploid setting!\n",
+            level="ERROR",
+        )
         raise ValueError(sp.error(f"final model selection error"))
-    
+
     data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
     (n2, obj2) = select_best_n(sorted(data_diploid, key=lambda a: a[0]), "diploid")
-    sp.log(msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO")
-    
+    sp.log(
+        msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO"
+    )
+
     data_tetraploid = [[n, imf_obj] for n, (_, imf_obj) in tetraploid_sols.items()]
-    (n4, obj4) = select_best_n(sorted(data_tetraploid, key=lambda a: a[0]), "tetraploid")
-    sp.log(msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n", level="INFO")
+    (n4, obj4) = select_best_n(
+        sorted(data_tetraploid, key=lambda a: a[0]), "tetraploid"
+    )
+    sp.log(
+        msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n",
+        level="INFO",
+    )
 
     # pick best solution by principle of parsimony
     return n2, n4, "diploid" if n2 <= n4 else "tetraploid"

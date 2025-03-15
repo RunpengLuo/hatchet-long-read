@@ -68,14 +68,29 @@ def _work(cd, u, solver_type, max_iters, max_convergence_iters, timelimit):
 
 
 class CoordinateDescent:
-    def __init__(self, f_a, f_b, n, mu, d, cn_max, cn, w, purities, baf, ampdel=True, 
-                 copy_numbers_fixed=None, purities_fixed=None, penalty_param=None):
+    def __init__(
+        self,
+        f_a,
+        f_b,
+        n,
+        minprop,
+        max_ncns_seg,
+        cn_max,
+        cn,
+        w,
+        purities,
+        baf,
+        ampdel=True,
+        copy_numbers_fixed=None,
+        purities_fixed=None,
+        penalty_param=None,
+    ):
         # ilp attribute used here as a convenient storage container for properties
         self.ilp = ILPSubset(
             n=n,
             cn_max=cn_max,
-            d=d,
-            mu=mu,
+            max_ncns_seg=max_ncns_seg,
+            minprop=minprop,
             ampdel=ampdel,
             copy_numbers=cn,
             f_a=f_a,
@@ -83,9 +98,9 @@ class CoordinateDescent:
             w=w,
             purities=purities,
             baf=baf,
-            copy_numbers_fixed=copy_numbers_fixed, # TODO
+            copy_numbers_fixed=copy_numbers_fixed,  # TODO
             purities_fixed=purities_fixed,
-            penalty_param=penalty_param
+            penalty_param=penalty_param,
         )
         # Building the model here is not strictly necessary, as, during execution,
         #   self.carch and c.uarch will copy self.ilp and create+run those models.
@@ -108,7 +123,7 @@ class CoordinateDescent:
     ):
         with Random(random_seed):
             seeds = [self.ilp.build_random_u() for _ in range(n_seed)]
-        
+
         result = {}  # obj. value => (cA, cB, u) mapping
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
@@ -135,8 +150,17 @@ class CoordinateDescent:
 
         # TODO store all results
         if tempdir != None:
-            store_instance_tofile(result, self.ilp.cluster_ids, self.ilp.sample_ids, 
-                              self.ilp.f_a, self.ilp.f_b, self.ilp.baf, tempdir, "cd", self.ilp.n)
+            store_instance_tofile(
+                result,
+                self.ilp.cluster_ids,
+                self.ilp.sample_ids,
+                self.ilp.f_a,
+                self.ilp.f_b,
+                self.ilp.baf,
+                tempdir,
+                "cd",
+                self.ilp.n,
+            )
 
         best = min(result)
         return (best,) + result[best] + (self.ilp.cluster_ids, self.ilp.sample_ids)
@@ -148,8 +172,8 @@ class CoordinateDescentSplit(CoordinateDescent):
         f_a,
         f_b,
         n,
-        mu,
-        d,
+        minprop,
+        max_ncns_seg,
         cn_max,
         cn,
         binsA,
@@ -161,8 +185,8 @@ class CoordinateDescentSplit(CoordinateDescent):
         self.ilp = ILPSubsetSplit(
             n=n,
             cn_max=cn_max,
-            d=d,
-            mu=mu,
+            max_ncns_seg=max_ncns_seg,
+            minprop=minprop,
             ampdel=ampdel,
             copy_numbers=cn,
             f_a=f_a,

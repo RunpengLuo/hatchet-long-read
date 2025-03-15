@@ -13,6 +13,7 @@ from hatchet.utils.solve.ilp_subset import ILPSubset
 from hatchet.utils.solve.ilp_subset_split import ILPSubsetSplit
 from hatchet.utils.solve.cd import CoordinateDescent, CoordinateDescentSplit
 
+
 def solver_available(solver: str):
     if solver == "cpp":
         return os.getenv("GRB_LICENSE_FILE") is not None
@@ -26,29 +27,29 @@ def solver_available(solver: str):
 
 
 def solve_instance(
-    f_a,
-    f_b,
-    n,
-    mu,
-    d,
-    cn_max,
-    weights,
-    ampdel,
-    clonal,
-    purities,
-    baf,
-    copy_numbers_fixed,
-    purities_fixed,
-    penalty_param,
-    solver,
-    max_iters,
-    n_seed,
-    n_worker,
-    random_seed,
-    timelimit,
-    instance_dir,
-    solve_mode,
-    verbose=False
+    f_a: pd.DataFrame,
+    f_b: pd.DataFrame,
+    n: int,
+    minprop: float,
+    max_ncns_seg: int,
+    cn_max: int,
+    weights: pd.Series,
+    ampdel: bool,
+    clonal: dict,
+    purities: dict,
+    baf: pd.DataFrame,
+    copy_numbers_fixed: dict,
+    purities_fixed: dict,
+    penalty_param: list,
+    solver: str,
+    max_iters: int,
+    n_seed: int,
+    n_worker: int,
+    random_seed: int,
+    timelimit: int,
+    instance_dir: str,
+    solve_mode: str,
+    verbose=False,
 ):
     """
     solve optimization with specific problem parameter setting
@@ -59,8 +60,8 @@ def solve_instance(
             f_a=f_a,
             f_b=f_b,
             n=n,
-            mu=mu,
-            d=d,
+            minprop=minprop,
+            max_ncns_seg=max_ncns_seg,
             cn_max=cn_max,
             w=weights,
             ampdel=ampdel,
@@ -85,8 +86,8 @@ def solve_instance(
         ilp = ILPSubset(
             n,
             cn_max,
-            d=d,
-            mu=mu,
+            max_ncns_seg=max_ncns_seg,
+            minprop=minprop,
             ampdel=ampdel,
             copy_numbers=clonal,
             f_a=f_a,
@@ -174,15 +175,24 @@ def model_selection_instance(
 
     sol_index = 0
     if elbow_x == None:
-        sp.log(msg=f"Failed to identify elbow in model selection step, use result without penalty.\n", level="WARN")
+        sp.log(
+            msg=f"Failed to identify elbow in model selection step, use result without penalty.\n",
+            level="WARN",
+        )
     else:
         sol_indices = np.where(ys >= elbow_y)[0]
         if len(sol_indices) == 0:
-            sp.log(msg=f"Failed to locate result in model selection step, use result without penalty.\n", level="WARN")
+            sp.log(
+                msg=f"Failed to locate result in model selection step, use result without penalty.\n",
+                level="WARN",
+            )
         else:
             # multiple instance may yield same objective values, pick the one with minimum penalty
             sol_index = sol_indices[0]
-            sp.log(msg=f"Model selection found solution with index={sol_index}!\n", level="INFO")
+            sp.log(
+                msg=f"Model selection found solution with index={sol_index}!\n",
+                level="INFO",
+            )
     df.loc[:, "selected"] = ""
     df.loc[sol_index, "selected"] = "*"
     df.to_csv(f"{outdir}/model_selections.tsv", sep="\t", header=True, index=False)

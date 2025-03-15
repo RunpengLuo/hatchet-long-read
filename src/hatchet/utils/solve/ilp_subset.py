@@ -1,6 +1,7 @@
 import textwrap
 import math
 import numpy as np
+import pandas as pd
 from pyomo import environ as pe
 from pyomo.opt import SolverStatus, TerminationCondition
 
@@ -8,8 +9,23 @@ from hatchet.utils.solve.utils import Random
 
 
 class ILPSubset:
-    def __init__(self, n, cn_max, d, mu, ampdel, copy_numbers, f_a, f_b, w, purities, 
-                 baf, copy_numbers_fixed, purities_fixed, penalty_param):
+    def __init__(
+        self,
+        n: int,
+        cn_max: int,
+        max_ncns_seg: int,
+        minprop: float,
+        ampdel: bool,
+        copy_numbers: dict,
+        f_a: pd.DataFrame,
+        f_b: pd.DataFrame,
+        w: pd.Series,
+        purities: dict,
+        baf: pd.DataFrame,
+        copy_numbers_fixed: dict,
+        purities_fixed: dict,
+        penalty_param: list,
+    ):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
 
@@ -25,8 +41,8 @@ class ILPSubset:
 
         self.n = n
         self.cn_max = cn_max
-        self.d = d
-        self.mu = mu
+        self.max_ncns_seg = max_ncns_seg
+        self.minprop = minprop
         self.ampdel = ampdel
         self.copy_numbers = copy_numbers
         self.copy_numbers_fixed = copy_numbers_fixed  # TODO
@@ -36,7 +52,7 @@ class ILPSubset:
         self.w = w
         self.purities = purities
 
-        self.tol = 0.001
+        self.tol = 0.001 # TODO make as argument?
 
         self.mode = "FULL"
 
@@ -46,8 +62,8 @@ class ILPSubset:
         self.u = [[np.nan for _ in range(self.k)] for _ in range(self.n)]
 
         # Fixed values of cA/cB/u
-        self._fixed_cA = [[np.nan for _ in range(n)] for _ in range(self.m)]
-        self._fixed_cB = [[np.nan for _ in range(n)] for _ in range(self.m)]
+        self._fixed_cA = [[np.nan for _ in range(self.n)] for _ in range(self.m)]
+        self._fixed_cB = [[np.nan for _ in range(self.n)] for _ in range(self.m)]
         self._fixed_u = [[np.nan for _ in range(self.k)] for _ in range(self.n)]
 
         self.warmstart = False  # set on hot_start()
@@ -57,18 +73,18 @@ class ILPSubset:
         return ILPSubset(
             n=self.n,
             cn_max=self.cn_max,
-            d=self.d,
-            mu=self.mu,
+            max_ncns_seg=self.max_ncns_seg,
+            minprop=self.minprop,
             ampdel=self.ampdel,
             copy_numbers=self.copy_numbers,
             f_a=self.f_a,
             f_b=self.f_b,
             w=self.w,
             purities=self.purities,
-            baf = self.baf,
-            copy_numbers_fixed=self.copy_numbers_fixed, # TODO
-            purities_fixed = self.purities_fixed,
-            penalty_param = self.penalty_param
+            baf=self.baf,
+            copy_numbers_fixed=self.copy_numbers_fixed,  # TODO
+            purities_fixed=self.purities_fixed,
+            penalty_param=self.penalty_param,
         )
 
     def __str__(self):
@@ -138,20 +154,25 @@ class ILPSubset:
         bM = {}
         aMb = {}
         penalty = 0
-        for _m in range(self.m): # cluster
-            cluster_id = self.f_a.index[_m] # clone
+        for _m in range(self.m):  # cluster
+            cluster_id = self.f_a.index[_m]  # clone
             for _n in range(1, self.n):
                 bM[(_m, _n)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
-                model.add_component(f'bM_{_m + 1}_{_n + 1}', bM[(_m, _n)])
+                model.add_component(f"bM_{_m + 1}_{_n + 1}", bM[(_m, _n)])
                 aMb[(_m, _n)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
-                model.add_component(f'aMb_{_m + 1}_{_n + 1}', aMb[(_m, _n)])
+                model.add_component(f"aMb_{_m + 1}_{_n + 1}", aMb[(_m, _n)])
 
                 model.constraints.add(cB[_m][_n] - 1 <= bM[(_m, _n)])
                 model.constraints.add(1 - cB[_m][_n] <= bM[(_m, _n)])
                 model.constraints.add(cA[_m][_n] - cB[_m][_n] <= aMb[(_m, _n)])
                 model.constraints.add(cB[_m][_n] - cA[_m][_n] <= aMb[(_m, _n)])
-                for _k in range(self.k): # sample
-                    penalty += self.w[cluster_id] * beta * u[_n][_k] * (bM[(_m, _n)] + 0.5 * aMb[(_m, _n)])
+                for _k in range(self.k):  # sample
+                    penalty += (
+                        self.w[cluster_id]
+                        * beta
+                        * u[_n][_k]
+                        * (bM[(_m, _n)] + 0.5 * aMb[(_m, _n)])
+                    )
 
         return penalty
 
@@ -161,10 +182,10 @@ class ILPSubset:
         cn_max = self.cn_max
         ampdel = self.ampdel
         copy_numbers = self.copy_numbers
-        copy_numbers_fixed = self.copy_numbers_fixed # TODO
+        copy_numbers_fixed = self.copy_numbers_fixed  # TODO
         purities_fixed = self.purities_fixed
         mode_t = self.mode
-        d = self.d
+        max_ncns_seg = self.max_ncns_seg
         _M = self.M
         _base = self.base
         purities = self.purities
@@ -218,7 +239,7 @@ class ILPSubset:
 
         bitcA = {}
         bitcB = {}
-        if (mode_t == "FULL") or (d > 0 and mode_t == "CARCH"):
+        if (mode_t == "FULL") or (max_ncns_seg > 0 and mode_t == "CARCH"):
             for _b in range(_M):
                 for _m in range(m):
                     for _n in range(n):
@@ -262,7 +283,7 @@ class ILPSubset:
                             )
 
         x = {}
-        if (mode_t in ("FULL", "UARCH")) and (self.mu > 0):
+        if (mode_t in ("FULL", "UARCH")) and (self.minprop > 0):
             for _n in range(n):
                 for _k in range(k):
                     x[(_n, _k)] = pe.Var(domain=pe.Binary)
@@ -270,10 +291,10 @@ class ILPSubset:
 
         # buildOptionalVariables
         z = {}
-        if (mode_t in ("FULL", "CARCH")) and d > 0:
+        if (mode_t in ("FULL", "CARCH")) and max_ncns_seg > 0:
             for _m in range(self.m):
                 for _n in range(1, self.n):
-                    for _d in range(d):
+                    for _d in range(max_ncns_seg):
                         z[(_m, _n, _d)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
                         model.add_component(
                             f"z_{_m + 1}_{_n + 1}_{_d + 1}", z[(_m, _n, _d)]
@@ -343,7 +364,7 @@ class ILPSubset:
                             _sum += bitcA[(_b, _m, _n)] + bitcB[(_b, _m, _n)]
                     model.constraints.add(_sum >= self.u[_n][_k])
 
-        if (mode_t == "FULL") or (d > 0 and mode_t == "CARCH"):
+        if (mode_t == "FULL") or (max_ncns_seg > 0 and mode_t == "CARCH"):
             for _m in range(m):
                 cluster_id = f_a.index[_m]
                 # upper bound for solver
@@ -373,7 +394,7 @@ class ILPSubset:
                     _sumA = 0
                     _sumB = 0
                     for _n in range(n):
-                        if self._fixed_u[_n][_k] >= self.mu - self.tol:
+                        if self._fixed_u[_n][_k] >= self.minprop - self.tol:
                             _sumA += self.cA[_m][_n] * self._fixed_u[_n][_k]
                             _sumB += self.cB[_m][_n] * self._fixed_u[_n][_k]
                     model.constraints.add(fA[(_m, _k)] == _sumA)
@@ -433,24 +454,24 @@ class ILPSubset:
                     _sum += self.u[_n][_k]
                 model.constraints.add(_sum == 1)
 
-        if (mode_t in ("FULL", "UARCH")) and self.mu > 0:
+        if (mode_t in ("FULL", "UARCH")) and self.minprop > 0:
             for _k in range(k):
                 for _n in range(1, n):
                     model.constraints.add(x[(_n, _k)] >= self.u[_n][_k])
-                    model.constraints.add(self.u[_n][_k] >= self.mu * x[(_n, _k)])
+                    model.constraints.add(self.u[_n][_k] >= self.minprop * x[(_n, _k)])
 
         # buildOptionalConstraints
-        if (mode_t in ("FULL", "CARCH")) and d > 0:
+        if (mode_t in ("FULL", "CARCH")) and max_ncns_seg > 0:
             for _m in range(self.m):
                 for _n in range(1, self.n):
                     _sum = 0
-                    for _d in range(self.d):
+                    for _d in range(self.max_ncns_seg):
                         _sum += z[(_m, _n, _d)]
                     model.constraints.add(_sum == 1)
 
             for _m in range(self.m):
                 for _M in range(self.M):
-                    for _d in range(d):
+                    for _d in range(max_ncns_seg):
                         for _i in range(1, self.n - 1):
                             for _j in range(1, self.n):
                                 model.constraints.add(
@@ -471,7 +492,7 @@ class ILPSubset:
                                 )
 
             for _m in range(self.m):
-                for _d in range(d - 1):
+                for _d in range(max_ncns_seg - 1):
                     _sum_l = _sum_l1 = 0
                     for _n in range(1, self.n):
                         _sum_l += z[(_m, _n, _d)] * self.symmCoeff(_n)
@@ -481,7 +502,7 @@ class ILPSubset:
         if mode_t in ("FULL", "CARCH"):
             self.build_symmetry_breaking(model)
             self.fix_given_cn(model)
-        
+
         # TODO manually fix additional copynumbers in either C/Full-step
         if copy_numbers_fixed != None and mode_t in ("FULL", "CARCH"):
             for _m in range(self.m):
@@ -489,8 +510,8 @@ class ILPSubset:
                 if cluster_id in copy_numbers_fixed:
                     for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
                         # +1 to skip normal clone.
-                        model.constraints.add(self.cA[_m][_n+1] == _cnA)
-                        model.constraints.add(self.cB[_m][_n+1] == _cnB)
+                        model.constraints.add(self.cA[_m][_n + 1] == _cnA)
+                        model.constraints.add(self.cB[_m][_n + 1] == _cnB)
         if purities_fixed != None and mode_t in ("FULL", "UARCH"):
             for sID, cprops in enumerate(purities_fixed):
                 for cID, cprop in enumerate(cprops):
@@ -500,7 +521,9 @@ class ILPSubset:
         objective = 0
         for _m in range(m):
             for _k in range(k):
-                objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[self.cluster_ids[_m]]
+                objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[
+                    self.cluster_ids[_m]
+                ]
 
         # TODO make this more efficient by pyomo.Param to reuse states
         [pname, pparam] = self.penalty_param
@@ -513,7 +536,9 @@ class ILPSubset:
                     model.add_component(f"HCA_{_m}", hcn_vars[(_m, "a")])
                     hcn_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                     model.add_component(f"HCB_{_m}", hcn_vars[(_m, "b")])
-                    for _n in range(1, n): #TODO I didn't add penalty for normal clone, will it matter?
+                    for _n in range(
+                        1, n
+                    ):  # TODO I didn't add penalty for normal clone, will it matter?
                         model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
                         model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
                 # add objective
@@ -526,20 +551,44 @@ class ILPSubset:
                 manhat_vars = {}
                 for _m in range(m):
                     for _n in range(1, n):
-                        manhat_vars[(_m, _n, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                        model.add_component(f"MDA_{_m}_{_n}", manhat_vars[(_m, _n, "a")])
-                        manhat_vars[(_m, _n, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                        model.add_component(f"MDB_{_m}_{_n}", manhat_vars[(_m, _n, "b")])
-                        model.constraints.add(self.cA[_m][_n] - self.cA[_m][0] <= manhat_vars[(_m, _n, "a")])
-                        model.constraints.add(self.cA[_m][0] - self.cA[_m][_n] <= manhat_vars[(_m, _n, "a")])
-                        model.constraints.add(self.cB[_m][_n] - self.cB[_m][0] <= manhat_vars[(_m, _n, "b")])
-                        model.constraints.add(self.cB[_m][0] - self.cB[_m][_n] <= manhat_vars[(_m, _n, "b")])
+                        manhat_vars[(_m, _n, "a")] = pe.Var(
+                            bounds=(0, np.inf), domain=pe.Reals
+                        )
+                        model.add_component(
+                            f"MDA_{_m}_{_n}", manhat_vars[(_m, _n, "a")]
+                        )
+                        manhat_vars[(_m, _n, "b")] = pe.Var(
+                            bounds=(0, np.inf), domain=pe.Reals
+                        )
+                        model.add_component(
+                            f"MDB_{_m}_{_n}", manhat_vars[(_m, _n, "b")]
+                        )
+                        model.constraints.add(
+                            self.cA[_m][_n] - self.cA[_m][0]
+                            <= manhat_vars[(_m, _n, "a")]
+                        )
+                        model.constraints.add(
+                            self.cA[_m][0] - self.cA[_m][_n]
+                            <= manhat_vars[(_m, _n, "a")]
+                        )
+                        model.constraints.add(
+                            self.cB[_m][_n] - self.cB[_m][0]
+                            <= manhat_vars[(_m, _n, "b")]
+                        )
+                        model.constraints.add(
+                            self.cB[_m][0] - self.cB[_m][_n]
+                            <= manhat_vars[(_m, _n, "b")]
+                        )
                 # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
                     for _n in range(1, n):
-                        objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
-                        objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
+                        objective += (
+                            pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
+                        )
+                        objective += (
+                            pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
+                        )
             elif pname == "DROOT_MAX":
                 # max distance from tumor clone to normal clone per cluster
                 droot_vars = {}
@@ -549,10 +598,18 @@ class ILPSubset:
                     droot_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                     model.add_component(f"DRB_{_m}", droot_vars[(_m, "b")])
                     for _n in range(1, n):
-                        model.constraints.add(self.cA[_m][_n] - self.cA[_m][0] <= droot_vars[(_m, "a")])
-                        model.constraints.add(self.cA[_m][0] - self.cA[_m][_n] <= droot_vars[(_m, "a")])
-                        model.constraints.add(self.cB[_m][_n] - self.cB[_m][0] <= droot_vars[(_m, "b")])
-                        model.constraints.add(self.cB[_m][0] - self.cB[_m][_n] <= droot_vars[(_m, "b")])
+                        model.constraints.add(
+                            self.cA[_m][_n] - self.cA[_m][0] <= droot_vars[(_m, "a")]
+                        )
+                        model.constraints.add(
+                            self.cA[_m][0] - self.cA[_m][_n] <= droot_vars[(_m, "a")]
+                        )
+                        model.constraints.add(
+                            self.cB[_m][_n] - self.cB[_m][0] <= droot_vars[(_m, "b")]
+                        )
+                        model.constraints.add(
+                            self.cB[_m][0] - self.cB[_m][_n] <= droot_vars[(_m, "b")]
+                        )
                 # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
@@ -564,22 +621,52 @@ class ILPSubset:
                 for _m in range(m):
                     for _n1 in range(n - 1):
                         for _n2 in range(_n1 + 1, n):
-                            manhat_vars[(_m, _n1, _n2, "a")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                            model.add_component(f"MDA_{_m}_{_n1}_{_n2}", manhat_vars[(_m, _n1, _n2, "a")])
-                            manhat_vars[(_m, _n1, _n2, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                            model.add_component(f"MDB_{_m}_{_n1}_{_n2}", manhat_vars[(_m, _n1, _n2, "b")])
+                            manhat_vars[(_m, _n1, _n2, "a")] = pe.Var(
+                                bounds=(0, np.inf), domain=pe.Reals
+                            )
+                            model.add_component(
+                                f"MDA_{_m}_{_n1}_{_n2}",
+                                manhat_vars[(_m, _n1, _n2, "a")],
+                            )
+                            manhat_vars[(_m, _n1, _n2, "b")] = pe.Var(
+                                bounds=(0, np.inf), domain=pe.Reals
+                            )
+                            model.add_component(
+                                f"MDB_{_m}_{_n1}_{_n2}",
+                                manhat_vars[(_m, _n1, _n2, "b")],
+                            )
 
-                            model.constraints.add(self.cA[_m][_n1] - self.cA[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "a")])
-                            model.constraints.add(self.cA[_m][_n2] - self.cA[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "a")])
-                            model.constraints.add(self.cB[_m][_n1] - self.cB[_m][_n2] <= manhat_vars[(_m, _n1, _n2, "b")])
-                            model.constraints.add(self.cB[_m][_n2] - self.cB[_m][_n1] <= manhat_vars[(_m, _n1, _n2, "b")])
+                            model.constraints.add(
+                                self.cA[_m][_n1] - self.cA[_m][_n2]
+                                <= manhat_vars[(_m, _n1, _n2, "a")]
+                            )
+                            model.constraints.add(
+                                self.cA[_m][_n2] - self.cA[_m][_n1]
+                                <= manhat_vars[(_m, _n1, _n2, "a")]
+                            )
+                            model.constraints.add(
+                                self.cB[_m][_n1] - self.cB[_m][_n2]
+                                <= manhat_vars[(_m, _n1, _n2, "b")]
+                            )
+                            model.constraints.add(
+                                self.cB[_m][_n2] - self.cB[_m][_n1]
+                                <= manhat_vars[(_m, _n1, _n2, "b")]
+                            )
                 # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
                     for _n1 in range(n - 1):
                         for _n2 in range(_n1 + 1, n):
-                            objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n1, _n2, "a")]
-                            objective += pparam * self.w[cluster_id] * manhat_vars[(_m, _n1, _n2, "b")]
+                            objective += (
+                                pparam
+                                * self.w[cluster_id]
+                                * manhat_vars[(_m, _n1, _n2, "a")]
+                            )
+                            objective += (
+                                pparam
+                                * self.w[cluster_id]
+                                * manhat_vars[(_m, _n1, _n2, "b")]
+                            )
             else:
                 pass
                 # TODO metin's penalty or else
@@ -618,15 +705,15 @@ class ILPSubset:
                     model.constraints.add(self.cB[_m][_n] == _cnB)
 
     def first_hot_start(self):
-        if self.d > 0:
-            targetA = np.empty((self.m, self.d))
+        if self.max_ncns_seg > 0:
+            targetA = np.empty((self.m, self.max_ncns_seg))
             targetB = np.empty_like(targetA)
             for _m in range(self.m):
                 targetA[_m, :] = np.random.choice(
-                    self.f_a.iloc[_m].values, self.d, replace=False
+                    self.f_a.iloc[_m].values, self.max_ncns_seg, replace=False
                 )
                 targetB[_m, :] = np.random.choice(
-                    self.f_b.iloc[_m].values, self.d, replace=False
+                    self.f_b.iloc[_m].values, self.max_ncns_seg, replace=False
                 )
             targetA = targetA.round()
             targetB = targetB.round()
@@ -723,17 +810,17 @@ class ILPSubset:
         # TODO: sanity checks in fixC
 
     def build_random_u(self, random_seed=None):
-        def _calculate_size_bubbles(mu):
-            if mu <= 0.1:
+        def _calculate_size_bubbles(minprop):
+            if minprop <= 0.1:
                 return 10
-            elif mu <= 0.15:
+            elif minprop <= 0.15:
                 return 6
-            elif mu <= 0.2:
+            elif minprop <= 0.2:
                 return 5
             else:
                 return 3
 
-        def _build_partition_vector(n, n_parts, size_bubbles, mu=0.03):
+        def _build_partition_vector(n, n_parts, size_bubbles, minprop=0.03):
             """
             Return fractional components of n components as an ndarray of size n
             """
@@ -754,12 +841,12 @@ class ILPSubset:
 
             # set fractions at selected positions to successive difference between bubbles
             result[positions] = _result
-            # for fractions that are within tol of mu, clamp them up to mu
-            result[(mu - self.tol <= result) & (result < mu)] = mu
+            # for fractions that are within tol of minprop, clamp them up to minprop
+            result[(minprop - self.tol <= result) & (result < minprop)] = minprop
 
             return result
 
-        size_bubbles = _calculate_size_bubbles(self.mu)
+        size_bubbles = _calculate_size_bubbles(self.minprop)
         U = np.empty((self.n, self.k))
 
         with Random(random_seed):
@@ -770,7 +857,7 @@ class ILPSubset:
                 n_parts = min(
                     max(_n0, _n1), size_bubbles
                 )  # no. of clones with non-zero proportion in the mix
-                v = _build_partition_vector(self.n, n_parts, size_bubbles, mu=self.mu)
+                v = _build_partition_vector(self.n, n_parts, size_bubbles, minprop=self.minprop)
                 U[:, _k] = v
         return U
 
