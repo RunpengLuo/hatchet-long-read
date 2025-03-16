@@ -26,7 +26,7 @@ def solver_available(solver: str):
     return pe.SolverFactory(solver).available(exception_flag=False)
 
 
-def solve_instance(
+def solve(
     f_a: pd.DataFrame,
     f_b: pd.DataFrame,
     n: int,
@@ -40,21 +40,19 @@ def solve_instance(
     baf: pd.DataFrame,
     copy_numbers_fixed: dict,
     purities_fixed: dict,
-    penalty_param: list,
+    reg_term: list,
     solver: str,
     max_iters: int,
     n_seed: int,
     n_worker: int,
     random_seed: int,
     timelimit: int,
-    instance_dir: str,
+    instances_dir: str,
     solve_mode: str,
     verbose=False,
 ):
-    """
-    solve optimization with specific problem parameter setting
-    """
     assert solve_mode in ("ilp", "cd", "both"), "Unrecognized solve_mode"
+    cd_instances = None
     if solve_mode == "cd" or solve_mode == "both":
         cd = CoordinateDescent(
             f_a=f_a,
@@ -70,19 +68,33 @@ def solve_instance(
             baf=baf,
             copy_numbers_fixed=copy_numbers_fixed,
             purities_fixed=purities_fixed,
-            penalty_param=penalty_param,
+            penalty_param=None,
         )
-        obj, cA, cB, u, cluster_ids, sample_ids = cd.run(
+
+        # obj. value => (cA, cB, u) mapping
+        cd_instances = cd.run(
             solver_type=solver,
             max_iters=max_iters,
             n_seed=n_seed,
             j=n_worker,
             random_seed=random_seed,
             timelimit=timelimit,
-            tempdir=instance_dir,
         )
+        if instances_dir != None:
+            store_instance_tofile(
+                cd_instances,
+                f_a,
+                f_b,
+                baf,
+                instances_dir,
+                "cd",
+                n,
+            )
 
+    ilp_instances = None
     if solve_mode == "ilp" or solve_mode == "both":
+        ilp_instances = {}
+        [pname, num_steps, step_size] = reg_term
         ilp = ILPSubset(
             n,
             cn_max,
@@ -97,31 +109,49 @@ def solve_instance(
             baf=baf,
             copy_numbers_fixed=copy_numbers_fixed,
             purities_fixed=purities_fixed,
-            penalty_param=penalty_param,
+            penalty_param=[pname, 0.0],
         )
-        if solve_mode == "ilp":
-            ilp.create_model(pprint=verbose)
-        else:
-            # run coordinate-descent first to get local-opt cA and cB
+        ilp.create_model(pprint=verbose)
+        if solve_mode == "both":
+            # select local-opt from coordinate-descent instances
+            # TODO does the starting point be more useful to do reg model selection instead?
+            _, [obj, cA, cB, _] = min(cd_instances.items(), key=lambda tp: tp[1][0])
+            sp.log(
+                msg=f"use CD local opt with obj={obj} to initialize ILP model\n",
+                level="STEP",
+            )
             # use cA and cB to hot start the model.
-            ilp.create_model()
             ilp.hot_start(cA, cB)
+        # solve ILP model with regularizations
+        for i0 in range(0, num_steps + 1):
+            if verbose:
+                sp.log(
+                    msg=f"running instance {i0}/{num_steps}\n",
+                    level="STEP",
+                )
+            pparam = step_size * i0
+            ilp.model.pparam = pparam
+            if i0 > 0:
+                cA, cB = ilp_instances[0][1:3]
+                ilp.hot_start(cA, cB)
+            ilp_instances[pparam] = ilp.run(solver_type=solver, timelimit=timelimit)
+            assert ilp_instances[pparam] != None, f"ERROR! optimization failed."
 
-        obj, cA, cB, u, cluster_ids, sample_ids = ilp.run(
-            solver_type=solver, timelimit=timelimit
-        )
-        store_instance_tofile(
-            {obj: [cA, cB, u]},
-            cluster_ids,
-            sample_ids,
-            f_a,
-            f_b,
-            baf,
-            instance_dir,
-            solve_mode,
-            n,
-        )
-    return obj, cA, cB, u, cluster_ids, sample_ids
+        if instances_dir != None:
+            store_instance_tofile(
+                ilp_instances,
+                f_a,
+                f_b,
+                baf,
+                instances_dir,
+                solve_mode,
+                n,
+            )
+
+    if solve_mode == "cd":
+        return cd_instances
+    else:
+        return ilp_instances
 
 
 def model_selection_instance(
@@ -130,10 +160,15 @@ def model_selection_instance(
     weights: pd.Series,
     instances: dict,
     pname: str,
+    solve_mode: str,
     outdir: str,
 ):
     """
-    select best instance among all scalarized solutions
+    use elbow criterion to select best instance from either
+    1) ILP or CD+ILP with scalaried solutions, or
+    2) CD only solutions
+
+    if solve_mode != cd, float-number error with be estimated.
     """
     assert len(instances) > 0, "ERROR! there is no solution to be selected"
 
@@ -141,13 +176,15 @@ def model_selection_instance(
         return instances[0], instances[0][1]
 
     data = []
+    errv = 0.0
     for param, [tobj, cA, cB, u, _, _] in sorted(
         instances.items(), key=lambda tp: tp[0]
     ):
         [imf_obj, reg_obj] = compute_individual_objs(
             pname, weights, f_a, f_b, cA, cB, u
         )
-        errv = tobj - (imf_obj + param * reg_obj)
+        if solve_mode != "cd":
+            errv = tobj - (imf_obj + param * reg_obj)
         data.append([param, tobj, imf_obj, reg_obj, errv])
 
     df = pd.DataFrame(
@@ -171,7 +208,7 @@ def model_selection_instance(
         xlabel=f"{pname}-objective",
         ylabel="IMF-objective",
     )
-    plt.savefig(f"{outdir}/pareto_curve.{pname}.png", dpi=300)
+    plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
 
     sol_index = 0
     if elbow_x == None:
@@ -195,6 +232,11 @@ def model_selection_instance(
             )
     df.loc[:, "selected"] = ""
     df.loc[sol_index, "selected"] = "*"
-    df.to_csv(f"{outdir}/model_selections.tsv", sep="\t", header=True, index=False)
+    df.to_csv(
+        f"{outdir}/model_selections.{solve_mode}.{pname}.tsv",
+        sep="\t",
+        header=True,
+        index=False,
+    )
 
     return instances[df.loc[sol_index, "Lambda"]], df.loc[sol_index, "IMF-objective"]

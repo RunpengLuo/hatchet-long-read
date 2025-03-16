@@ -29,8 +29,6 @@ class Random:
 
 def store_solve_input(
     out_file: str,
-    samples: list,
-    clusters: list,
     baf: pd.DataFrame,
     rdr: pd.DataFrame,
     fcn: pd.DataFrame,
@@ -38,10 +36,12 @@ def store_solve_input(
     f_b: pd.DataFrame,
     weights: pd.Series,
 ):
+    cluster_ids = f_a.index.tolist()
+    sample_ids = f_a.columns.tolist()
     with open(out_file, "w") as fd:
         fd.write("CLUSTER\tSAMPLE\tBAF\tRDR\tFCN\tF_A\tF_B\tweight\n")
-        for sample in samples:
-            for cid in clusters:
+        for sample in sample_ids:
+            for cid in cluster_ids:
                 fd.write(
                     "\t".join(
                         [
@@ -63,8 +63,6 @@ def store_solve_input(
 
 def store_instance_tofile(
     result: dict,
-    cluster_ids: pd.Index,
-    sample_ids: pd.Index,
     f_a: pd.DataFrame,
     f_b: pd.DataFrame,
     baf: pd.DataFrame,
@@ -77,18 +75,17 @@ def store_instance_tofile(
     TODO add expected BAF and FCN from cn result as well to directly see fitness
     """
     assert solve_mode in ["cd", "ilp", "both"] and tempdir != None
-    cluster_ids = cluster_ids.tolist()
-    sample_ids = sample_ids.tolist()
+    cluster_ids = f_a.index.tolist()
+    sample_ids = f_a.columns.tolist()
     fd2_header = f"CLUSTER\tSAMPLE\tbaf\tfcn\texp-baf\texp-fcn\tcn_normal\tu_normal\t"
     fd2_header += "\t".join(f"cn_clone{i}\tu_clone{i}" for i in range(1, n)) + "\n"
     with open(f"{tempdir}/{solve_mode}_objs.tsv", "w") as fd1:
         fd1.write("sol_id\tobjective\n")
         # TODO also write the sub-objective values
-        for i, obj in enumerate(sorted(result.keys())):
+        for i, [obj, cA, cB, u] in result.items():
             fd1.write(f"{i}\t{obj}\n")
             with open(f"{tempdir}/{solve_mode}_sol{i}.tsv", "w") as fd2:
                 fd2.write(fd2_header)
-                cA, cB, u = result[obj]
                 for ci, cid in enumerate(cluster_ids):
                     for si, sample in enumerate(sample_ids):
                         fcn = f_a.loc[cid, sample] + f_b.loc[cid, sample]

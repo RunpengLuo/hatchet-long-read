@@ -246,17 +246,20 @@ def execute_python(
     return:
     obj
     """
-    solver_mode = ("both", "ilp", "cd")[args["M"]]
+    solve_mode = ("both", "ilp", "cd")[args["M"]]
     out_dir = args["x"]
+
     sol_dir = os.path.join(out_dir, f"sols/{problem_type}_n{n}")
     os.makedirs(sol_dir, exist_ok=True)
+
+    instances_dir = os.path.join(sol_dir, "instances")
+    os.makedirs(instances_dir, exist_ok=True)
+
     out_bbc = os.path.join(out_dir, f"results.{problem_type}.n{n}.bbc.ucn.tsv")
     out_seg = os.path.join(out_dir, f"results.{problem_type}.n{n}.seg.ucn.tsv")
 
     # bbc = pd.read_table(args["bbc"])
     seg = pd.read_table(args["seg"]).sort_values(["#ID", "SAMPLE"])
-    sample_ids = sorted(seg["SAMPLE"].unique().tolist())
-    cluster_ids = sorted(seg["#ID"].unique().tolist())
 
     rdr = seg.pivot(index="#ID", columns="SAMPLE", values="RD")
     baf = seg.pivot(index="#ID", columns="SAMPLE", values="BAF")
@@ -266,6 +269,9 @@ def execute_python(
     f_b = fcn * baf
     f_a = fcn - f_b
 
+    cluster_ids = f_a.index.tolist()
+    sample_ids  = f_a.columns.tolist()
+
     bins = pd.Series(cluster_sizes)
     weights = 100 * bins / sum(bins)
 
@@ -273,14 +279,11 @@ def execute_python(
     copy_number_fixed = None
     purities_fixed = None
 
-    # check user-defined regularization terms
-    # [pname, num_steps, step_size] = ["RAW", 0, 0.0]
-    [pname, num_steps, step_size] = args["reg_term"]
+    # get user-defined regularization term / second objective
+    [pname, _, _] = args["reg_term"]
 
     store_solve_input(
         os.path.join(sol_dir, "input.tsv"),
-        sample_ids,
-        cluster_ids,
         baf,
         rdr,
         fcn,
@@ -302,18 +305,7 @@ def execute_python(
     if args["binwise"]:
         assert False, "binwise mode is unsupported"
     else:
-        instances = {}
-        os.makedirs(os.path.join(sol_dir, "instances"), exist_ok=True)
-        for i0 in range(0, num_steps + 1):
-            param = step_size * i0
-            instance_dir = os.path.join(sol_dir, f"instances/solve_{pname}_{param}")
-            os.makedirs(instance_dir, exist_ok=True)
-            if args["v"] >= 2:
-                sp.log(
-                    msg=f"running instance {i0}/{num_steps} for {problem_type}\n",
-                    level="STEP",
-                )
-            instances[param] = solve_instance(
+        instances = solve(
                 f_a=f_a,
                 f_b=f_b,
                 n=n,
@@ -327,23 +319,23 @@ def execute_python(
                 baf=baf,
                 copy_numbers_fixed=copy_number_fixed,
                 purities_fixed=purities_fixed,
-                penalty_param=[pname, param],
+                reg_term=args["reg_term"],
                 solver=args["solver"],
                 max_iters=max_iters,
                 n_seed=args["p"],
                 n_worker=args["j"],
                 random_seed=args["r"],
                 timelimit=args["s"],
-                instance_dir=instance_dir,
-                solve_mode=solver_mode,
+                instances_dir=instances_dir,
+                solve_mode=solve_mode,
                 verbose=args["v"] >= 2,
             )
         best_instance, imf_obj = model_selection_instance(
-            f_a, f_b, weights, instances, pname, sol_dir
+            f_a, f_b, weights, instances, pname, solve_mode, sol_dir
         )
 
     assert best_instance != None, f"no solution for {problem_type} and n={n}"
-    [obj, cA, cB, u, cluster_ids, sample_ids] = best_instance
+    [obj, cA, cB, u] = best_instance
     segmentation(
         cA,
         cB,

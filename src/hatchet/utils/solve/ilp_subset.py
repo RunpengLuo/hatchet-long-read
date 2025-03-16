@@ -52,7 +52,7 @@ class ILPSubset:
         self.w = w
         self.purities = purities
 
-        self.tol = 0.001 # TODO make as argument?
+        self.tol = 0.001  # TODO make as argument?
 
         self.mode = "FULL"
 
@@ -192,10 +192,15 @@ class ILPSubset:
 
         model = pe.ConcreteModel()
 
+        # 0-cn_max var per m*k
         fA = {}
         fB = {}
+
+        # 0-inf var per m*k
         yA = {}
         yB = {}
+
+        # 0-1 var per m, ampdel only
         adA = {}
         adB = {}
 
@@ -237,6 +242,7 @@ class ILPSubset:
                         adB[_m] = pe.Var(bounds=(0, 1), domain=pe.Binary)
                         model.add_component(f"adB_{_m + 1}", adB[_m])
 
+        # 0-1 var per M * m * n; M=floor(log(cn_max)) + 1
         bitcA = {}
         bitcB = {}
         if (mode_t == "FULL") or (max_ncns_seg > 0 and mode_t == "CARCH"):
@@ -526,8 +532,11 @@ class ILPSubset:
                 ]
 
         # TODO make this more efficient by pyomo.Param to reuse states
-        [pname, pparam] = self.penalty_param
-        if pname != "RAW" and pparam > 0.0 and mode_t in ("FULL", "CARCH"):
+        if mode_t == "FULL" and self.penalty_param[0] != "RAW":
+            [pname, init_val] = self.penalty_param
+            pparam = pe.Param(mutable=True, initialize=init_val)
+            model.pparam = pparam
+            objective_sec = 0
             if pname == "MAXCN":
                 # constrain maximum copy-number states per cluster
                 hcn_vars = {}
@@ -536,16 +545,13 @@ class ILPSubset:
                     model.add_component(f"HCA_{_m}", hcn_vars[(_m, "a")])
                     hcn_vars[(_m, "b")] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                     model.add_component(f"HCB_{_m}", hcn_vars[(_m, "b")])
-                    for _n in range(
-                        1, n
-                    ):  # TODO I didn't add penalty for normal clone, will it matter?
+                    for _n in range(1, n):
                         model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
                         model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
-                # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
-                    objective += pparam * self.w[cluster_id] * hcn_vars[(_m, "a")]
-                    objective += pparam * self.w[cluster_id] * hcn_vars[(_m, "b")]
+                    objective_sec += pparam * self.w[cluster_id] * hcn_vars[(_m, "a")]
+                    objective_sec += pparam * self.w[cluster_id] * hcn_vars[(_m, "b")]
             elif pname == "DROOT_SUM":
                 # total distance from tumor clone to normal clone state per cluster
                 manhat_vars = {}
@@ -579,14 +585,13 @@ class ILPSubset:
                             self.cB[_m][0] - self.cB[_m][_n]
                             <= manhat_vars[(_m, _n, "b")]
                         )
-                # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
                     for _n in range(1, n):
-                        objective += (
+                        objective_sec += (
                             pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
                         )
-                        objective += (
+                        objective_sec += (
                             pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "b")]
                         )
             elif pname == "DROOT_MAX":
@@ -610,11 +615,10 @@ class ILPSubset:
                         model.constraints.add(
                             self.cB[_m][0] - self.cB[_m][_n] <= droot_vars[(_m, "b")]
                         )
-                # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
-                    objective += pparam * self.w[cluster_id] * droot_vars[(_m, "a")]
-                    objective += pparam * self.w[cluster_id] * droot_vars[(_m, "b")]
+                    objective_sec += pparam * self.w[cluster_id] * droot_vars[(_m, "a")]
+                    objective_sec += pparam * self.w[cluster_id] * droot_vars[(_m, "b")]
             elif pname == "DADJ_SUM":
                 # total distance for all pairs of clones per cluster
                 manhat_vars = {}
@@ -652,17 +656,16 @@ class ILPSubset:
                                 self.cB[_m][_n2] - self.cB[_m][_n1]
                                 <= manhat_vars[(_m, _n1, _n2, "b")]
                             )
-                # add objective
                 for _m in range(m):
                     cluster_id = self.cluster_ids[_m]
                     for _n1 in range(n - 1):
                         for _n2 in range(_n1 + 1, n):
-                            objective += (
+                            objective_sec += (
                                 pparam
                                 * self.w[cluster_id]
                                 * manhat_vars[(_m, _n1, _n2, "a")]
                             )
-                            objective += (
+                            objective_sec += (
                                 pparam
                                 * self.w[cluster_id]
                                 * manhat_vars[(_m, _n1, _n2, "b")]
@@ -671,6 +674,7 @@ class ILPSubset:
                 pass
                 # TODO metin's penalty or else
                 # objective += self.large_cn_penalty(model, 1, ub)
+            objective += objective_sec
 
         if mode_t == "FULL":
             self.hot_start()
@@ -705,6 +709,9 @@ class ILPSubset:
                     model.constraints.add(self.cB[_m][_n] == _cnB)
 
     def first_hot_start(self):
+        """
+        ran by cd init step and also ILP init step
+        """
         if self.max_ncns_seg > 0:
             targetA = np.empty((self.m, self.max_ncns_seg))
             targetB = np.empty_like(targetA)
@@ -857,7 +864,9 @@ class ILPSubset:
                 n_parts = min(
                     max(_n0, _n1), size_bubbles
                 )  # no. of clones with non-zero proportion in the mix
-                v = _build_partition_vector(self.n, n_parts, size_bubbles, minprop=self.minprop)
+                v = _build_partition_vector(
+                    self.n, n_parts, size_bubbles, minprop=self.minprop
+                )
                 U[:, _k] = v
         return U
 
@@ -901,6 +910,4 @@ class ILPSubset:
             [[int(getattr(x, "value", x)) for x in row] for row in self.optimized_cA],
             [[int(getattr(x, "value", x)) for x in row] for row in self.optimized_cB],
             [[getattr(x, "value", x) for x in row] for row in self.optimized_u],
-            self.cluster_ids,
-            self.sample_ids,
         )

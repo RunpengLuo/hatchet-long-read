@@ -3,7 +3,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from hatchet.utils.solve.ilp_subset import ILPSubset
 from hatchet.utils.solve.ilp_subset_split import ILPSubsetSplit
-from hatchet.utils.solve.utils import Random, store_instance_tofile
+from hatchet.utils.solve.utils import Random
 
 
 class Worker:
@@ -33,7 +33,7 @@ class Worker:
             carch_results = carch.run(self.solver_type, timelimit=timelimit)
             if carch_results is None:
                 return None
-            _obj_c, _cA, _cB, _, _, _ = carch_results
+            _obj_c, _cA, _cB, _ = carch_results
 
             uarch = copy(self.ilp)
             uarch.fix_c(_cA, _cB)
@@ -41,7 +41,7 @@ class Worker:
             uarch_results = uarch.run(self.solver_type, timelimit=timelimit)
             if uarch_results is None:
                 return None
-            _obj_u, _, _, _u, _, _ = uarch_results
+            _obj_u, _, _, _u = uarch_results
 
             delta = abs(_obj_c - _obj_u)
             if delta < tol:
@@ -119,12 +119,12 @@ class CoordinateDescent:
         j=8,
         random_seed=None,
         timelimit=None,
-        tempdir=None,
     ):
         with Random(random_seed):
             seeds = [self.ilp.build_random_u() for _ in range(n_seed)]
 
-        result = {}  # obj. value => (cA, cB, u) mapping
+        instances = {}  # obj. value => (cA, cB, u) mapping
+        idx = 0
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
             for u in seeds:
@@ -140,30 +140,16 @@ class CoordinateDescent:
                 to_do.append(future)
 
             for future in as_completed(to_do):
-                results = future.result()
-                if results is not None:
-                    obj, cA, cB, u = results
-                    result[obj] = cA, cB, u
+                instance = future.result()
+                if instance is not None:
+                    obj, cA, cB, u = instance
+                    instances[idx] = [obj, cA, cB, u]
+                    idx += 1
 
-        if not result:
+        if not instances:
             raise RuntimeError("Not a single feasible solution found!")
 
-        # TODO store all results
-        if tempdir != None:
-            store_instance_tofile(
-                result,
-                self.ilp.cluster_ids,
-                self.ilp.sample_ids,
-                self.ilp.f_a,
-                self.ilp.f_b,
-                self.ilp.baf,
-                tempdir,
-                "cd",
-                self.ilp.n,
-            )
-
-        best = min(result)
-        return (best,) + result[best] + (self.ilp.cluster_ids, self.ilp.sample_ids)
+        return instances
 
 
 class CoordinateDescentSplit(CoordinateDescent):
