@@ -177,7 +177,7 @@ def model_selection_instance(
 
     data = []
     errv = 0.0
-    for param, [tobj, cA, cB, u, _, _] in sorted(
+    for param, [tobj, cA, cB, u] in sorted(
         instances.items(), key=lambda tp: tp[0]
     ):
         [imf_obj, reg_obj] = compute_individual_objs(
