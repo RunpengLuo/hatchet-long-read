@@ -68,7 +68,7 @@ def solve(
             baf=baf,
             copy_numbers_fixed=copy_numbers_fixed,
             purities_fixed=purities_fixed,
-            penalty_param=None,
+            penalty_param=["RAW", 0.0],
         )
 
         # obj. value => (cA, cB, u) mapping
