@@ -270,7 +270,7 @@ def execute_python(
     f_a = fcn - f_b
 
     cluster_ids = f_a.index.tolist()
-    sample_ids  = f_a.columns.tolist()
+    sample_ids = f_a.columns.tolist()
 
     bins = pd.Series(cluster_sizes)
     weights = 100 * bins / sum(bins)
@@ -306,30 +306,30 @@ def execute_python(
         assert False, "binwise mode is unsupported"
     else:
         instances = solve(
-                f_a=f_a,
-                f_b=f_b,
-                n=n,
-                minprop=args["u"],
-                max_ncns_seg=max_ncns_seg,
-                cn_max=cn_max,
-                weights=weights,
-                ampdel=args["ampdel"],
-                clonal=clonal,
-                purities=args["purities"],
-                baf=baf,
-                copy_numbers_fixed=copy_number_fixed,
-                purities_fixed=purities_fixed,
-                reg_term=args["reg_term"],
-                solver=args["solver"],
-                max_iters=max_iters,
-                n_seed=args["p"],
-                n_worker=args["j"],
-                random_seed=args["r"],
-                timelimit=args["s"],
-                instances_dir=instances_dir,
-                solve_mode=solve_mode,
-                verbose=args["v"] >= 2,
-            )
+            f_a=f_a,
+            f_b=f_b,
+            n=n,
+            minprop=args["u"],
+            max_ncns_seg=max_ncns_seg,
+            cn_max=cn_max,
+            weights=weights,
+            ampdel=args["ampdel"],
+            clonal=clonal,
+            purities=args["purities"],
+            baf=baf,
+            copy_numbers_fixed=copy_number_fixed,
+            purities_fixed=purities_fixed,
+            reg_term=args["reg_term"],
+            solver=args["solver"],
+            max_iters=max_iters,
+            n_seed=args["p"],
+            n_worker=args["j"],
+            random_seed=args["r"],
+            timelimit=args["s"],
+            instances_dir=instances_dir,
+            solve_mode=solve_mode,
+            verbose=args["v"] >= 2,
+        )
         best_instance, imf_obj = model_selection_instance(
             f_a, f_b, weights, instances, pname, solve_mode, sol_dir
         )
@@ -428,4 +428,6 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
     )
 
     # pick best solution by principle of parsimony
-    return n2, n4, "diploid" if n2 <= n4 else "tetraploid"
+    final_selection = "diploid" if n2 <= n4 else "tetraploid"
+    sp.log(msg=f"final selection: {final_selection}\n", level="INFO")
+    return n2, n4, final_selection
