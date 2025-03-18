@@ -42,8 +42,8 @@ class Worker:
                 pparam = reg_ssize * i0
                 carch.model.pparam = pparam
                 if i0 > 0:
-                    cA, cB = carch_instances[0][1:3]
-                    carch.hot_start(cA, cB)
+                    reg_cA, reg_cB = carch_instances[0][1:3]
+                    carch.hot_start(reg_cA, reg_cB)
                 carch_instances[pparam] = carch.run(
                     solver_type=self.solver_type, timelimit=timelimit
                 )
