@@ -160,8 +160,8 @@ class CVXSubset:
                 yB[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
                 model.add_component(f"yB_{_m + 1}_{_k + 1}", yB[(_m, _k)])
 
-                a_dot = sum(self.cA[(_m, _n)] * self.u[(_n, _k)] for _n in range(n))
-                b_dot = sum(self.cA[(_m, _n)] * self.u[(_n, _k)] for _n in range(n))
+                a_dot = sum(self.cA[_m][_n] * self.u[_n][_k] for _n in range(n))
+                b_dot = sum(self.cB[_m][_n] * self.u[_n][_k] for _n in range(n))
                 model.constraints.add(float(f_a_values[_k]) - a_dot <= yA[(_m, _k)])
                 model.constraints.add(a_dot - float(f_a_values[_k]) <= yA[(_m, _k)])
                 model.constraints.add(float(f_b_values[_k]) - b_dot <= yB[(_m, _k)])
