@@ -173,7 +173,7 @@ def model_selection_instance(
     assert len(instances) > 0, "ERROR! there is no solution to be selected"
 
     if pname == "RAW" or len(instances) == 1:
-        return instances[0], instances[0][1]
+        return instances[0], instances[0][0]
 
     data = []
     errv = 0.0

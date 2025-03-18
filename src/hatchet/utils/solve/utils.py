@@ -77,7 +77,7 @@ def store_instance_tofile(
     assert tempdir != None
     cluster_ids = f_a.index.tolist()
     sample_ids = f_a.columns.tolist()
-    fd2_header = f"CLUSTER\tSAMPLE\tbaf\tfcn\texp-baf\texp-fcn\tcn_normal\tu_normal\t"
+    fd2_header = f"CLUSTER\tSAMPLE\tbaf\texp-baf\tfcn\texp-fcn\tcn_normal\tu_normal\t"
     fd2_header += "\t".join(f"cn_clone{i}\tu_clone{i}" for i in range(1, n)) + "\n"
     with open(f"{tempdir}/{solve_mode}_objs.tsv", "w") as fd1:
         fd1.write("sol_id\tobjective\n")
@@ -89,7 +89,7 @@ def store_instance_tofile(
                 for ci, cid in enumerate(cluster_ids):
                     for si, sample in enumerate(sample_ids):
                         fcn = f_a.loc[cid, sample] + f_b.loc[cid, sample]
-                        row = f"{cid}\t{sample}\t{baf.loc[cid, sample]}\t{fcn}\t"
+                        row = f"{cid}\t{sample}\t"
 
                         exp_fcn = 0.0
                         exp_bcount = 0.0
@@ -99,7 +99,7 @@ def store_instance_tofile(
                         exp_baf = -1
                         if exp_fcn != 0:
                             exp_baf = exp_bcount / exp_fcn
-                        row += f"{exp_baf}\t{exp_fcn}"
+                        row += f"{baf.loc[cid, sample]}\t{exp_baf}\t{fcn}\t{exp_fcn}"
                         for oi in range(n):
                             row += f"\t{cA[ci][oi]}|{cB[ci][oi]}\t{u[oi][si]}"
                         fd2.write(row + "\n")
