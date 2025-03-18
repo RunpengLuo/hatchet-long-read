@@ -231,42 +231,35 @@ def model_selection_instance(
             "float-error",
         ],
     )
+    df.loc[:, "selected"] = ""
 
     # find elbow point
     xs = df[f"{pname}-objective"].to_numpy()
     ys = df["IMF-objective"].to_numpy()
-    kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
-    elbow_x, elbow_y = kl.elbow, kl.elbow_y
-    kl.plot_knee(
-        title="Model Selection Pareto Curve",
-        xlabel=f"{pname}-objective",
-        ylabel="IMF-objective",
-    )
-    if outdir != None:
-        plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
 
     sol_index = 0
-    if elbow_x == None:
-        sp.log(
-            msg=f"Failed to identify elbow in model selection step, use result without penalty.\n",
-            level="WARN",
-        )
-    else:
-        sol_indices = np.where(ys >= elbow_y)[0]
-        if len(sol_indices) == 0:
-            sp.log(
-                msg=f"Failed to locate result in model selection for {solve_mode}, use non-penalized result\n",
-                level="WARN",
+    if min(xs) != max(xs):
+        kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
+        elbow_x, elbow_y = kl.elbow, kl.elbow_y
+        if outdir != None:
+            kl.plot_knee(
+                title="Model Selection Pareto Curve",
+                xlabel=f"{pname}-objective",
+                ylabel="IMF-objective",
             )
-        else:
-            # multiple instance may yield same objective values, pick the one with minimum penalty
-            sol_index = sol_indices[0]
-            if verbose:
-                sp.log(
-                    msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
-                    level="INFO",
-                )
-    df.loc[:, "selected"] = ""
+            plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
+
+        if elbow_x != None:
+            sol_indices = np.where(ys >= elbow_y)[0]
+            if len(sol_indices) != 0:
+                # multiple instance may yield same objective values, pick the one with minimum penalty
+                sol_index = sol_indices[0]
+                if verbose:
+                    sp.log(
+                        msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
+                        level="INFO",
+                    )
+
     df.loc[sol_index, "selected"] = "*"
     if outdir != None:
         df.to_csv(
