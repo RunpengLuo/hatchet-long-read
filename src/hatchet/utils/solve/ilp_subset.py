@@ -24,6 +24,9 @@ class ILPSubset:
         copy_numbers_fixed: dict,
         purities_fixed: dict,
         penalty_param: list,
+        # TODO make as parameters
+        zero_cn_thres=0.005,
+        tol=0.001,
     ):
         # Each ILPSubset maintains its own data, so make a deep-copy of passed-in DataFrames
         f_a, f_b = f_a.copy(deep=True), f_b.copy(deep=True)
@@ -50,7 +53,8 @@ class ILPSubset:
         self.w = w
         self.purities = purities
 
-        self.tol = 0.001  # TODO make as argument?
+        self.zero_cn_thres = zero_cn_thres
+        self.tol = tol
 
         self.mode = "FULL"
 
@@ -82,6 +86,8 @@ class ILPSubset:
             copy_numbers_fixed=self.copy_numbers_fixed,  # TODO
             purities_fixed=self.purities_fixed,
             penalty_param=self.penalty_param,
+            zero_cn_thres=self.zero_cn_thres,
+            tol=self.tol
         )
 
     def __str__(self):
@@ -145,7 +151,7 @@ class ILPSubset:
         _M = self.M  # compute binary length
         _base = self.base
         purities = self.purities
-        zero_cn_thres = 0.005
+        zero_cn_thres = self.zero_cn_thres
 
         model = pe.ConcreteModel()
 
