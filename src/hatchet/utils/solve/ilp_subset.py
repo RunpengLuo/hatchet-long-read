@@ -87,7 +87,7 @@ class ILPSubset:
             purities_fixed=self.purities_fixed,
             penalty_param=self.penalty_param,
             zero_cn_thres=self.zero_cn_thres,
-            tol=self.tol
+            tol=self.tol,
         )
 
     def __str__(self):
@@ -448,8 +448,7 @@ class ILPSubset:
         for _m, _k in np.ndindex((m, k)):
             objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[self.cluster_ids[_m]]
 
-        # TODO make this more efficient by pyomo.Param to reuse states
-        if mode_t == "FULL" and self.penalty_param[0] != "RAW":
+        if mode_t in ("FULL", "CARCH") and self.penalty_param[0] != "RAW":
             [pname, init_val] = self.penalty_param
             pparam = pe.Param(mutable=True, initialize=init_val)
             model.pparam = pparam

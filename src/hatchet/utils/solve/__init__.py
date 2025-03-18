@@ -3,8 +3,6 @@ import numpy as np
 import pandas as pd
 from pyomo import environ as pe
 from collections import OrderedDict
-import kneed
-import matplotlib.pyplot as plt
 
 import hatchet.utils.Supporting as sp
 
@@ -52,8 +50,10 @@ def solve(
     solve_mode: str,
     verbose=False,
 ):
+    [pname, num_steps, step_size] = reg_term
+
     cd_instances = None
-    if solve_mode in ["cd", "both"]:
+    if solve_mode in ("cd", "both"):
         cd = CoordinateDescent(
             f_a=f_a,
             f_b=f_b,
@@ -67,7 +67,7 @@ def solve(
             purities=purities,
             copy_numbers_fixed=copy_numbers_fixed,
             purities_fixed=purities_fixed,
-            penalty_param=["RAW", 0.0],
+            reg_term=reg_term,
         )
 
         # obj. value => (cA, cB, u) mapping
@@ -92,9 +92,8 @@ def solve(
 
     sol_instances = None
     sol_class = {"ilp": ILPSubset, "both": ILPSubset, "cvx": CVXSubset}
-    if solve_mode in ["ilp", "both", "cvx"]:
+    if solve_mode in ("ilp", "both", "cvx"):
         sol_instances = {}
-        [pname, num_steps, step_size] = reg_term
         solver = sol_class[solve_mode](
             n,
             cn_max,
@@ -152,91 +151,3 @@ def solve(
         return cd_instances
     else:
         return sol_instances
-
-
-def model_selection_instance(
-    f_a: pd.DataFrame,
-    f_b: pd.DataFrame,
-    weights: pd.Series,
-    instances: dict,
-    pname: str,
-    solve_mode: str,
-    outdir: str,
-):
-    """
-    use elbow criterion to select best instance from either
-    1) ILP or CD+ILP with scalaried solutions, or
-    2) CD only solutions
-
-    if solve_mode != cd, float-number error with be estimated.
-    """
-    assert len(instances) > 0, "ERROR! there is no solution to be selected"
-
-    if pname == "RAW" or len(instances) == 1:
-        return instances[0], instances[0][0]
-
-    data = []
-    errv = 0.0
-    for param, [tobj, cA, cB, u] in sorted(instances.items(), key=lambda tp: tp[0]):
-        [imf_obj, reg_obj] = compute_individual_objs(
-            pname, weights, f_a, f_b, cA, cB, u
-        )
-        if solve_mode != "cd":
-            errv = tobj - (imf_obj + param * reg_obj)
-        else:
-            errv = tobj - imf_obj
-        data.append([param, tobj, imf_obj, reg_obj, errv])
-
-    df = pd.DataFrame(
-        data=data,
-        columns=[
-            "Lambda",
-            "Objective",
-            "IMF-objective",
-            f"{pname}-objective",
-            "float-error",
-        ],
-    )
-
-    # find elbow point
-    xs = df[f"{pname}-objective"].to_numpy()
-    ys = df["IMF-objective"].to_numpy()
-    kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
-    elbow_x, elbow_y = kl.elbow, kl.elbow_y
-    kl.plot_knee(
-        title="Model Selection Pareto Curve",
-        xlabel=f"{pname}-objective",
-        ylabel="IMF-objective",
-    )
-    plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
-
-    sol_index = 0
-    if elbow_x == None:
-        sp.log(
-            msg=f"Failed to identify elbow in model selection step, use result without penalty.\n",
-            level="WARN",
-        )
-    else:
-        sol_indices = np.where(ys >= elbow_y)[0]
-        if len(sol_indices) == 0:
-            sp.log(
-                msg=f"Failed to locate result in model selection step, use result without penalty.\n",
-                level="WARN",
-            )
-        else:
-            # multiple instance may yield same objective values, pick the one with minimum penalty
-            sol_index = sol_indices[0]
-            sp.log(
-                msg=f"Model selection found solution with index={sol_index}!\n",
-                level="INFO",
-            )
-    df.loc[:, "selected"] = ""
-    df.loc[sol_index, "selected"] = "*"
-    df.to_csv(
-        f"{outdir}/model_selections.{solve_mode}.{pname}.tsv",
-        sep="\t",
-        header=True,
-        index=False,
-    )
-
-    return instances[df.loc[sol_index, "Lambda"]], df.loc[sol_index, "IMF-objective"]

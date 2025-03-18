@@ -3,12 +3,14 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from hatchet.utils.solve.ilp_subset import ILPSubset
 from hatchet.utils.solve.ilp_subset_split import ILPSubsetSplit
-from hatchet.utils.solve.utils import Random
+from hatchet.utils.solve.utils import Random, model_selection_instance
 
 
 class Worker:
-    def __init__(self, ilp, solver):
+    def __init__(self, work_id: int, ilp: ILPSubset, reg_term: list, solver: str):
+        self.work_id = work_id
         self.ilp = ilp
+        self.reg_term = reg_term
         self.solver_type = solver
 
     def run(
@@ -25,12 +27,41 @@ class Worker:
         _u = u
         _cA, _cB = cA, cB  # first hot-start values
 
+        [reg_name, reg_steps, reg_ssize] = self.reg_term
+        # TODO save temp result? maybe huge
+
         while (_iters < max_iters) and (_convergence_iters < max_convergence_iters):
             carch = copy(self.ilp)
             carch.fix_u(_u)
             carch.create_model()
             carch.hot_start(_cA, _cB)
-            carch_results = carch.run(self.solver_type, timelimit=timelimit)
+
+            # regularization loop
+            carch_instances = {}
+            for i0 in range(0, reg_steps + 1):
+                pparam = reg_ssize * i0
+                carch.model.pparam = pparam
+                if i0 > 0:
+                    cA, cB = carch_instances[0][1:3]
+                    carch.hot_start(cA, cB)
+                carch_instances[pparam] = carch.run(
+                    solver_type=self.solver_type, timelimit=timelimit
+                )
+                if carch_instances[pparam] == None:
+                    return None
+
+            # model-select best (cA, cB) here
+            carch_results, _ = model_selection_instance(
+                self.ilp.f_a,
+                self.ilp.f_b,
+                self.ilp.w,
+                carch_instances,
+                reg_name,
+                f"cd_{self.work_id}_{_iters}",
+                None,
+            )
+
+            # carch_results = carch.run(self.solver_type, timelimit=timelimit)
             if carch_results is None:
                 return None
             _obj_c, _cA, _cB, _ = carch_results
@@ -55,8 +86,8 @@ class Worker:
 
 
 # Top-level 'work' function that can be pickled for multiprocessing
-def _work(cd, u, solver_type, max_iters, max_convergence_iters, timelimit):
-    worker = Worker(cd.ilp, solver_type)
+def _work(cd, work_id, u, solver_type, max_iters, max_convergence_iters, timelimit):
+    worker = Worker(work_id, cd.ilp, cd.reg_term, solver_type)
     return worker.run(
         cd.hcA,
         cd.hcB,
@@ -82,8 +113,9 @@ class CoordinateDescent:
         ampdel=True,
         copy_numbers_fixed=None,
         purities_fixed=None,
-        penalty_param=None,
+        reg_term=None,
     ):
+        self.reg_term = reg_term
         # ilp attribute used here as a convenient storage container for properties
         self.ilp = ILPSubset(
             n=n,
@@ -98,7 +130,7 @@ class CoordinateDescent:
             purities=purities,
             copy_numbers_fixed=copy_numbers_fixed,  # TODO
             purities_fixed=purities_fixed,
-            penalty_param=penalty_param,
+            penalty_param=[reg_term[0], 0.0],
         )
         # Building the model here is not strictly necessary, as, during execution,
         #   self.carch and c.uarch will copy self.ilp and create+run those models.
@@ -125,10 +157,11 @@ class CoordinateDescent:
         idx = 0
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
-            for u in seeds:
+            for i, u in enumerate(seeds):
                 future = executor.submit(
                     _work,
                     self,
+                    i,
                     u,
                     solver_type,
                     max_iters,

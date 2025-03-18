@@ -1,6 +1,10 @@
 import os
 import numpy as np
 import pandas as pd
+import kneed
+import matplotlib.pyplot as plt
+
+import hatchet.utils.Supporting as sp
 
 # A list of random states, used as a stack
 random_states = []
@@ -181,3 +185,93 @@ def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     maxA_w = np.dot(np.max(cA[:, 1:], axis=1), weights)[0]
     maxB_w = np.dot(np.max(cB[:, 1:], axis=1), weights)[0]
     return maxA_w + maxB_w
+
+
+def model_selection_instance(
+    f_a: pd.DataFrame,
+    f_b: pd.DataFrame,
+    weights: pd.Series,
+    instances: dict,
+    pname: str,
+    solve_mode: str,
+    outdir: str,
+):
+    """
+    use elbow criterion to select best instance from either
+    1) ILP or CD+ILP with scalaried solutions, or
+    2) CD only solutions
+
+    if solve_mode != cd, float-number error with be estimated.
+    """
+    assert len(instances) > 0, "ERROR! there is no solution to be selected"
+
+    if pname == "RAW" or len(instances) == 1:
+        return instances[0], instances[0][0]
+
+    data = []
+    errv = 0.0
+    for param, [tobj, cA, cB, u] in sorted(instances.items(), key=lambda tp: tp[0]):
+        [imf_obj, reg_obj] = compute_individual_objs(
+            pname, weights, f_a, f_b, cA, cB, u
+        )
+        if solve_mode != "cd":
+            errv = tobj - (imf_obj + param * reg_obj)
+        else:
+            errv = tobj - imf_obj
+        data.append([param, tobj, imf_obj, reg_obj, errv])
+
+    df = pd.DataFrame(
+        data=data,
+        columns=[
+            "Lambda",
+            "Objective",
+            "IMF-objective",
+            f"{pname}-objective",
+            "float-error",
+        ],
+    )
+
+    # find elbow point
+    xs = df[f"{pname}-objective"].to_numpy()
+    ys = df["IMF-objective"].to_numpy()
+    kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
+    elbow_x, elbow_y = kl.elbow, kl.elbow_y
+    kl.plot_knee(
+        title="Model Selection Pareto Curve",
+        xlabel=f"{pname}-objective",
+        ylabel="IMF-objective",
+    )
+    if outdir != None:
+        plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
+
+    sol_index = 0
+    if elbow_x == None:
+        sp.log(
+            msg=f"Failed to identify elbow in model selection step, use result without penalty.\n",
+            level="WARN",
+        )
+    else:
+        sol_indices = np.where(ys >= elbow_y)[0]
+        if len(sol_indices) == 0:
+            sp.log(
+                msg=f"Failed to locate result in model selection for {solve_mode}, use non-penalized result\n",
+                level="WARN",
+            )
+        else:
+            # multiple instance may yield same objective values, pick the one with minimum penalty
+            sol_index = sol_indices[0]
+            sp.log(
+                msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
+                level="INFO",
+            )
+    df.loc[:, "selected"] = ""
+    df.loc[sol_index, "selected"] = "*"
+    if outdir != None:
+        df.to_csv(
+            f"{outdir}/model_selections.{solve_mode}.{pname}.tsv",
+            sep="\t",
+            header=True,
+            index=False,
+        )
+
+    return instances[df.loc[sol_index, "Lambda"]], df.loc[sol_index, "IMF-objective"]
