@@ -129,14 +129,14 @@ class CVXSubset:
             model.constraints.add(self.cA[_m][0] == 1)
             model.constraints.add(self.cB[_m][0] == 1)
             for _n in range(n):
-                model.constraints.add(self.cA[_m][n] == a)
-                model.constraints.add(self.cB[_m][n] == b)
+                model.constraints.add(self.cA[_m][_n] == a)
+                model.constraints.add(self.cB[_m][_n] == b)
 
         # copy-number constraints
         for _m in range(m):
             cluster_id = f_a.index[_m]
             for _n in range(n):
-                model.constraints.add(self.cA[_m][n] + self.cB[_m][n] <= cn_max)
+                model.constraints.add(self.cA[_m][_n] + self.cB[_m][_n] <= cn_max)
 
         # purity constraint
         for _k in range(k):
