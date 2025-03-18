@@ -65,7 +65,6 @@ def solve(
             ampdel=ampdel,
             cn=clonal,
             purities=purities,
-            baf=baf,
             copy_numbers_fixed=copy_numbers_fixed,
             purities_fixed=purities_fixed,
             penalty_param=["RAW", 0.0],
@@ -107,7 +106,6 @@ def solve(
             f_b=f_b,
             w=weights,
             purities=purities,
-            baf=baf,
             copy_numbers_fixed=copy_numbers_fixed,
             purities_fixed=purities_fixed,
             penalty_param=[pname, 0.0],
@@ -134,7 +132,9 @@ def solve(
             if i0 > 0:
                 cA, cB = sol_instances[0][1:3]
                 solver.hot_start(cA, cB)
-            sol_instances[pparam] = solver.run(solver_type=solver_type, timelimit=timelimit)
+            sol_instances[pparam] = solver.run(
+                solver_type=solver_type, timelimit=timelimit
+            )
             assert sol_instances[pparam] != None, f"ERROR! optimization failed."
 
         if instances_dir != None:

@@ -79,7 +79,6 @@ class CoordinateDescent:
         cn,
         w,
         purities,
-        baf,
         ampdel=True,
         copy_numbers_fixed=None,
         purities_fixed=None,
@@ -97,7 +96,6 @@ class CoordinateDescent:
             f_b=f_b,
             w=w,
             purities=purities,
-            baf=baf,
             copy_numbers_fixed=copy_numbers_fixed,  # TODO
             purities_fixed=purities_fixed,
             penalty_param=penalty_param,

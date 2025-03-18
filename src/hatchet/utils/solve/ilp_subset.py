@@ -21,7 +21,6 @@ class ILPSubset:
         f_b: pd.DataFrame,
         w: pd.Series,
         purities: dict,
-        baf: pd.DataFrame,
         copy_numbers_fixed: dict,
         purities_fixed: dict,
         penalty_param: list,
@@ -48,7 +47,6 @@ class ILPSubset:
         self.copy_numbers_fixed = copy_numbers_fixed  # TODO
         self.purities_fixed = purities_fixed
         self.penalty_param = penalty_param
-        self.baf = baf
         self.w = w
         self.purities = purities
 
@@ -81,7 +79,6 @@ class ILPSubset:
             f_b=self.f_b,
             w=self.w,
             purities=self.purities,
-            baf=self.baf,
             copy_numbers_fixed=self.copy_numbers_fixed,  # TODO
             purities_fixed=self.purities_fixed,
             penalty_param=self.penalty_param,
@@ -137,58 +134,18 @@ class ILPSubset:
         else:
             return self.u
 
-    # TODO metin's cn penalty
-    def large_cn_penalty(self, model, beta, ub):
-        if self.mode == "UARCH":
-            cA = self._fixed_cA
-            cB = self._fixed_cB
-            u = self.u
-        elif self.mode == "FULL":
-            cA = self.cA
-            cB = self.cB
-            u = self.u
-        else:
-            cA = self.cA
-            cB = self.cB
-            u = self._fixed_u
-        bM = {}
-        aMb = {}
-        penalty = 0
-        for _m in range(self.m):  # cluster
-            cluster_id = self.f_a.index[_m]  # clone
-            for _n in range(1, self.n):
-                bM[(_m, _n)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
-                model.add_component(f"bM_{_m + 1}_{_n + 1}", bM[(_m, _n)])
-                aMb[(_m, _n)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
-                model.add_component(f"aMb_{_m + 1}_{_n + 1}", aMb[(_m, _n)])
-
-                model.constraints.add(cB[_m][_n] - 1 <= bM[(_m, _n)])
-                model.constraints.add(1 - cB[_m][_n] <= bM[(_m, _n)])
-                model.constraints.add(cA[_m][_n] - cB[_m][_n] <= aMb[(_m, _n)])
-                model.constraints.add(cB[_m][_n] - cA[_m][_n] <= aMb[(_m, _n)])
-                for _k in range(self.k):  # sample
-                    penalty += (
-                        self.w[cluster_id]
-                        * beta
-                        * u[_n][_k]
-                        * (bM[(_m, _n)] + 0.5 * aMb[(_m, _n)])
-                    )
-
-        return penalty
-
     def create_model(self, pprint=False):
         m, n, k = self.m, self.n, self.k
         f_a, f_b = self.f_a, self.f_b
         cn_max = self.cn_max
         ampdel = self.ampdel
         copy_numbers = self.copy_numbers
-        copy_numbers_fixed = self.copy_numbers_fixed  # TODO
-        purities_fixed = self.purities_fixed
         mode_t = self.mode
         max_ncns_seg = self.max_ncns_seg
-        _M = self.M
+        _M = self.M  # compute binary length
         _base = self.base
         purities = self.purities
+        zero_cn_thres = 0.005
 
         model = pe.ConcreteModel()
 
@@ -204,34 +161,28 @@ class ILPSubset:
         adA = {}
         adB = {}
 
+        # upper bound for solver
+        cAB_bounds = {}
         for _m in range(m):
             cluster_id = f_a.index[_m]
+            cAB_bounds[_m] = max(sum(copy_numbers.get(cluster_id, (0, 0))), cn_max)
 
-            # upper bound for solver
-            ub = max(sum(copy_numbers.get(cluster_id, (0, 0))), cn_max)
-
-            for _k in range(k):
-                yA[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                model.add_component(f"yA_{_m + 1}_{_k + 1}", yA[(_m, _k)])
-                yB[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
-                model.add_component(f"yB_{_m + 1}_{_k + 1}", yB[(_m, _k)])
-                fA[(_m, _k)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
-                model.add_component(f"fA_{_m + 1}_{_k + 1}", fA[(_m, _k)])
-                fB[(_m, _k)] = pe.Var(bounds=(0, ub), domain=pe.Reals)
-                model.add_component(f"fB_{_m + 1}_{_k + 1}", fB[(_m, _k)])
+        for _m, _k in np.ndindex((m, k)):
+            yA[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+            model.add_component(f"yA_{_m + 1}_{_k + 1}", yA[(_m, _k)])
+            yB[(_m, _k)] = pe.Var(bounds=(0, np.inf), domain=pe.Reals)
+            model.add_component(f"yB_{_m + 1}_{_k + 1}", yB[(_m, _k)])
+            fA[(_m, _k)] = pe.Var(bounds=(0, cAB_bounds[_m]), domain=pe.Reals)
+            model.add_component(f"fA_{_m + 1}_{_k + 1}", fA[(_m, _k)])
+            fB[(_m, _k)] = pe.Var(bounds=(0, cAB_bounds[_m]), domain=pe.Reals)
+            model.add_component(f"fB_{_m + 1}_{_k + 1}", fB[(_m, _k)])
 
         if mode_t in ("FULL", "CARCH"):
-            for _m in range(m):
-                cluster_id = f_a.index[_m]
-
-                # upper bound for solver
-                ub = max(sum(copy_numbers.get(cluster_id, (0, 0))), cn_max)
-
-                for _n in range(n):
-                    self.cA[_m][_n] = pe.Var(bounds=(0, ub), domain=pe.Integers)
-                    model.add_component(f"cA_{_m + 1}_{_n + 1}", self.cA[_m][_n])
-                    self.cB[_m][_n] = pe.Var(bounds=(0, ub), domain=pe.Integers)
-                    model.add_component(f"cB_{_m + 1}_{_n + 1}", self.cB[_m][_n])
+            for _m, _n in np.ndindex((m, n)):
+                self.cA[_m][_n] = pe.Var(bounds=(0, cAB_bounds[_m]), domain=pe.Integers)
+                model.add_component(f"cA_{_m + 1}_{_n + 1}", self.cA[_m][_n])
+                self.cB[_m][_n] = pe.Var(bounds=(0, cAB_bounds[_m]), domain=pe.Integers)
+                model.add_component(f"cB_{_m + 1}_{_n + 1}", self.cB[_m][_n])
 
             if ampdel:
                 for _m in range(m):
@@ -246,65 +197,57 @@ class ILPSubset:
         bitcA = {}
         bitcB = {}
         if (mode_t == "FULL") or (max_ncns_seg > 0 and mode_t == "CARCH"):
-            for _b in range(_M):
-                for _m in range(m):
-                    for _n in range(n):
-                        bitcA[(_b, _m, _n)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
-                        model.add_component(
-                            f"bitcA_{_b + 1}_{_m + 1}_{_n + 1}",
-                            bitcA[(_b, _m, _n)],
-                        )
-                        bitcB[(_b, _m, _n)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
-                        model.add_component(
-                            f"bitcB_{_b + 1}_{_m + 1}_{_n + 1}",
-                            bitcB[(_b, _m, _n)],
-                        )
+            for (
+                _b,
+                _m,
+                _n,
+            ) in np.ndindex((_M, m, n)):
+                bitcA[(_b, _m, _n)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
+                model.add_component(
+                    f"bitcA_{_b + 1}_{_m + 1}_{_n + 1}",
+                    bitcA[(_b, _m, _n)],
+                )
+                bitcB[(_b, _m, _n)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
+                model.add_component(
+                    f"bitcB_{_b + 1}_{_m + 1}_{_n + 1}",
+                    bitcB[(_b, _m, _n)],
+                )
 
         if mode_t in ("FULL", "UARCH"):
-            for _n in range(n):
-                for _k in range(k):
-                    self.u[_n][_k] = pe.Var(bounds=(0, 1), domain=pe.Reals)
-                    model.add_component(f"u_{_n + 1}_{_k + 1}", self.u[_n][_k])
+            for _n, _k in np.ndindex((n, k)):
+                self.u[_n][_k] = pe.Var(bounds=(0, 1), domain=pe.Reals)
+                model.add_component(f"u_{_n + 1}_{_k + 1}", self.u[_n][_k])
 
         vA = {}
         vB = {}
         if mode_t == "FULL":
-            for _b in range(_M):
-                for _m in range(m):
-                    for _n in range(n):
-                        for _k in range(k):
-                            vA[(_b, _m, _n, _k)] = pe.Var(
-                                bounds=(0, 1), domain=pe.Reals
-                            )
-                            model.add_component(
-                                f"vA_{_b + 1}_{_m + 1}_{_n + 1}_{_k + 1}",
-                                vA[(_b, _m, _n, _k)],
-                            )
-                            vB[(_b, _m, _n, _k)] = pe.Var(
-                                bounds=(0, 1), domain=pe.Reals
-                            )
-                            model.add_component(
-                                f"vB_{_b + 1}_{_m + 1}_{_n + 1}_{_k + 1}",
-                                vB[(_b, _m, _n, _k)],
-                            )
+            for _b, _m, _n, _k in np.ndindex((_M, m, n, k)):
+                vA[(_b, _m, _n, _k)] = pe.Var(bounds=(0, 1), domain=pe.Reals)
+                model.add_component(
+                    f"vA_{_b + 1}_{_m + 1}_{_n + 1}_{_k + 1}",
+                    vA[(_b, _m, _n, _k)],
+                )
+                vB[(_b, _m, _n, _k)] = pe.Var(bounds=(0, 1), domain=pe.Reals)
+                model.add_component(
+                    f"vB_{_b + 1}_{_m + 1}_{_n + 1}_{_k + 1}",
+                    vB[(_b, _m, _n, _k)],
+                )
 
         x = {}
         if (mode_t in ("FULL", "UARCH")) and (self.minprop > 0):
-            for _n in range(n):
-                for _k in range(k):
-                    x[(_n, _k)] = pe.Var(domain=pe.Binary)
-                    model.add_component(f"x_{_n + 1}_{_k + 1}", x[(_n, _k)])
+            for _n, _k in np.ndindex((n, k)):
+                x[(_n, _k)] = pe.Var(domain=pe.Binary)
+                model.add_component(f"x_{_n + 1}_{_k + 1}", x[(_n, _k)])
 
         # buildOptionalVariables
         z = {}
         if (mode_t in ("FULL", "CARCH")) and max_ncns_seg > 0:
-            for _m in range(self.m):
-                for _n in range(1, self.n):
-                    for _d in range(max_ncns_seg):
-                        z[(_m, _n, _d)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
-                        model.add_component(
-                            f"z_{_m + 1}_{_n + 1}_{_d + 1}", z[(_m, _n, _d)]
-                        )
+            for _m, _n, _d in np.ndindex((m, n, max_ncns_seg)):
+                if _n != 0:
+                    z[(_m, _n, _d)] = pe.Var(bounds=(0, 1), domain=pe.Binary)
+                    model.add_component(
+                        f"z_{_m + 1}_{_n + 1}_{_d + 1}", z[(_m, _n, _d)]
+                    )
 
         # CONSTRAINTS
         model.constraints = pe.ConstraintList()
@@ -324,105 +267,71 @@ class ILPSubset:
                 model.constraints.add(_fB - float(f_b_values[_k]) <= _yB)
 
         if mode_t == "FULL":
-            for _m in range(m):
-                for _k in range(k):
-                    sum_a = 0
-                    for _n in range(n):
-                        for _b in range(_M):
-                            sum_a += vA[(_b, _m, _n, _k)] * math.pow(2, _b)
-                            model.constraints.add(
-                                vA[(_b, _m, _n, _k)] <= bitcA[(_b, _m, _n)]
-                            )
-                            model.constraints.add(
-                                vA[(_b, _m, _n, _k)] <= self.u[_n][_k]
-                            )
-                            model.constraints.add(
-                                vA[(_b, _m, _n, _k)]
-                                >= bitcA[(_b, _m, _n)] + self.u[_n][_k] - 1
-                            )
+            for _m, _k in np.ndindex((m, k)):
+                sum_a = 0
+                for _n, _b in np.ndindex((n, _M)):
+                    sum_a += vA[(_b, _m, _n, _k)] * math.pow(2, _b)
+                    model.constraints.add(vA[(_b, _m, _n, _k)] <= bitcA[(_b, _m, _n)])
+                    model.constraints.add(vA[(_b, _m, _n, _k)] <= self.u[_n][_k])
+                    model.constraints.add(
+                        vA[(_b, _m, _n, _k)] >= bitcA[(_b, _m, _n)] + self.u[_n][_k] - 1
+                    )
 
-                    model.constraints.add(fA[(_m, _k)] == sum_a)
+                model.constraints.add(fA[(_m, _k)] == sum_a)
 
-            for _m in range(m):
-                for _k in range(k):
-                    sum_b = 0
-                    for _n in range(n):
-                        for _b in range(_M):
-                            sum_b += vB[(_b, _m, _n, _k)] * math.pow(2, _b)
-                            model.constraints.add(
-                                vB[(_b, _m, _n, _k)] <= bitcB[(_b, _m, _n)]
-                            )
-                            model.constraints.add(
-                                vB[(_b, _m, _n, _k)] <= self.u[_n][_k]
-                            )
-                            model.constraints.add(
-                                vB[(_b, _m, _n, _k)]
-                                >= bitcB[(_b, _m, _n)] + self.u[_n][_k] - 1
-                            )
+            for _m, _k in np.ndindex((m, k)):
+                sum_b = 0
+                for _n, _b in np.ndindex((n, _M)):
+                    sum_b += vB[(_b, _m, _n, _k)] * math.pow(2, _b)
+                    model.constraints.add(vB[(_b, _m, _n, _k)] <= bitcB[(_b, _m, _n)])
+                    model.constraints.add(vB[(_b, _m, _n, _k)] <= self.u[_n][_k])
+                    model.constraints.add(
+                        vB[(_b, _m, _n, _k)] >= bitcB[(_b, _m, _n)] + self.u[_n][_k] - 1
+                    )
 
-                    model.constraints.add(fB[(_m, _k)] == sum_b)
+                model.constraints.add(fB[(_m, _k)] == sum_b)
 
-            for _n in range(n):
-                for _k in range(k):
-                    _sum = 0
-                    for _m in range(m):
-                        for _b in range(_M):
-                            _sum += bitcA[(_b, _m, _n)] + bitcB[(_b, _m, _n)]
-                    model.constraints.add(_sum >= self.u[_n][_k])
+            for _n, _k in np.ndindex((n, k)):
+                _sum = 0
+                for _m, _b in np.ndindex((m, _M)):
+                    _sum += bitcA[(_b, _m, _n)] + bitcB[(_b, _m, _n)]
+                model.constraints.add(_sum >= self.u[_n][_k])
 
         if (mode_t == "FULL") or (max_ncns_seg > 0 and mode_t == "CARCH"):
-            for _m in range(m):
-                cluster_id = f_a.index[_m]
-                # upper bound for solver
-                ub = max(sum(copy_numbers.get(cluster_id, (0, 0))), cn_max)
+            for _m, _n in np.ndindex((m, n)):
+                sum_a = 0
+                sum_b = 0
+                for _b in range(_M):
+                    sum_a += bitcA[(_b, _m, _n)] * math.pow(2, _b)
+                    sum_b += bitcB[(_b, _m, _n)] * math.pow(2, _b)
 
-                for _n in range(n):
-                    sum_a = 0
-                    sum_b = 0
-                    for _b in range(_M):
-                        sum_a += bitcA[(_b, _m, _n)] * math.pow(2, _b)
-                        sum_b += bitcB[(_b, _m, _n)] * math.pow(2, _b)
-
-                    model.constraints.add(self.cA[_m][_n] == sum_a)
-                    model.constraints.add(self.cB[_m][_n] == sum_b)
-                    model.constraints.add(self.cA[_m][_n] + self.cB[_m][_n] <= ub)
-
-        #  this is where we fix the purities if user provides purity values for (tumor) samples
-        # in each sample s, clone 0 (healty & normal) should have the purity 1 - purity_s
-        if mode_t in ("FULL", "UARCH") and purities:
-            for i, p in enumerate(purities):
-                model.constraints.add(self.u[0][i] == 1 - p)
+                model.constraints.add(self.cA[_m][_n] == sum_a)
+                model.constraints.add(self.cB[_m][_n] == sum_b)
 
         if mode_t == "CARCH":
             # TODO: These loops can be collapsed once validation against C++ is complete
-            for _m in range(m):
-                for _k in range(k):
-                    _sumA = 0
-                    _sumB = 0
-                    for _n in range(n):
-                        if self._fixed_u[_n][_k] >= self.minprop - self.tol:
-                            _sumA += self.cA[_m][_n] * self._fixed_u[_n][_k]
-                            _sumB += self.cB[_m][_n] * self._fixed_u[_n][_k]
-                    model.constraints.add(fA[(_m, _k)] == _sumA)
-                    model.constraints.add(fB[(_m, _k)] == _sumB)
-
-                cluster_id = f_a.index[_m]
-                # upper bound for solver
-                ub = max(sum(copy_numbers.get(cluster_id, (0, 0))), cn_max)
+            for _m, _k in np.ndindex((m, k)):
+                _sumA = 0
+                _sumB = 0
                 for _n in range(n):
-                    model.constraints.add(self.cA[_m][_n] + self.cB[_m][_n] <= ub)
+                    if self._fixed_u[_n][_k] >= self.minprop - self.tol:
+                        _sumA += self.cA[_m][_n] * self._fixed_u[_n][_k]
+                        _sumB += self.cB[_m][_n] * self._fixed_u[_n][_k]
+                model.constraints.add(fA[(_m, _k)] == _sumA)
+                model.constraints.add(fB[(_m, _k)] == _sumB)
 
         if mode_t in ("FULL", "CARCH"):
-            for _m in range(m):
+            for _m, _n in np.ndindex((m, n)):
+                model.constraints.add(
+                    self.cA[_m][_n] + self.cB[_m][_n] <= cAB_bounds[_m]
+                )
+
+            for _m, cluster_id in enumerate(self.cluster_ids):
                 model.constraints.add(self.cA[_m][0] == 1)
                 model.constraints.add(self.cB[_m][0] == 1)
 
-                cluster_id = self.cluster_ids[_m]
-
-                # if the fraction of the cluster size is larger than or equal to 0.005 in the whole dataset
-                # then its integer copy number cannot have (0,0) copy number
-                # TODO wired term
-                if self.w[cluster_id] / sum(self.w) >= 0.005:
+                # avoid zero copy number state <zero_cn_thres>
+                if self.w[cluster_id] / sum(self.w) >= zero_cn_thres:
                     for _n in range(1, n):
                         model.constraints.add(self.cA[_m][_n] + self.cB[_m][_n] >= 1)
 
@@ -444,21 +353,18 @@ class ILPSubset:
 
         if mode_t == "UARCH":
             # TODO: These loops can be collapsed once validation against C++ is complete
-            for _m in range(m):
-                for _k in range(k):
-                    _sumA = 0
-                    _sumB = 0
-                    for _n in range(n):
-                        _sumA += int(self._fixed_cA[_m][_n]) * self.u[_n][_k]
-                        _sumB += int(self._fixed_cB[_m][_n]) * self.u[_n][_k]
-                    model.constraints.add(fA[(_m, _k)] == _sumA)
-                    model.constraints.add(fB[(_m, _k)] == _sumB)
+            for _m, _k in np.ndindex((m, k)):
+                _sumA = 0
+                _sumB = 0
+                for _n in range(n):
+                    _sumA += int(self._fixed_cA[_m][_n]) * self.u[_n][_k]
+                    _sumB += int(self._fixed_cB[_m][_n]) * self.u[_n][_k]
+                model.constraints.add(fA[(_m, _k)] == _sumA)
+                model.constraints.add(fB[(_m, _k)] == _sumB)
 
         if mode_t in ("FULL", "UARCH"):
             for _k in range(k):
-                _sum = 0
-                for _n in range(n):
-                    _sum += self.u[_n][_k]
+                _sum = sum(self.u[_n][_k] for _n in range(n))
                 model.constraints.add(_sum == 1)
 
         if (mode_t in ("FULL", "UARCH")) and self.minprop > 0:
@@ -469,34 +375,32 @@ class ILPSubset:
 
         # buildOptionalConstraints
         if (mode_t in ("FULL", "CARCH")) and max_ncns_seg > 0:
-            for _m in range(self.m):
-                for _n in range(1, self.n):
+            for _m in range(m):
+                for _n in range(1, n):
                     _sum = 0
-                    for _d in range(self.max_ncns_seg):
+                    for _d in range(max_ncns_seg):
                         _sum += z[(_m, _n, _d)]
                     model.constraints.add(_sum == 1)
 
-            for _m in range(self.m):
-                for _M in range(self.M):
-                    for _d in range(max_ncns_seg):
-                        for _i in range(1, self.n - 1):
-                            for _j in range(1, self.n):
-                                model.constraints.add(
-                                    bitcA[(_M, _m, _i)] - bitcA[(_M, _m, _j)]
-                                    <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
-                                )
-                                model.constraints.add(
-                                    bitcA[(_M, _m, _j)] - bitcA[(_M, _m, _i)]
-                                    <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
-                                )
-                                model.constraints.add(
-                                    bitcB[(_M, _m, _i)] - bitcB[(_M, _m, _j)]
-                                    <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
-                                )
-                                model.constraints.add(
-                                    bitcB[(_M, _m, _j)] - bitcB[(_M, _m, _i)]
-                                    <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
-                                )
+            for _m, _b, _d in np.ndindex((m, _M, max_ncns_seg)):
+                for _i in range(1, n - 1):
+                    for _j in range(1, n):
+                        model.constraints.add(
+                            bitcA[(_b, _m, _i)] - bitcA[(_b, _m, _j)]
+                            <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
+                        )
+                        model.constraints.add(
+                            bitcA[(_b, _m, _j)] - bitcA[(_b, _m, _i)]
+                            <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
+                        )
+                        model.constraints.add(
+                            bitcB[(_b, _m, _i)] - bitcB[(_b, _m, _j)]
+                            <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
+                        )
+                        model.constraints.add(
+                            bitcB[(_b, _m, _j)] - bitcB[(_b, _m, _i)]
+                            <= 2 - z[(_m, _i, _d)] - z[(_m, _j, _d)]
+                        )
 
             for _m in range(self.m):
                 for _d in range(max_ncns_seg - 1):
@@ -504,33 +408,39 @@ class ILPSubset:
                     for _n in range(1, self.n):
                         _sum_l += z[(_m, _n, _d)] * self.symmCoeff(_n)
                         _sum_l1 += z[(_m, _n, _d + 1)] * self.symmCoeff(_n)
-                        model.constraints.add(_sum_l <= _sum_l1)
+                        model.constraints.add(_sum_l <= _sum_l1)  # FIXME wired term
 
         if mode_t in ("FULL", "CARCH"):
             self.build_symmetry_breaking(model)
             self.fix_given_cn(model)
 
+        # fix user-defined tumor purity
+        if mode_t in ("FULL", "UARCH") and purities != None:
+            for i, sample in self.sample_ids:
+                if sample in purities:
+                    model.constraints.add(self.u[0][i] == 1 - purities[sample])
+
         # TODO manually fix additional copynumbers in either C/Full-step
-        if copy_numbers_fixed != None and mode_t in ("FULL", "CARCH"):
-            for _m in range(self.m):
-                cluster_id = self.f_a.index[_m]
-                if cluster_id in copy_numbers_fixed:
-                    for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
-                        # +1 to skip normal clone.
-                        model.constraints.add(self.cA[_m][_n + 1] == _cnA)
-                        model.constraints.add(self.cB[_m][_n + 1] == _cnB)
-        if purities_fixed != None and mode_t in ("FULL", "UARCH"):
-            for sID, cprops in enumerate(purities_fixed):
-                for cID, cprop in enumerate(cprops):
-                    model.constraints.add(self.u[cID][sID] == cprop)
+        # copy_numbers_fixed = self.copy_numbers_fixed
+        # if copy_numbers_fixed != None and mode_t in ("FULL", "CARCH"):
+        #     for _m in range(self.m):
+        #         cluster_id = self.f_a.index[_m]
+        #         if cluster_id in copy_numbers_fixed:
+        #             for _n, (_cnA, _cnB) in enumerate(copy_numbers_fixed[cluster_id]):
+        #                 # +1 to skip normal clone.
+        #                 model.constraints.add(self.cA[_m][_n + 1] == _cnA)
+        #                 model.constraints.add(self.cB[_m][_n + 1] == _cnB)
+
+        # purities_fixed = self.purities_fixed
+        # if purities_fixed != None and mode_t in ("FULL", "UARCH"):
+        #     for sID, cprops in enumerate(purities_fixed):
+        #         for cID, cprop in enumerate(cprops):
+        #             model.constraints.add(self.u[cID][sID] == cprop)
 
         # add objective & regularization terms
         objective = 0
-        for _m in range(m):
-            for _k in range(k):
-                objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[
-                    self.cluster_ids[_m]
-                ]
+        for _m, _k in np.ndindex((m, k)):
+            objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[self.cluster_ids[_m]]
 
         # TODO make this more efficient by pyomo.Param to reuse states
         if mode_t == "FULL" and self.penalty_param[0] != "RAW":
@@ -549,8 +459,7 @@ class ILPSubset:
                     for _n in range(1, n):
                         model.constraints.add(self.cA[_m][_n] <= hcn_vars[(_m, "a")])
                         model.constraints.add(self.cB[_m][_n] <= hcn_vars[(_m, "b")])
-                for _m in range(m):
-                    cluster_id = self.cluster_ids[_m]
+                for _m, cluster_id in enumerate(self.cluster_ids):
                     objective_sec += pparam * self.w[cluster_id] * hcn_vars[(_m, "a")]
                     objective_sec += pparam * self.w[cluster_id] * hcn_vars[(_m, "b")]
             elif pname == "DROOT_SUM":
@@ -586,8 +495,7 @@ class ILPSubset:
                             self.cB[_m][0] - self.cB[_m][_n]
                             <= manhat_vars[(_m, _n, "b")]
                         )
-                for _m in range(m):
-                    cluster_id = self.cluster_ids[_m]
+                for _m, cluster_id in enumerate(self.cluster_ids):
                     for _n in range(1, n):
                         objective_sec += (
                             pparam * self.w[cluster_id] * manhat_vars[(_m, _n, "a")]
@@ -616,8 +524,7 @@ class ILPSubset:
                         model.constraints.add(
                             self.cB[_m][0] - self.cB[_m][_n] <= droot_vars[(_m, "b")]
                         )
-                for _m in range(m):
-                    cluster_id = self.cluster_ids[_m]
+                for _m, cluster_id in enumerate(self.cluster_ids):
                     objective_sec += pparam * self.w[cluster_id] * droot_vars[(_m, "a")]
                     objective_sec += pparam * self.w[cluster_id] * droot_vars[(_m, "b")]
             elif pname == "DADJ_SUM":
@@ -657,8 +564,7 @@ class ILPSubset:
                                 self.cB[_m][_n2] - self.cB[_m][_n1]
                                 <= manhat_vars[(_m, _n1, _n2, "b")]
                             )
-                for _m in range(m):
-                    cluster_id = self.cluster_ids[_m]
+                for _m, cluster_id in enumerate(self.cluster_ids):
                     for _n1 in range(n - 1):
                         for _n2 in range(_n1 + 1, n):
                             objective_sec += (
@@ -732,58 +638,52 @@ class ILPSubset:
         hcA = np.zeros((self.m, self.n))
         hcB = np.zeros((self.m, self.n))
 
-        for _m in range(self.m):
-            cluster_id = self.f_a.index[_m]
-
+        for _m, cluster_id in enumerate(self.cluster_ids):
             adA = 0
             adB = 0
-            for _n in range(self.n):
-                if _n == 0:
-                    hcA[_m][0] = 1
-                    hcB[_m][0] = 1
+            hcA[_m][0] = 1
+            hcB[_m][0] = 1
+            for _n in range(1, self.n):
+                if cluster_id in self.copy_numbers:
+                    hcA[_m][_n] = self.copy_numbers[cluster_id][0]
+                    hcB[_m][_n] = self.copy_numbers[cluster_id][1]
+                    continue
+                mod = min(self.n, self.k)
+                a = min(targetA[_m][_n % mod], self.cn_max)
+                b = min(targetB[_m][_n % mod], self.cn_max)
+
+                if self.ampdel:
+                    base = self.base
+                    if adA == 0 and a > base:
+                        adA = 1
+                    if adA == 0 and a < base:
+                        adA = -1
+                    if adB == 0 and b > base:
+                        adB = 1
+                    if adB == 0 and b < base:
+                        adB = -1
+
+                    a = max(a, base) if adA >= 0 else min(a, base)
+                    b = max(b, base) if adB >= 0 else min(b, base)
+
+                    if a + b > self.cn_max:
+                        a = self.cn_max - base
+                        b = self.cn_max - a
+
+                hcA[_m][_n] = a
+                if a + b <= self.cn_max:
+                    hcB[_m][_n] = b
                 else:
-                    if cluster_id in self.copy_numbers:
-                        hcA[_m][_n] = self.copy_numbers[cluster_id][0]
-                        hcB[_m][_n] = self.copy_numbers[cluster_id][1]
-                    else:
-                        mod = min(self.n, self.k)
-                        a = min(targetA[_m][_n % mod], self.cn_max)
-                        b = min(targetB[_m][_n % mod], self.cn_max)
+                    hcB[_m][_n] = max(self.cn_max - a, 0)
 
-                        if self.ampdel:
-                            base = self.base
-                            if adA == 0 and a > base:
-                                adA = 1
-                            if adA == 0 and a < base:
-                                adA = -1
-                            if adB == 0 and b > base:
-                                adB = 1
-                            if adB == 0 and b < base:
-                                adB = -1
-
-                            a = max(a, base) if adA >= 0 else min(a, base)
-                            b = max(b, base) if adB >= 0 else min(b, base)
-
-                            if a + b > self.cn_max:
-                                a = self.cn_max - base
-                                b = self.cn_max - a
-
-                        if a + b <= self.cn_max:
-                            hcA[_m][_n] = a
-                            hcB[_m][_n] = b
-                        else:
-                            hcA[_m][_n] = a
-                            hcB[_m][_n] = max(self.cn_max - a, 0)
-
-                        assert hcA[_m][_n] + hcB[_m][_n] <= self.cn_max
-                        assert hcA[_m][_n] >= 0
-                        assert hcB[_m][_n] >= 0
+                assert hcA[_m][_n] + hcB[_m][_n] <= self.cn_max
+                assert hcA[_m][_n] >= 0
+                assert hcB[_m][_n] >= 0
 
         return hcA, hcB
 
-    def hot_start(self, f_a=None, f_b=None):
+    def hot_start(self, _cA=None, _cB=None):
         def get_rank(hcA, hcB):
-            # m, n = hcA.shape
             m, n = len(hcA), len(hcA[0])
             rank = np.zeros(n)
             rank[0] = -1
@@ -795,15 +695,17 @@ class ILPSubset:
 
             return rank
 
-        if f_a is None and f_b is None:
-            f_a, f_b = self.first_hot_start()
-        rank = get_rank(f_a, f_b)
+        if _cA == None and _cB == None:
+            _cA, _cB = self.first_hot_start()
+        m, n = len(_cA), len(_cA[0])
+        assert self.m == m and self.n == n and n >= 1
+
+        rank = get_rank(_cA, _cB)
         rank_indices = np.argsort(rank)
 
-        for _m in range(self.m):
-            for _n in range(0, self.n):
-                self.cA[_m][rank_indices[_n]].value = f_a[_m][_n]
-                self.cB[_m][rank_indices[_n]].value = f_b[_m][_n]
+        for _m, _n in np.ndindex((m, n)):
+            self.cA[_m][rank_indices[_n]].value = _cA[_m][_n]
+            self.cB[_m][rank_indices[_n]].value = _cB[_m][_n]
         self.warmstart = True
 
     def fix_u(self, u):

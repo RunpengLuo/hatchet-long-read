@@ -272,7 +272,8 @@ def execute_python(
     cluster_ids = f_a.index.tolist()
     sample_ids = f_a.columns.tolist()
 
-    bins = pd.Series(cluster_sizes)
+    # sort by cluster ID
+    bins = pd.Series(cluster_sizes).sort_index()
     weights = 100 * bins / sum(bins)
 
     # check all user-defined fixed clonal states & fixed clone proportions. TODO
