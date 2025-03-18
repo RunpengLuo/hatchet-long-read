@@ -195,6 +195,7 @@ def model_selection_instance(
     pname: str,
     solve_mode: str,
     outdir: str,
+    verbose=False,
 ):
     """
     use elbow criterion to select best instance from either
@@ -260,10 +261,11 @@ def model_selection_instance(
         else:
             # multiple instance may yield same objective values, pick the one with minimum penalty
             sol_index = sol_indices[0]
-            sp.log(
-                msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
-                level="INFO",
-            )
+            if verbose:
+                sp.log(
+                    msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
+                    level="INFO",
+                )
     df.loc[:, "selected"] = ""
     df.loc[sol_index, "selected"] = "*"
     if outdir != None:
