@@ -238,7 +238,7 @@ def model_selection_instance(
     ys = df["IMF-objective"].to_numpy()
 
     sol_index = 0
-    if min(xs) != max(xs):
+    if min(xs) != max(xs) and min(ys) != max(ys):
         kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
         elbow_x, elbow_y = kl.elbow, kl.elbow_y
         if outdir != None:
