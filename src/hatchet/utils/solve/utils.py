@@ -74,7 +74,7 @@ def store_instance_tofile(
     store temporary solution(s) from optimization.
     TODO add expected BAF and FCN from cn result as well to directly see fitness
     """
-    assert solve_mode in ["cd", "ilp", "both"] and tempdir != None
+    assert tempdir != None
     cluster_ids = f_a.index.tolist()
     sample_ids = f_a.columns.tolist()
     fd2_header = f"CLUSTER\tSAMPLE\tbaf\tfcn\texp-baf\texp-fcn\tcn_normal\tu_normal\t"
