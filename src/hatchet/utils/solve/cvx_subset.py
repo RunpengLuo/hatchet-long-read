@@ -124,7 +124,7 @@ class CVXSubset:
                 model.add_component(f"u_aux_{_n + 1}_{_k + 1}", u_aux[(_n, _k)])
         
         # fix copy-numbers
-        for _m, (a, b) in copy_numbers.keys():
+        for _m, (a, b) in copy_numbers.items():
             cluster_id = f_a.index[_m]
             model.constraints.add(self.cA[_m][0] == 1)
             model.constraints.add(self.cB[_m][0] == 1)
