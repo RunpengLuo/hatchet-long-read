@@ -5,6 +5,8 @@ from hatchet.utils.solve.ilp_subset import ILPSubset
 from hatchet.utils.solve.ilp_subset_split import ILPSubsetSplit
 from hatchet.utils.solve.utils import Random, model_selection_instance
 
+import hatchet.utils.Supporting as sp
+
 
 class Worker:
     def __init__(self, work_id: int, ilp: ILPSubset, reg_term: list, solver: str):
@@ -153,8 +155,7 @@ class CoordinateDescent:
         with Random(random_seed):
             seeds = [self.ilp.build_random_u() for _ in range(n_seed)]
 
-        instances = {}  # obj. value => (cA, cB, u) mapping
-        idx = 0
+        instances = []  # obj. value => (cA, cB, u) mapping
         to_do = []
         with ProcessPoolExecutor(max_workers=min(j, n_seed)) as executor:
             for i, u in enumerate(seeds):
@@ -174,13 +175,16 @@ class CoordinateDescent:
                 instance = future.result()
                 if instance is not None:
                     obj, cA, cB, u = instance
-                    instances[idx] = [obj, cA, cB, u]
-                    idx += 1
+                    instances.append([obj, cA, cB, u])
 
-        if not instances:
+        if len(instances) == 0:
             raise RuntimeError("Not a single feasible solution found!")
+        
+        instances_s = {}
+        for idx, instance in enumerate(sorted(instances, key=lambda elem: elem[0])):
+            instances_s[idx] = instance
 
-        return instances
+        return instances_s
 
 
 class CoordinateDescentSplit(CoordinateDescent):
