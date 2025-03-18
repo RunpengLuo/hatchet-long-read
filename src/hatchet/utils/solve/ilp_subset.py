@@ -700,7 +700,7 @@ class ILPSubset:
 
             return rank
 
-        if _cA == None and _cB == None:
+        if _cA is None and _cB is None:
             _cA, _cB = self.first_hot_start()
         m, n = len(_cA), len(_cA[0])
         assert self.m == m and self.n == n and n >= 1
