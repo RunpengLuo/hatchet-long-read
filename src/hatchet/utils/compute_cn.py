@@ -246,7 +246,7 @@ def execute_python(
     return:
     obj
     """
-    solve_mode = ("both", "ilp", "cd")[args["M"]]
+    solve_mode = ("both", "ilp", "cd", "cvx")[args["M"]]
     out_dir = args["x"]
 
     sol_dir = os.path.join(out_dir, f"sols/{problem_type}_n{n}")
@@ -320,7 +320,7 @@ def execute_python(
             copy_numbers_fixed=copy_number_fixed,
             purities_fixed=purities_fixed,
             reg_term=args["reg_term"],
-            solver=args["solver"],
+            solver_type=args["solver"],
             max_iters=max_iters,
             n_seed=args["p"],
             n_worker=args["j"],

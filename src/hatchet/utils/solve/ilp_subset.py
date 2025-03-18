@@ -421,6 +421,7 @@ class ILPSubset:
 
                 # if the fraction of the cluster size is larger than or equal to 0.005 in the whole dataset
                 # then its integer copy number cannot have (0,0) copy number
+                # TODO wired term
                 if self.w[cluster_id] / sum(self.w) >= 0.005:
                     for _n in range(1, n):
                         model.constraints.add(self.cA[_m][_n] + self.cB[_m][_n] >= 1)

@@ -3010,7 +3010,8 @@ def parse_compute_cn_args(args=None):
         "The max-iteration number must be a positive integer!",
     )
 
-    ensure(args.mode in (None, 0, 1, 2), "The mode integer must be in (0, 1, 2)!")
+    # TODO add constraint later,
+    # ensure(args.mode in (None, 0, 1, 2), "The mode integer must be in (0, 1, 2)!")
 
     ensure(
         args.diploid or args.tetraploid,
