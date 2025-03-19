@@ -397,15 +397,13 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
         raise ValueError(sp.error(f"final model selection error"))
 
     data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
-    (n2, obj2) = select_best_n(sorted(data_diploid, key=lambda a: a[0]), "diploid")
+    (n2, obj2) = select_best_n(data_diploid, "diploid")
     sp.log(
         msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO"
     )
 
     data_tetraploid = [[n, imf_obj] for n, (_, imf_obj) in tetraploid_sols.items()]
-    (n4, obj4) = select_best_n(
-        sorted(data_tetraploid, key=lambda a: a[0]), "tetraploid"
-    )
+    (n4, obj4) = select_best_n(data_tetraploid, "tetraploid")
     sp.log(
         msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n",
         level="INFO",

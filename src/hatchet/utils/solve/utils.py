@@ -240,8 +240,17 @@ def model_select(df: pd.DataFrame, xid: str, yid: str, pareto_img: str, verbose:
                     x=df.loc[~df["is_pareto"], xid].to_numpy(),
                     y=df.loc[~df["is_pareto"], yid].to_numpy(),
                     c="gray",
+                    marker="x",
                     alpha=0.6,
                 )
+            # plot pareto points
+            plt.scatter(
+                x=df.loc[df["is_pareto"], xid].to_numpy(),
+                y=df.loc[df["is_pareto"], yid].to_numpy(),
+                c="green",
+                marker="o",
+                alpha=1.0,
+            )
             plt.savefig(pareto_img, dpi=300)
 
         if elbow_x != None:
