@@ -106,11 +106,11 @@ def main(args=None):
     diploid_sols = {}
     if args["diploid"]:
         clonal_dip = {s: (1, 1)}
-        sp.log(
-            msg=f"running diploid with clonal clusters={str(clonal_dip)}\n",
-            level="STEP",
-        )
         for n in range(first_n, last_n):
+            sp.log(
+                msg=f"running diploid with n={n} and clonal clusters={str(clonal_dip)}\n",
+                level="STEP",
+            )
             (obj, imf_obj) = solve_func(
                 n, clonal_dip, gammas_dip, cluster_sizes, args, "diploid"
             )
@@ -146,11 +146,11 @@ def main(args=None):
             for sname, gamma in gammas_wgd.items():
                 sp.log(msg=f"{sname}\tgamma={gamma}\n", level="INFO")
             clonal_tet = {s: (2, 2), zid: cz}
-            sp.log(
-                msg=f"running tetraploid with clonal clusters={str(clonal_tet)}\n",
-                level="STEP",
-            )
             for n in range(first_n, last_n):
+                sp.log(
+                    msg=f"running tetraploid with n={n} and clonal clusters={str(clonal_tet)}\n",
+                    level="STEP",
+                )
                 (obj, imf_obj) = solve_func(
                     n, clonal_tet, gammas_wgd, cluster_sizes, args, "tetraploid"
                 )
