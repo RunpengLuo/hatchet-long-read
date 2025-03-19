@@ -186,6 +186,20 @@ def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     maxB_w = np.dot(np.max(cB[:, 1:], axis=1), weights)[0]
     return maxA_w + maxB_w
 
+def filter_non_pareto(points: np.ndarray):
+    """
+    filter non-pareto points,
+    a point is pareto if it is not dominated by any other points
+    """
+    is_pareto = np.zeros(shape=len(points), dtype=bool)
+    for i in range(len(points)):
+        pareto = 1
+        for j in range(len(points)):
+            if points[j, 0] < points[i, 0] and points[j, 1] < points[i, 1]:
+                pareto = 0
+                break
+        is_pareto[i] = pareto
+    return is_pareto
 
 def model_selection_instance(
     f_a: pd.DataFrame,
@@ -231,6 +245,15 @@ def model_selection_instance(
             "float-error",
         ],
     )
+
+    # TODO handle cd duplicates more precisely?
+    df = df.drop_duplicates(
+        subset=["IMF-objective", f"{pname}-objective"], 
+        keep="first", ignore_index=True
+    )
+
+    # filter non pareto-optimal solutions
+    df.loc[:, "is_Pareto"] = filter_non_pareto(df[["IMF-objective", f"{pname}-objective"]].to_numpy())
     df.loc[:, "selected"] = ""
 
     # find elbow point

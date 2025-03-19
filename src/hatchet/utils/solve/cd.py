@@ -179,7 +179,7 @@ class CoordinateDescent:
 
         if len(instances) == 0:
             raise RuntimeError("Not a single feasible solution found!")
-        
+
         instances_s = {}
         for idx, instance in enumerate(sorted(instances, key=lambda elem: elem[0])):
             instances_s[idx] = instance
