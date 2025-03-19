@@ -132,7 +132,8 @@ class CoordinateDescent:
             purities=purities,
             copy_numbers_fixed=copy_numbers_fixed,  # TODO
             purities_fixed=purities_fixed,
-            penalty_param=[reg_term[0], 0.0],
+            # penalty_param=[reg_term[0], 0.0],
+            penalty_param=["RAW", 0.0],
         )
         # Building the model here is not strictly necessary, as, during execution,
         #   self.carch and c.uarch will copy self.ilp and create+run those models.
