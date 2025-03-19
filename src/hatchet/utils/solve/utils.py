@@ -278,7 +278,7 @@ def model_selection_instance(
             if len(pids) < len(df):
                 plt.scatter(x=df.loc[~df["is_pareto"], f"{pname}-objective"].to_numpy(),
                             y=df.loc[~df["is_pareto"], "IMF-objective"].to_numpy(),
-                            c="gray")
+                            c="gray", alpha=0.6, )
             plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
 
         if elbow_x != None:
