@@ -261,6 +261,9 @@ def model_selection_instance(
     xs = df.loc[df["is_pareto"], f"{pname}-objective"].to_numpy()
     ys = df.loc[df["is_pareto"], "IMF-objective"].to_numpy()
 
+    if verbose:
+        sp.log(msg=f"model selection, #pareto={len(pids)}/{len(df)}", level="INFO")
+
     sol_index = 0
     if len(pids) > 1:
         kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")

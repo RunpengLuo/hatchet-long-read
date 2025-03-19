@@ -283,6 +283,8 @@ def execute_python(
     # get user-defined regularization term / second objective
     [pname, _, _] = args["reg_term"]
 
+    verbose = args["v"] >= 2
+
     store_solve_input(
         os.path.join(sol_dir, "input.tsv"),
         baf,
@@ -329,10 +331,10 @@ def execute_python(
             timelimit=args["s"],
             instances_dir=instances_dir,
             solve_mode=solve_mode,
-            verbose=args["v"] >= 2,
+            verbose=verbose,
         )
         best_instance, imf_obj = model_selection_instance(
-            f_a, f_b, weights, instances, pname, solve_mode, sol_dir
+            f_a, f_b, weights, instances, pname, solve_mode, sol_dir, verbose
         )
 
     assert best_instance != None, f"no solution for {problem_type} and n={n}"
