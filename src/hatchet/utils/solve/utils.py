@@ -161,7 +161,6 @@ def compute_obj_DROOT_SUM(weights, fA, fB, cA, cB, u):
     return obj
 
 
-# TODO
 def compute_obj_DADJ_SUM(weights, fA, fB, cA, cB, u):
     """
     DADJ: hamming distance between (a,b) and (a',b'), for all clones, per cluster
@@ -186,6 +185,7 @@ def compute_obj_MAXCN(weights, fA, fB, cA, cB, u):
     maxB_w = np.dot(np.max(cB[:, 1:], axis=1), weights)[0]
     return maxA_w + maxB_w
 
+
 def filter_non_pareto(points: np.ndarray):
     """
     filter non-pareto points,
@@ -200,6 +200,67 @@ def filter_non_pareto(points: np.ndarray):
                 break
         is_pareto[i] = pareto
     return is_pareto
+
+
+def model_select(df: pd.DataFrame, xid: str, yid: str, pareto_img: str, verbose: bool):
+    """
+    given the set of solutions with two minimizing objective <xid> and <yid>
+    1) select the pareto-optimal set,
+    2) decide the best solution based elbow criterion. If failed, select the first solution
+    add a column to indicate the pareto-state and selected solution.
+
+    Assumption:
+    df is sorted by <yid> objective value.
+    """
+    # filter non pareto-optimal solutions
+    df.loc[:, "is_pareto"] = filter_non_pareto(df[[xid, yid]].to_numpy())
+    df.loc[:, "selected"] = ""
+
+    # find elbow point among pareto points
+    pids = df.loc[df["is_pareto"]].index.to_numpy()
+    xs = df.loc[df["is_pareto"], xid].to_numpy()
+    ys = df.loc[df["is_pareto"], yid].to_numpy()
+
+    if verbose:
+        sp.log(msg=f"model selection, #pareto={len(pids)}/{len(df)}\n", level="INFO")
+
+    sol_index = 0
+    if len(pids) > 1:
+        kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
+        elbow_x, elbow_y = kl.elbow, kl.elbow_y
+        if pareto_img != None:
+            kl.plot_knee(
+                title="Model Selection Pareto Curve",
+                xlabel=xid,
+                ylabel=yid,
+            )
+            # plot non-pareto points in background if any
+            if len(pids) < len(df):
+                plt.scatter(
+                    x=df.loc[~df["is_pareto"], xid].to_numpy(),
+                    y=df.loc[~df["is_pareto"], yid].to_numpy(),
+                    c="gray",
+                    alpha=0.6,
+                )
+            plt.savefig(pareto_img, dpi=300)
+
+        if elbow_x != None:
+            sol_indices = np.where(ys >= elbow_y)[0]
+            if len(sol_indices) != 0:
+                # multiple instance may yield same objective values, pick the one with minimum penalty
+                # convert back to df index
+                sol_index = pids[sol_indices[0]]
+                if verbose:
+                    sp.log(
+                        msg=f"Model selection found solution with index={sol_index}!\n",
+                        level="INFO",
+                    )
+    elif len(pids) == 0:
+        sp.log(msg=f"WARN! at least one pareto point must exists!\n", level="WARN")
+
+    df.loc[sol_index, "selected"] = "*"
+    return df, sol_index
+
 
 def model_selection_instance(
     f_a: pd.DataFrame,
@@ -248,54 +309,17 @@ def model_selection_instance(
 
     # TODO handle cd duplicates more precisely?
     df = df.drop_duplicates(
-        subset=["IMF-objective", f"{pname}-objective"], 
-        keep="first", ignore_index=True
+        subset=["IMF-objective", f"{pname}-objective"], keep="first", ignore_index=True
     )
 
-    # filter non pareto-optimal solutions
-    df.loc[:, "is_pareto"] = filter_non_pareto(df[["IMF-objective", f"{pname}-objective"]].to_numpy())
-    df.loc[:, "selected"] = ""
+    df, sol_index = model_select(
+        df,
+        f"{pname}-objective",
+        "IMF-objective",
+        f"{outdir}/pareto_curve.{solve_mode}.{pname}.png",
+        verbose,
+    )
 
-    # find elbow point among pareto points
-    pids = df.loc[df["is_pareto"]].index.to_numpy()
-    xs = df.loc[df["is_pareto"], f"{pname}-objective"].to_numpy()
-    ys = df.loc[df["is_pareto"], "IMF-objective"].to_numpy()
-
-    if verbose:
-        sp.log(msg=f"model selection, #pareto={len(pids)}/{len(df)}\n", level="INFO")
-
-    sol_index = 0
-    if len(pids) > 1:
-        kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
-        elbow_x, elbow_y = kl.elbow, kl.elbow_y
-        if outdir != None:
-            kl.plot_knee(
-                title="Model Selection Pareto Curve",
-                xlabel=f"{pname}-objective",
-                ylabel="IMF-objective",
-            )
-            # plot non-pareto points in background if any
-            if len(pids) < len(df):
-                plt.scatter(x=df.loc[~df["is_pareto"], f"{pname}-objective"].to_numpy(),
-                            y=df.loc[~df["is_pareto"], "IMF-objective"].to_numpy(),
-                            c="gray", alpha=0.6, )
-            plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
-
-        if elbow_x != None:
-            sol_indices = np.where(ys >= elbow_y)[0]
-            if len(sol_indices) != 0:
-                # multiple instance may yield same objective values, pick the one with minimum penalty
-                # convert back to df index
-                sol_index = pids[sol_indices[0]]
-                if verbose:
-                    sp.log(
-                        msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
-                        level="INFO",
-                    )
-    elif len(pids) == 0:
-        sp.log(msg=f"WARN! at least one pareto point must exists!\n", level="WARN")
-
-    df.loc[sol_index, "selected"] = "*"
     if outdir != None:
         df.to_csv(
             f"{outdir}/model_selections.{solve_mode}.{pname}.tsv",

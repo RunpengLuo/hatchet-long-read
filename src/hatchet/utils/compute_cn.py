@@ -372,41 +372,22 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
 
     def select_best_n(data: list, problem_type: str):
         sp.log(msg=f"running model selection for {problem_type}\n", level="INFO")
-        # pick init solution with minimum IMF-objective
-        best_res = min(data, key=lambda d: d[1])
-        if len(data) <= 2:
-            return best_res
-        df = pd.DataFrame(data=data, columns=["n", "IMF-objective"])
-        xs, ys = df["n"].to_numpy(), df["IMF-objective"].to_numpy()
-        kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
-        elbow_x, elbow_y = kl.elbow, kl.elbow_y
-        kl.plot_knee(
-            title=f"Model Selection Pareto Curve - {problem_type}",
-            xlabel=f"#clones",
-            ylabel="IMF-objective",
+        sorted_data = sorted(data, key=lambda elem: elem[1])
+        df = pd.DataFrame(data=sorted_data, columns=["n", "IMF-objective"])
+        df, sol_index = model_select(
+            df,
+            "n",
+            "IMF-objective",
+            os.path.join(out_dir, f"pareto_curve.{problem_type}.png"),
+            verbose=True,
         )
-        plt.savefig(os.path.join(out_dir, f"pareto_curve.{problem_type}.png"), dpi=300)
-        sp.log(
-            msg=f"Pareto curve can be found at <outdir>/pareto_curve.{problem_type}.png\n",
-            level="INFO",
+        df.to_csv(
+            os.path.join(out_dir, f"model_selections.{problem_type}.tsv"),
+            sep="\t",
+            header=True,
+            index=False,
         )
-
-        if elbow_x == None:
-            sp.log(
-                msg=f"Failed to identify elbow in model selection step, use result with minimum IMF-objective\n",
-                level="WARN",
-            )
-        else:
-            sol_indices = np.where(ys >= elbow_y)[0]
-            if len(sol_indices) == 0:
-                sp.log(
-                    msg=f"Failed to locate result in model selection step, use result with minimum IMF-objective\n",
-                    level="WARN",
-                )
-            else:
-                sol_index = sol_indices[0]
-                best_res = (df.loc[sol_index, "n"], df.loc[sol_index, "IMF-objective"])
-        return best_res
+        return df.loc[sol_index, "n"], df.loc[sol_index, "IMF-objective"]
 
     if len(diploid_sols) == 0 and len(tetraploid_sols) == 0:
         sp.log(
