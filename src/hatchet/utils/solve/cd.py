@@ -38,32 +38,32 @@ class Worker:
             carch.create_model()
             carch.hot_start(_cA, _cB)
 
-            # regularization loop
-            carch_instances = {}
-            for i0 in range(0, reg_steps + 1):
-                pparam = reg_ssize * i0
-                carch.model.pparam = pparam
-                if i0 > 0:
-                    reg_cA, reg_cB = carch_instances[0][1:3]
-                    carch.hot_start(reg_cA, reg_cB)
-                carch_instances[pparam] = carch.run(
-                    solver_type=self.solver_type, timelimit=timelimit
-                )
-                if carch_instances[pparam] == None:
-                    return None
+            # # regularization loop
+            # carch_instances = {}
+            # for i0 in range(0, reg_steps + 1):
+            #     pparam = reg_ssize * i0
+            #     carch.model.pparam = pparam
+            #     if i0 > 0:
+            #         reg_cA, reg_cB = carch_instances[0][1:3]
+            #         carch.hot_start(reg_cA, reg_cB)
+            #     carch_instances[pparam] = carch.run(
+            #         solver_type=self.solver_type, timelimit=timelimit
+            #     )
+            #     if carch_instances[pparam] == None:
+            #         return None
 
-            # model-select best (cA, cB) here
-            carch_results, _ = model_selection_instance(
-                self.ilp.f_a,
-                self.ilp.f_b,
-                self.ilp.w,
-                carch_instances,
-                reg_name,
-                f"cd_{self.work_id}_{_iters}",
-                None,
-            )
+            # # model-select best (cA, cB) here
+            # carch_results, _ = model_selection_instance(
+            #     self.ilp.f_a,
+            #     self.ilp.f_b,
+            #     self.ilp.w,
+            #     carch_instances,
+            #     reg_name,
+            #     f"cd_{self.work_id}_{_iters}",
+            #     None,
+            # )
 
-            # carch_results = carch.run(self.solver_type, timelimit=timelimit)
+            carch_results = carch.run(self.solver_type, timelimit=timelimit)
             if carch_results is None:
                 return None
             _obj_c, _cA, _cB, _ = carch_results
