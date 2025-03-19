@@ -253,15 +253,16 @@ def model_selection_instance(
     )
 
     # filter non pareto-optimal solutions
-    df.loc[:, "is_Pareto"] = filter_non_pareto(df[["IMF-objective", f"{pname}-objective"]].to_numpy())
+    df.loc[:, "is_pareto"] = filter_non_pareto(df[["IMF-objective", f"{pname}-objective"]].to_numpy())
     df.loc[:, "selected"] = ""
 
-    # find elbow point
-    xs = df[f"{pname}-objective"].to_numpy()
-    ys = df["IMF-objective"].to_numpy()
+    # find elbow point among pareto points
+    pids = df.loc[df["is_pareto"]].index.to_numpy()
+    xs = df.loc[df["is_pareto"], f"{pname}-objective"].to_numpy()
+    ys = df.loc[df["is_pareto"], "IMF-objective"].to_numpy()
 
     sol_index = 0
-    if min(xs) != max(xs) and min(ys) != max(ys):
+    if len(pids) > 1:
         kl = kneed.KneeLocator(x=xs, y=ys, curve="convex", direction="decreasing")
         elbow_x, elbow_y = kl.elbow, kl.elbow_y
         if outdir != None:
@@ -270,18 +271,26 @@ def model_selection_instance(
                 xlabel=f"{pname}-objective",
                 ylabel="IMF-objective",
             )
+            # plot non-pareto points in background if any
+            if len(pids) < len(df):
+                plt.scatter(x=df.loc[~df["is_pareto"], f"{pname}-objective"].to_numpy(),
+                            y=df.loc[~df["is_pareto"], "IMF-objective"].to_numpy(),
+                            c="gray")
             plt.savefig(f"{outdir}/pareto_curve.{solve_mode}.{pname}.png", dpi=300)
 
         if elbow_x != None:
             sol_indices = np.where(ys >= elbow_y)[0]
             if len(sol_indices) != 0:
                 # multiple instance may yield same objective values, pick the one with minimum penalty
-                sol_index = sol_indices[0]
+                # convert back to df index
+                sol_index = pids[sol_indices[0]]
                 if verbose:
                     sp.log(
                         msg=f"Model selection found solution with index={sol_index} for {solve_mode}!\n",
                         level="INFO",
                     )
+    elif len(pids) == 0:
+        sp.log(msg=f"WARN! at least one pareto point must exists!\n", level="WARN")
 
     df.loc[sol_index, "selected"] = "*"
     if outdir != None:
