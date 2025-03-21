@@ -71,6 +71,10 @@ def main(args=None):
         fbbc_path = os.path.join(out_dir, "bulk.good.bbc")
         bbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
         args["bbc"] = fbbc_path
+
+        for cluster in clusters:
+            if cluster not in good_clusters:
+                cluster_sizes.pop(cluster)
         clusters = good_clusters
         sp.log(
             msg=f"Clusters after filtering is stored in {fseg_path} and {fbbc_path}\n",
