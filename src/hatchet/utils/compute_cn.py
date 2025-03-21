@@ -4,8 +4,6 @@ import shutil
 
 import numpy as np
 import pandas as pd
-import kneed
-import matplotlib.pyplot as plt
 
 import hatchet.utils.Supporting as sp
 from hatchet.utils.ArgParsing import parse_compute_cn_args
@@ -55,27 +53,25 @@ def main(args=None):
             func=lambda r: r["END"] - r["START"], axis=1
         ).sum()
 
-    fbbc, fseg, fclusters = filtering(
+    good_clusters = filtering(
         bbc=bbc,
         seg=seg,
         samples=samples,
-        cluster_sizes=cluster_sizes,
-        ts=args["ts"],
-        tc=args["tc"],
-        mB=args["mB"],
-        mR=args["mR"],
+        clusters=clusters,
         v=args["v"],
     )
 
-    if len(fseg) != len(seg):
-        fseg_path = os.path.join(out_dir, "bulk.fil.seg")
-        fseg.to_csv(fseg_path, header=True, index=False, sep="\t")
+    if len(good_clusters) != len(clusters):
+        seg = seg[seg["#ID"].isin(good_clusters)]
+        fseg_path = os.path.join(out_dir, "bulk.good.seg")
+        seg.to_csv(fseg_path, header=True, index=False, sep="\t")
         args["seg"] = fseg_path
 
-        fbbc_path = os.path.join(out_dir, "bulk.fil.bbc")
-        fbbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
+        bbc = bbc[bbc["CLUSTER"].isin(good_clusters)]
+        fbbc_path = os.path.join(out_dir, "bulk.good.bbc")
+        bbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
         args["bbc"] = fbbc_path
-        clusters = fclusters
+        clusters = good_clusters
         sp.log(
             msg=f"Clusters after filtering is stored in {fseg_path} and {fbbc_path}\n",
             level="STEP",
@@ -89,7 +85,7 @@ def main(args=None):
         sp.log(msg=f"#{cid}\t{csize}\n", level="INFO")
 
     s, gammas_dip = get_scaling_factor_no_WGD(
-        seg=fseg,
+        seg=seg,
         samples=samples,
         cluster_sizes=cluster_sizes,
         tol_baf=args["td"],
@@ -123,7 +119,7 @@ def main(args=None):
     tetraploid_sols = {}
     if args["tetraploid"]:
         zid, cz, gammas_wgd = get_scaling_factor_WGD(
-            seg=fseg,
+            seg=seg,
             sid=s,
             cluster_sizes=cluster_sizes,
             max_cn=args["eT"],
@@ -203,34 +199,54 @@ def filtering(
     bbc: pd.DataFrame,
     seg: pd.DataFrame,
     samples: list,
-    cluster_sizes: dict,
-    ts: float,
-    tc: float,
-    mB: float,
-    mR: float,
+    clusters: list,
     v=1,
 ):
     """
     filter&merge clusters before optimization step
-    TODO we can also check variance of cluster and filter sparse ones
+    1. compute per-sample per-cluster variance SCV, 
+    2. compute per-sample MV and STDV
+    3. filter a cluster if it has |SCV - MV| >= 2 * STDV for all samples.
+
+    Returns:
+    1. list of remaining cluster IDs
     """
-    cluster_maps = {}
-    for cid in cluster_sizes.keys():
-        cluster_maps[cid] = [cid]
+    sp.log(f"preprocessing, filtering clusters\n", level="STEP")
 
-    # check sparsity for each cluster
-    # for cid in cluster_sizes.keys():
-    #     bbc_ = bbc[bbc["CLUSTER"] == cid]
+    var_rd_matrix = np.zeros((len(clusters), len(samples)), dtype=np.float64)
+    var_baf_matrix = np.zeros((len(clusters), len(samples)), dtype=np.float64)
 
-    chrs_per_cluster = {}
-    for cid in cluster_sizes.keys():
-        chrs_per_cluster[cid] = bbc.loc[bbc["CLUSTER"] == cid, "#CHR"].unique().tolist()
+    for i, cluster in enumerate(clusters):
+        for j, sample in enumerate(samples):
+            bbc_ = bbc[(bbc["SAMPLE"] == sample) & (bbc["CLUSTER"] == cluster)]
+            var_rd_matrix[i, j] = np.linalg.norm(
+                bbc_["RD"] - np.mean(bbc_["RD"]), 2
+            ) / len(bbc_)
+            var_baf_matrix[i, j] = np.linalg.norm(
+                bbc_["BAF"] - np.mean(bbc_["BAF"]), 2
+            ) / len(bbc_)
+    mv_rd = np.mean(var_rd_matrix, axis=0)
+    stdv_rd = np.std(var_rd_matrix, axis=0, ddof=1)
+    mv_baf = np.mean(var_baf_matrix, axis=0)
+    stdv_baf = np.std(var_baf_matrix, axis=0, ddof=1)
+    if v >= 1:
+        for j, sample in enumerate(samples):
+            sp.log(
+                msg=f"{sample}\tRD=({mv_rd[j]},{stdv_rd[j]})\tBAF=({mv_baf[j]},{stdv_baf[j]})\n",
+                level="INFO",
+            )
 
-    # merge clusters
-    sp.log(msg="filtering is not implemented yet!\n", level="INFO")
+    ret_clusters = []
+    for i, cluster in enumerate(clusters):
+        dv_rd = np.abs(var_rd_matrix[i, :] - mv_rd)
+        dv_baf = np.abs(var_baf_matrix[i, :] - mv_baf)
+        if np.all(dv_rd > (2 * stdv_rd)) and np.all(dv_baf > (2 * stdv_baf)):
+            sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
+            continue
+        ret_clusters.append(cluster)
 
-    # for cid, csize in sorted(cluster_sizes.items(), key=lambda tp: tp[1], reverse=True):
-    return bbc, seg, cluster_sizes
+    sp.log(msg=f"remaining clusters: {ret_clusters}\n", level="INFO")
+    return ret_clusters
 
 
 def execute_python(
