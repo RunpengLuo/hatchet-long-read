@@ -143,12 +143,16 @@ def main(args=None):
             perpos_file = os.path.join(outdir, name + ".per-base.bed.gz")
             subprocess.run([tabix, "-f", perpos_file]) # FIXME issue 232
 
+        isX = {ch: ch.endswith("X") for ch in chromosomes}
+        isY = {ch: ch.endswith("Y") for ch in chromosomes}
+
         # form parameters for each worker
         params = [
             (
                 outdir,
                 names,
                 ch,
+                isX[ch] and any(isY[ch] for ch in chromosomes),
                 chr2centro[ch][0],
                 chr2centro[ch][1],
                 args["baf_file"],
@@ -489,6 +493,7 @@ def run_chromosome(
     outdir,
     all_names,
     chromosome,
+    xy,
     centromere_start,
     centromere_end,
     baf_file,
@@ -529,7 +534,7 @@ def run_chromosome(
         )
         # Load SNP positions and counts for this chromosome
 
-        if chromosome.endswith("X") or chromosome.endswith("Y"):
+        if xy: # XY case
             log(
                 msg="Running on sex chromosome -- ignoring SNPs and min SNP reads\n",
                 level="INFO",
