@@ -301,7 +301,7 @@ class AlleleCounter(Worker):
             )
         else:
             print(f"finished {samplename}-{chromosome}")
-            # os.remove(errname)
+            os.remove(errname)
         alleles = {"A", "C", "G", "T"}
         mkcounts = lambda p, q: list(
             map(
