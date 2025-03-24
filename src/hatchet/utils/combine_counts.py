@@ -88,7 +88,7 @@ def main(args=None):
             msr,
             mtr,
             args["array"],
-            isX[ch] or isY[ch],
+            isX[ch] and any(isY[ch] for ch in chromosomes), # XY if Y also present
             multisample,
             phase,
             blocksize,

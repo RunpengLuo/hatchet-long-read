@@ -357,16 +357,16 @@ class ILPSubset:
                             )
                             model.constraints.add(self.cB[_m][_n] >= _base * adB[_m])
 
-        # if mode_t == "UARCH":
-        #     # TODO: These loops can be collapsed once validation against C++ is complete
-        #     for _m, _k in np.ndindex((m, k)):
-        #         _sumA = 0
-        #         _sumB = 0
-        #         for _n in range(n):
-        #             _sumA += int(self._fixed_cA[_m][_n]) * self.u[_n][_k]
-        #             _sumB += int(self._fixed_cB[_m][_n]) * self.u[_n][_k]
-        #         model.constraints.add(fA[(_m, _k)] == _sumA)
-        #         model.constraints.add(fB[(_m, _k)] == _sumB)
+        if mode_t == "UARCH":
+            # TODO: These loops can be collapsed once validation against C++ is complete
+            for _m, _k in np.ndindex((m, k)):
+                _sumA = 0
+                _sumB = 0
+                for _n in range(n):
+                    _sumA += int(self._fixed_cA[_m][_n]) * self.u[_n][_k]
+                    _sumB += int(self._fixed_cB[_m][_n]) * self.u[_n][_k]
+                model.constraints.add(fA[(_m, _k)] == _sumA)
+                model.constraints.add(fB[(_m, _k)] == _sumB)
 
         if mode_t in ("FULL", "UARCH"):
             for _k in range(k):
