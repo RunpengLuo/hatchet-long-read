@@ -326,11 +326,14 @@ def main(args=None):
 
     if config.run.cluster_bins:
         os.makedirs(f"{output}/bbc", exist_ok=True)
+        bulk_bb = f"{output}/bb/bulk.bb"
+        if "chrX" in chromosomes or "chrY" in chromosomes:
+            bulk_bb = f"{output}/bb/bulk.bb.withXY"
 
         if config.run.loc_clust:
             cluster_bins(
                 args=[
-                    f"{output}/bb/bulk.bb",
+                    bulk_bb,
                     "-o",
                     f"{output}/bbc/bulk.seg",
                     "-O",
