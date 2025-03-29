@@ -146,13 +146,16 @@ def main(args=None):
         isX = {ch: ch.endswith("X") for ch in chromosomes}
         isY = {ch: ch.endswith("Y") for ch in chromosomes}
 
+        # if Y is present and ch is X or Y.
+        is_xy = lambda ch: any(isY[_ch] for _ch in chromosomes) and (isX[ch] or isY[ch])
+
         # form parameters for each worker
         params = [
             (
                 outdir,
                 names,
                 ch,
-                isX[ch] and any(isY[ch] for ch in chromosomes),
+                is_xy(ch),
                 chr2centro[ch][0],
                 chr2centro[ch][1],
                 args["baf_file"],
