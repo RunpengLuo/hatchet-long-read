@@ -105,7 +105,9 @@ def main(args=None):
 
     diploid_sols = {}
     if args["diploid"]:
-        clonal_dip = {s: (1, 1)}
+        # clonal_dip = {s: (1, 1)}
+        # try not fix clonal
+        clonal_dip = {}
         for n in range(first_n, last_n):
             sp.log(
                 msg=f"running diploid with n={n} and clonal clusters={str(clonal_dip)}\n",
@@ -416,20 +418,31 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
         )
         raise ValueError(sp.error(f"final model selection error"))
 
-    data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
-    (n2, obj2) = select_best_n(data_diploid, "diploid")
-    sp.log(
-        msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO"
-    )
+    n2 = 0
+    obj2 = 0
+    if len(diploid_sols) > 0:
+        data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
+        (n2, obj2) = select_best_n(data_diploid, "diploid")
+        sp.log(
+            msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO"
+        )
 
-    data_tetraploid = [[n, imf_obj] for n, (_, imf_obj) in tetraploid_sols.items()]
-    (n4, obj4) = select_best_n(data_tetraploid, "tetraploid")
-    sp.log(
-        msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n",
-        level="INFO",
-    )
+    n4 = 0
+    obj4 = 0
+    if len(tetraploid_sols) > 0:
+        data_tetraploid = [[n, imf_obj] for n, (_, imf_obj) in tetraploid_sols.items()]
+        (n4, obj4) = select_best_n(data_tetraploid, "tetraploid")
+        sp.log(
+            msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n",
+            level="INFO",
+        )
 
     # pick best solution by principle of parsimony
-    final_selection = "diploid" if n2 <= n4 else "tetraploid"
+    if len(tetraploid_sols) == 0:
+        final_selection = "diploid"
+    elif len(diploid_sols) == 0:
+        final_selection = "tetraploid"
+    else:
+        final_selection = "diploid" if n2 <= n4 else "tetraploid"
     sp.log(msg=f"final selection: {final_selection}\n", level="INFO")
     return n2, n4, final_selection
