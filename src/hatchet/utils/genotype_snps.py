@@ -58,8 +58,9 @@ def main(args=None):
         number = "".join([_l for _l in number if _l.isdigit()])
         return int(number) if len(number) > 0 else 0
 
-    number_snps = sum(count(f) for f in snps)
-
+    # stats only
+    snp_counts = [count(f) for f in snps]
+    number_snps = sum(snp_counts)
     if number_snps == 0:
         raise ValueError(error("No SNPs found in the normal!\n"))
     else:
@@ -69,12 +70,10 @@ def main(args=None):
         )
 
     log(msg="# SNP Calling is concluded\n", level="STEP")
-    log(
-        msg="## Called SNPs have been written per chromosome in:\n{}\n".format(
-            "\n".join(snps)
-        ),
-        level="INFO",
-    )
+    for i, f in enumerate(snps):
+        log(
+            msg=f"#SNPs={snp_counts[i]}\t{f}\n", level="INFO"
+        )
 
 
 def call(
