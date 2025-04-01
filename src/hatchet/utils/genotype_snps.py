@@ -247,7 +247,10 @@ class Caller(Process):
                     stderr=err,
                     universal_newlines=True,
                 )
+                tgt.stdout.close()
                 codes = map(lambda p: p.wait(), [tgt, gzip])
+                tout.close()
+                err.close()
             if any(c != 0 for c in codes):
                 raise ValueError(
                     error(
@@ -276,14 +279,12 @@ class Caller(Process):
         )
 
         with open(errname, "w") as err:
-            pcss = []
             mpileup = pr.Popen(
                 shlex.split(cmd_mpileup),
                 stdout=pr.PIPE,
                 stderr=err,
                 universal_newlines=True,
             )
-            pcss.append(mpileup)
             call = pr.Popen(
                 shlex.split(cmd_call),
                 stdin=mpileup.stdout,
@@ -291,16 +292,17 @@ class Caller(Process):
                 stderr=err,
                 universal_newlines=True,
             )
-            pcss.append(call)
+            mpileup.stdout.close()
             filter = pr.Popen(
                 shlex.split(cmd_filter),
                 stdin=call.stdout,
-                stdout=pr.PIPE,
+                stdout=None,
                 stderr=err,
                 universal_newlines=True,
             )
-            pcss.append(filter)
-            codes = [p.wait() for p in pcss]
+            call.stdout.close()
+            codes = map(lambda p: p.wait(), [mpileup, call, filter])
+            err.close()
         if any(c != 0 for c in codes):
             raise ValueError(
                 error(
