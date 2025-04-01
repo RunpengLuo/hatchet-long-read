@@ -14,18 +14,21 @@ def get_scaling_factor_no_WGD(
     find the netural clonal cluster s with BAF~0.5
     estimate rd scaling factors when no WGD
     """
-    s = None
+    balanced_s = []
     for cid, _ in sorted(cluster_sizes.items(), key=lambda tp: tp[1], reverse=True):
         if all(abs(seg.loc[seg["#ID"] == cid, "BAF"] - 0.5) <= tol_baf):
-            s = cid
-            break
-
-    if s == None:
+            balanced_s.append(cid)
+    
+    if len(balanced_s) == 0:
         sp.log(
             msg=f"ERROR! unable to locate netural cluster with td={tol_baf}\n",
             level="ERROR",
         )
-        assert s != None
+        assert len(balanced_s) != 0
+    
+    rdr = seg.pivot(index="#ID", columns="SAMPLE", values="RD")
+    balanced_s = sorted(balanced_s, key=lambda s: rdr.loc[s].mean())
+    s = balanced_s[0]
 
     gammas = {}
     for p in samples:
@@ -54,7 +57,7 @@ def get_scaling_factor_WGD(
         1. z is not neutral, i.e., |RD(z, p)-RD(s, p)| > <rd_tol>
         2. cz=0...3 if RD(z, p) < RD(s, p), and
         3. cz=5..<max_cn> if RD(z, p) > RD(s, p)
-        4. for any cz, inferred tumor purity must above <lb_purity>,
+        4. consider cz if it has inferred tumor purity must above <lb_purity>,
         5. and have minimum BAF-error < <baf_tol>
         6. z has lowest copy-number cz that satisfies (4) and (5).
     3. among all candidate clonal cluster, the most weighted
@@ -143,3 +146,8 @@ def get_scaling_factor_WGD(
             cz = min(final_clonals.values(), key=lambda val: val[1])[4]  # (az, bz)
             return zid, cz, gammas
     return None, None, None
+
+
+def get_scaling_factor():
+
+    return
