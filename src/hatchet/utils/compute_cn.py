@@ -105,9 +105,9 @@ def main(args=None):
 
     diploid_sols = {}
     if args["diploid"]:
-        # clonal_dip = {s: (1, 1)}
+        clonal_dip = {s: (1, 1)}
         # try not fix clonal
-        clonal_dip = {}
+        # clonal_dip = {}
         for n in range(first_n, last_n):
             sp.log(
                 msg=f"running diploid with n={n} and clonal clusters={str(clonal_dip)}\n",
