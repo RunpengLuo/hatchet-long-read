@@ -177,7 +177,7 @@ def main(args=None):
                 msg="# Array forming completed successfully, removing intermediate count files. \n",
                 level="STEP",
             )
-            # [os.remove(f) for f in expected_counts_files(outdir, chromosomes, names)]
+            [os.remove(f) for f in expected_counts_files(outdir, chromosomes, names)]
 
     totals_file = os.path.join(outdir, "total.tsv")
     if os.path.exists(totals_file):
@@ -467,8 +467,8 @@ def form_counts_array(
                 # count the number of reads covering the chromosome end
                 arr[idx, 0] = end_reads
 
-        # if os.path.exists(chr_sample_file):
-        #     os.remove(chr_sample_file)
+        if os.path.exists(chr_sample_file):
+            os.remove(chr_sample_file)
 
     return arr, thresholds
 
