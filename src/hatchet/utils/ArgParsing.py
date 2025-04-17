@@ -2879,6 +2879,14 @@ def parse_compute_cn_args(args=None):
         required=False,
         help="When eetimate WGD clonal cluster, inferred tumor purity must above <min_purity>",
     )
+    parser.add_argument(
+        "-fS",
+        "--filter_std",
+        type=float,
+        default=config.compute_cn.filter_std,
+        required=False,
+        help="Filter cluster with variance deviates mean-variance by <fil_std>*std(variances)",
+    )
     # TODO "fixed_cn" "fixed_purity"
     # 0.8,0.2,0.0;0.6,0.1,0.3  <uprop_i;> one per sample, dict type \\
     # 1:1|1,1|2; <segID:<cA|cB>,<cA|cB>;> one per cluster, dict type
@@ -3030,6 +3038,7 @@ def parse_compute_cn_args(args=None):
         args.purities = purities
 
     ensure(0.0 <= args.min_purity <= 1.0, "min_purity is out of bound [0, 1]")
+    ensure(args.filter_std >= 0.0, "filter_std is out of bound [0, inf]")
     if args.reg_term != None:
         reg_type, reg_val = args.reg_term.split(":")
         ensure(
@@ -3089,6 +3098,7 @@ def parse_compute_cn_args(args=None):
         "purities": args.purities,
         "mP": args.min_purity,
         "reg_term": args.reg_term,
+        "fstd": args.filter_std
     }
 
 def extractChromosomes(samtools, normal, tumors, reference=None):

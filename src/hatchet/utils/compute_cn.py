@@ -58,8 +58,13 @@ def main(args=None):
         seg=seg,
         samples=samples,
         clusters=clusters,
+        fstd=args["fstd"],
         v=args["v"],
     )
+
+    # TODO
+    # add balanced cluster merge at this step
+    # compute scaling factor here
 
     if len(good_clusters) != len(clusters):
         seg = seg[seg["#ID"].isin(good_clusters)]
@@ -206,6 +211,7 @@ def filtering(
     seg: pd.DataFrame,
     samples: list,
     clusters: list,
+    fstd=2.0,
     v=1,
 ):
     """
@@ -241,12 +247,13 @@ def filtering(
                 msg=f"{sample}\tRD=({mv_rd[j]},{stdv_rd[j]})\tBAF=({mv_baf[j]},{stdv_baf[j]})\n",
                 level="INFO",
             )
-
+        sp.log(msg=f"RD-variance bound={fstd}*{stdv_rd}={fstd * stdv_rd}", level="INFO")
+        sp.log(msg=f"BAF-variance bound={fstd}*{stdv_baf}={fstd * stdv_baf}", level="INFO")
     ret_clusters = []
     for i, cluster in enumerate(clusters):
         dv_rd = np.abs(var_rd_matrix[i, :] - mv_rd)
         dv_baf = np.abs(var_baf_matrix[i, :] - mv_baf)
-        if np.all(dv_rd > (2 * stdv_rd)) and np.all(dv_baf > (2 * stdv_baf)):
+        if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
             sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
             continue
         ret_clusters.append(cluster)
