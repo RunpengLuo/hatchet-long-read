@@ -101,6 +101,7 @@ def pairwise_merge(
             print(s1, _bins, _rd, _snps, _cov, _alpha, _beta, _baf)
             seg.loc[(seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :] = [
                 s1,
+                sample,
                 _bins,
                 _rd,
                 _snps,
