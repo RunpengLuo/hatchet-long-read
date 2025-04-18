@@ -10,6 +10,9 @@ from hatchet.utils.ArgParsing import parse_compute_cn_args
 from hatchet.utils.compute_cn_utils import (
     get_scaling_factor_no_WGD,
     get_scaling_factor_WGD,
+    locate_balanced_clusters,
+    pairwise_merge,
+    get_scaling_factor,
 )
 from hatchet.utils.solve import *
 from hatchet.utils.solve.utils import *
@@ -41,18 +44,14 @@ def main(args=None):
         if not all(sample in samples for sample in args["purities"].keys()):
             raise ValueError(sp.error(f"purities contains sample name error"))
 
-    cluster_sizes = {}
     for cid in clusters:
         seg_rows = seg.loc[seg["#ID"] == cid]
         if len(seg_rows["#BINS"].unique()) != 1:
             raise ValueError(
                 f"Bin sizes for cluster {cid} across tumor samples are not identical!"
             )
-        bbc_rows = bbc.loc[(bbc["CLUSTER"] == cid) & (bbc["SAMPLE"] == samples[0])]
-        cluster_sizes[cid] = bbc_rows.apply(
-            func=lambda r: r["END"] - r["START"], axis=1
-        ).sum()
 
+    cluster_refined = False
     good_clusters = filtering(
         bbc=bbc,
         seg=seg,
@@ -61,111 +60,129 @@ def main(args=None):
         fstd=args["fstd"],
         v=args["v"],
     )
-
-    # TODO
-    # add balanced cluster merge at this step
-    # compute scaling factor here
-
     if len(good_clusters) != len(clusters):
+        cluster_refined |= True
         seg = seg[seg["#ID"].isin(good_clusters)]
+        bbc = bbc[bbc["CLUSTER"].isin(good_clusters)]
+
+    balanced_s, unbalanced_z = locate_balanced_clusters(seg, args["mB"])
+    if len(balanced_s) <= 0:
+        raise ValueError(f"no balanced cluster was found, try increase <mB>")
+    if args["merge"]:
+        bbc, seg, _balanced_s = pairwise_merge(
+            samples, seg, bbc, balanced_s, args["mR"], args["v"]
+        )
+        cluster_refined |= len(_balanced_s) != len(balanced_s)
+        balanced_s = _balanced_s
+
+    clusters = balanced_s + unbalanced_z
+    if cluster_refined:
         fseg_path = os.path.join(out_dir, "bulk.good.seg")
         seg.to_csv(fseg_path, header=True, index=False, sep="\t")
         args["seg"] = fseg_path
-
-        bbc = bbc[bbc["CLUSTER"].isin(good_clusters)]
         fbbc_path = os.path.join(out_dir, "bulk.good.bbc")
         bbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
         args["bbc"] = fbbc_path
-
-        for cluster in clusters:
-            if cluster not in good_clusters:
-                cluster_sizes.pop(cluster)
-        clusters = good_clusters
         sp.log(
-            msg=f"Clusters after filtering is stored in {fseg_path} and {fbbc_path}\n",
+            msg=f"Clusters after filtering&merging is stored in {fseg_path} and {fbbc_path}\n",
             level="STEP",
         )
     else:
-        sp.log(msg="No cluster is filtered\n", level="STEP")
+        sp.log(msg="No cluster is filtered&merged\n", level="STEP")
 
     sp.log(msg="General cluster statistics\n", level="INFO")
     sp.log(msg="#ID\tSIZE(bp)\n", level="INFO")
-    for cid, csize in cluster_sizes.items():
-        sp.log(msg=f"#{cid}\t{csize}\n", level="INFO")
+    cluster_sizes = {}
+    for cid in clusters:
+        bbc_rows = bbc.loc[(bbc["CLUSTER"] == cid) & (bbc["SAMPLE"] == samples[0])]
+        cluster_sizes[cid] = bbc_rows.apply(
+            func=lambda r: r["END"] - r["START"], axis=1
+        ).sum()
+        sp.log(msg=f"#{cid}\t{cluster_sizes[cid]}\n", level="INFO")
 
-    s, gammas_dip = get_scaling_factor_no_WGD(
-        seg=seg,
-        samples=samples,
-        cluster_sizes=cluster_sizes,
-        tol_baf=args["td"],
-        v=args["v"],
+    # compute RD scaling factor
+    ret_scaling = get_scaling_factor(
+        samples, seg, bbc, balanced_s, unbalanced_z, args["tR"], args["tB"], args["eT"]
     )
-    sp.log(msg=f"Inferred diploid netural cluster={s}\n", level="INFO")
-    sp.log(msg="Inferred diploid RD scaling factor gamma per sample:\n", level="INFO")
-    for sname, gamma in gammas_dip.items():
-        sp.log(msg=f"{sname}\tgamma={gamma}\n", level="INFO")
+    s0, pair_noWGD, gammas_noWGD, pair_WGD, gammas_WGD = ret_scaling
 
     # optimization step
     first_n, last_n = args["ln"], args["un"] + 1
 
     diploid_sols = {}
     if args["diploid"]:
-        clonal_dip = {s: (1, 1)}
-        # try not fix clonal
-        # clonal_dip = {}
-        for n in range(first_n, last_n):
+        if len(gammas_noWGD) != len(samples):
             sp.log(
-                msg=f"running diploid with n={n} and clonal clusters={str(clonal_dip)}\n",
-                level="STEP",
-            )
-            (obj, imf_obj) = solve_func(
-                n, clonal_dip, gammas_dip, cluster_sizes, args, "diploid"
-            )
-            diploid_sols[n] = (obj, imf_obj)
-            sp.log(
-                msg=f"diploid n={n} objective={obj} imf-objective={imf_obj}\n",
-                level="STEP",
-            )
-
-    tetraploid_sols = {}
-    if args["tetraploid"]:
-        zid, cz, gammas_wgd = get_scaling_factor_WGD(
-            seg=seg,
-            sid=s,
-            cluster_sizes=cluster_sizes,
-            max_cn=args["eT"],
-            lb_purity=args["mP"],
-            rd_tol=args["tR"],
-            baf_tol=args["tB"],
-            v=args["v"],
-        )
-        if zid == None:
-            sp.log(
-                f"Cannot infer WGD clonal cluster, try increase <baf_tol> or <lb_purity>.\n",
+                f"Failed to infer scaling factor for noWGD, try increase <baf_tol> or <rd_tol>.\n",
                 level="WARN",
             )
         else:
-            sp.log(msg=f"Inferred tetraploid clonal cluster={zid}\n", level="INFO")
+            sp.log(msg=f"Inferred (1,1) balanced cluster={s0}\n", level="INFO")
+            if pair_noWGD != None:
+                (s, z, (sa, sb), (za, zb)) = pair_noWGD
+                sp.log(
+                    msg=f"Inferred clonal pair: {s}:({sa},{sb}), {z}:({za},{zb})\n",
+                    level="INFO",
+                )
+            clonal_dip = {s0: (1, 1)}
+            sp.log(
+                msg="Inferred diploid RD scaling factor gamma per sample:\n",
+                level="INFO",
+            )
+            for sample, gamma in gammas_noWGD.items():
+                sp.log(msg=f"{sample}\tgamma={gamma}\n", level="INFO")
+
+            for n in range(first_n, last_n):
+                sp.log(
+                    msg=f"running diploid with n={n} and clonal clusters={str(clonal_dip)}\n",
+                    level="STEP",
+                )
+                (obj, imf_obj) = solve_func(
+                    n, clonal_dip, gammas_noWGD, cluster_sizes, args, "diploid"
+                )
+                diploid_sols[n] = (obj, imf_obj)
+                sp.log(
+                    msg=f"diploid n={n} objective={obj} imf-objective={imf_obj}\n",
+                    level="STEP",
+                )
+
+    tetraploid_sols = {}
+    if args["tetraploid"]:
+        if len(gammas_WGD) != len(samples) or pair_WGD == None:
+            sp.log(
+                f"Failed to infer scaling factor for WGD, try increase <baf_tol> or <rd_tol>.\n",
+                level="WARN",
+            )
+        else:
+            (s, z, (sa, sb), (za, zb)) = pair_WGD
+            sp.log(
+                msg=f"Inferred clonal pair: {s}:({sa},{sb}), {z}:({za},{zb})\n",
+                level="INFO",
+            )
             sp.log(
                 msg="Inferred tetraploid RD scaling factor gamma per sample:\n",
                 level="INFO",
             )
-            for sname, gamma in gammas_wgd.items():
-                sp.log(msg=f"{sname}\tgamma={gamma}\n", level="INFO")
-            clonal_tet = {s: (2, 2), zid: cz}
+            for sample, gamma in gammas_WGD.items():
+                sp.log(msg=f"{sample}\tgamma={gamma}\n", level="INFO")
+
+            clonal_tet = {s: (sa, sb), z: (za, zb)}
             for n in range(first_n, last_n):
                 sp.log(
                     msg=f"running tetraploid with n={n} and clonal clusters={str(clonal_tet)}\n",
                     level="STEP",
                 )
                 (obj, imf_obj) = solve_func(
-                    n, clonal_tet, gammas_wgd, cluster_sizes, args, "tetraploid"
+                    n, clonal_tet, gammas_WGD, cluster_sizes, args, "tetraploid"
                 )
                 tetraploid_sols[n] = (obj, imf_obj)
                 sp.log(
                     msg=f"tetraploid n={n} objective={obj} imf-objective={imf_obj}\n",
                     level="STEP",
                 )
+
+    if len(diploid_sols) == 0 and len(tetraploid_sols) == 0:
+        raise ValueError("No solutions found for either noWGD or WGD case, exit..\n")
 
     # final model selection between diploid and tetraploid with varying n.
     n_dip, n_tet, best_type = model_selection_final(
@@ -216,7 +233,7 @@ def filtering(
 ):
     """
     filter&merge clusters before optimization step
-    1. compute per-sample per-cluster variance SCV, 
+    1. compute per-sample per-cluster variance SCV,
     2. compute per-sample MV and STDV
     3. filter a cluster if it has |SCV - MV| >= 2 * STDV for all samples.
 
@@ -247,8 +264,13 @@ def filtering(
                 msg=f"{sample}\tRD=({mv_rd[j]},{stdv_rd[j]})\tBAF=({mv_baf[j]},{stdv_baf[j]})\n",
                 level="INFO",
             )
-        sp.log(msg=f"RD-variance bound={fstd}*{stdv_rd}={fstd * stdv_rd}", level="INFO")
-        sp.log(msg=f"BAF-variance bound={fstd}*{stdv_baf}={fstd * stdv_baf}", level="INFO")
+        sp.log(
+            msg=f"RD-variance bound={fstd}*{stdv_rd}={fstd * stdv_rd}\n", level="INFO"
+        )
+        sp.log(
+            msg=f"BAF-variance bound={fstd}*{stdv_baf}={fstd * stdv_baf}\n",
+            level="INFO",
+        )
     ret_clusters = []
     for i, cluster in enumerate(clusters):
         dv_rd = np.abs(var_rd_matrix[i, :] - mv_rd)
@@ -397,6 +419,7 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
     """
     1. select n based on elbow criterion for either WGD/no WGD
     2. then select the final solution based on principle of parsimony (lowest n)
+    TODO handle the case when elbow criterion failed
     """
 
     def select_best_n(data: list, problem_type: str):
@@ -431,7 +454,8 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
         data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
         (n2, obj2) = select_best_n(data_diploid, "diploid")
         sp.log(
-            msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n", level="INFO"
+            msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n",
+            level="INFO",
         )
 
     n4 = 0

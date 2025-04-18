@@ -2705,7 +2705,8 @@ def parse_compute_cn_args(args=None):
         type=float,
         required=False,
         default=config.compute_cn.mergerdr,
-        help="RDR tolerance used for finding the clonal copy numbers (default: 0.08)",
+        # help="RDR tolerance used for finding the clonal copy numbers (default: 0.08)",
+        help="RDR tolerance used for merging adjacent balanced cluster, OVL",
     )
     parser.add_argument(
         "-mB",
@@ -2713,7 +2714,8 @@ def parse_compute_cn_args(args=None):
         type=float,
         required=False,
         default=config.compute_cn.mergebaf,
-        help="BAF tolerance used for finding the clonal copy numbers (default: 0.04)",
+        # help="BAF tolerance used for finding the clonal copy numbers (default: 0.04)",
+        help="BAF tolerance used for finding the balanced clusters (default: 0.04)",
     )
     parser.add_argument(
         "-l",
@@ -3098,7 +3100,8 @@ def parse_compute_cn_args(args=None):
         "purities": args.purities,
         "mP": args.min_purity,
         "reg_term": args.reg_term,
-        "fstd": args.filter_std
+        "fstd": args.filter_std,
+        "merge": args.merge
     }
 
 def extractChromosomes(samtools, normal, tumors, reference=None):
