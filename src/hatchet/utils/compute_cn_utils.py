@@ -73,13 +73,13 @@ def pairwise_merge(
             merged_ss.append(s2)
             continue
         # merge s1 and s2
-        sp.log(msg=f"merge {s1} and {s2}\n", level="INFO")
-        _s = f"{s1}&{s2}"
-        bbc.loc[bbc["CLUSTER"].isin([s1, s2]), "CLUSTER"] = _s
+        sp.log(msg=f"merge {s1} and {s2}, drop {s2}\n", level="INFO")
+        bbc.loc[bbc["CLUSTER"] == s2, "CLUSTER"] = s1
+        bbc.loc[bbc["#ID"] == s2, "#ID"] = s1
         for sample in samples:
             # BINS	RD	#SNPS	COV	ALPHA	BETA	BAF
             _seg = seg.loc[
-                (seg["#ID"].isin([s1, s2])) & (seg["SAMPLE"] == sample), :
+                (seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :
             ]
             _bins = _seg["#BINS"].sum()
             _rd = (
@@ -97,8 +97,10 @@ def pairwise_merge(
                 _seg.apply(func=lambda r: r["BAF"] * r["#BINS"], axis=1).sum()
                 / _bins
             )
-            seg.loc[(seg["#ID"].isin([s1, s2])) & (seg["SAMPLE"] == sample), :] = [
-                _s,
+            print(_seg)
+            print(s1, _bins, _rd, _snps, _cov, _alpha, _beta, _baf)
+            seg.loc[(seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :] = [
+                s1,
                 _bins,
                 _rd,
                 _snps,
@@ -107,7 +109,6 @@ def pairwise_merge(
                 _beta,
                 _baf,
             ]
-        merged_ss[-1] = _s
     seg = seg.drop_duplicates(["#ID", "SAMPLE"], keep="first")
     sp.log(msg=f"balanced clusters after merge: {merged_ss}\n", level="INFO")
     return bbc, seg, merged_ss
