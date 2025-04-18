@@ -266,10 +266,12 @@ def filtering(
     stdv_baf = np.std(var_baf_matrix, axis=0, ddof=1)
     if v >= 1:
         for j, sample in enumerate(samples):
-            rd_bound = (mv_rd[j] - fstd * stdv_rd[j], mv_rd[j] + fstd * stdv_rd[j])
-            baf_bound = (mv_baf[j] - fstd * stdv_baf[j], mv_baf[j] + fstd * stdv_baf[j])
+            lb_rd = mv_rd[j] - fstd * stdv_rd[j]
+            ub_rd = mv_rd[j] + fstd * stdv_rd[j]
+            lb_baf = mv_baf[j] - fstd * stdv_baf[j]
+            ub_baf = mv_baf[j] + fstd * stdv_baf[j]
             sp.log(
-                msg=f"{sample}\tRD-variance bound={rd_bound}\tBAF-variance bound={baf_bound}\n",
+                msg=f"{sample}\tRD-variance bound={(lb_rd, ub_rd)}\tBAF-variance bound={(lb_baf, ub_baf)}\n",
                 level="INFO",
             )
 
@@ -285,6 +287,8 @@ def filtering(
         if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
             sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
             continue
+        if v >= 1:
+            sp.log(msg=f"cluster {cluster} Z(RD)={dv_rd / stdv_rd}\tZ(RD)={dv_baf / stdv_baf}\n", level="INFO")
         ret_clusters.append(cluster)
 
     sp.log(msg=f"remaining clusters: {ret_clusters}\n", level="INFO")
