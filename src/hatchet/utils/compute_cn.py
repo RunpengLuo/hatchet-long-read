@@ -279,7 +279,7 @@ def filtering(
         dv_baf = np.abs(var_baf_matrix[i, :] - mv_baf)
         if v >= 1:
             sp.log(
-                msg=f"{cluster}\tRD-variance dev={dv_rd}\tBAF-variance dev={dv_baf}\n",
+                msg=f"{cluster}\tRD-variance={var_rd_matrix[i, :]}\tBAF-variance={var_baf_matrix[i, :]}\n",
                 level="INFO",
             )
         if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
