@@ -78,24 +78,17 @@ def pairwise_merge(
         seg.loc[seg["#ID"] == s2, "#ID"] = s1
         for sample in samples:
             # BINS	RD	#SNPS	COV	ALPHA	BETA	BAF
-            _seg = seg.loc[
-                (seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :
-            ]
+            _seg = seg.loc[(seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :]
             _bins = _seg["#BINS"].sum()
-            _rd = (
-                _seg.apply(func=lambda r: r["RD"] * r["#BINS"], axis=1).sum()
-                / _bins
-            )
+            _rd = _seg.apply(func=lambda r: r["RD"] * r["#BINS"], axis=1).sum() / _bins
             _snps = _seg["#SNPS"].sum()
             _cov = (
-                _seg.apply(func=lambda r: r["COV"] * r["#BINS"], axis=1).sum()
-                / _bins
+                _seg.apply(func=lambda r: r["COV"] * r["#BINS"], axis=1).sum() / _bins
             )
             _alpha = _seg["ALPHA"].sum()
             _beta = _seg["BETA"].sum()
             _baf = (
-                _seg.apply(func=lambda r: r["BAF"] * r["#BINS"], axis=1).sum()
-                / _bins
+                _seg.apply(func=lambda r: r["BAF"] * r["#BINS"], axis=1).sum() / _bins
             )
             seg.loc[(seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :] = [
                 s1,
@@ -112,14 +105,16 @@ def pairwise_merge(
     sp.log(msg=f"balanced clusters after merge: {merged_ss}\n", level="INFO")
     return bbc, seg, merged_ss
 
+
 # clonal cluster z (a,b)
 def get_purity_by_baf(bafz: float, a: int, b: int):
     """
     compute tumor purity by BAF and copy-number (a,b)
     """
-    num = (2 * bafz - 1)
+    num = 2 * bafz - 1
     dom = (b - 1) - bafz * (a + b - 2)
     return -1 if dom == 0 else num / dom
+
 
 def get_purity_by_rrd(rrdz: float, a: int, b: int, is_wgd=True):
     """
@@ -132,6 +127,7 @@ def get_purity_by_rrd(rrdz: float, a: int, b: int, is_wgd=True):
     else:
         dom = a + b - 2
     return -1 if dom == 0 else num / dom
+
 
 def purity_est_err(bafz: float, rrdz: float, a: int, b: int, is_wgd: bool):
     """
@@ -146,13 +142,16 @@ def purity_est_err(bafz: float, rrdz: float, a: int, b: int, is_wgd: bool):
         return np.inf, pbaf, prrd
     return abs(pbaf - prrd), pbaf, prrd
 
+
 def get_gamma_WGD(rds: float, rdz: float, cz: int):
     dom = (cz - 2) * rds - 2 * rdz
     if dom == 0.0:
         return -1
     return (2 * cz - 8) / dom
 
-def get_scaling_factor(samples: list,
+
+def get_scaling_factor(
+    samples: list,
     seg: pd.DataFrame,
     bbc: pd.DataFrame,
     balanced_s: list,
@@ -161,8 +160,8 @@ def get_scaling_factor(samples: list,
     tol_err: float,
     maxcn: int,
     maxcn_wgd: int,
-    v=1
-    ):
+    v=1,
+):
     """
     Compute scaling factors
     """
@@ -181,8 +180,11 @@ def get_scaling_factor(samples: list,
     if len(balanced_s) >= 2:
         # TODO also reason about (0,0) or (2,2) base?
         s0, s1 = balanced_s[0], balanced_s[1]
-        pair_noWGD = (s0, s1, (1,1), (2,2))
-        sp.log(msg=f"found >1 balanced clusters, assign (1,1) and (2,2) to {s0} and {s1}\n", level="INFO")
+        pair_noWGD = (s0, s1, (1, 1), (2, 2))
+        sp.log(
+            msg=f"found >1 balanced clusters, assign (1,1) and (2,2) to {s0} and {s1}\n",
+            level="INFO",
+        )
         for sample in samples:
             gamma = 2 / rdr.loc[s0, sample]
             gammas_noWGD[sample] = gamma
@@ -203,7 +205,7 @@ def get_scaling_factor(samples: list,
                 if np.any(baf.loc[_z] < baf.loc[z]):
                     is_cand_loh[z] = False
                     break
-    
+
     for z in sorted(unbalanced_z, key=lambda z: baf.loc[z, :].mean()):
         if not is_cand_loh[z]:
             sp.log(msg=f"\t({z},{s0}) cannot be LOH pair, skip.\n")
@@ -222,97 +224,109 @@ def get_scaling_factor(samples: list,
                         purities_noWGD[sample] = None
                         break
                 if all(p != None for p in purities_noWGD.values()):
-                    pair_noWGD = (s0, z, (1,1), (2,0))
-            
+                    pair_noWGD = (s0, z, (1, 1), (2, 0))
+
             # case 2, (2,2) and (4,0)
             if pair_WGD == None:
                 for sample in samples:
-                    perr, pbaf, prrd = purity_est_err(baf.loc[z, sample], rrdr.loc[z, sample], 4, 0, True)
+                    perr, pbaf, prrd = purity_est_err(
+                        baf.loc[z, sample], rrdr.loc[z, sample], 4, 0, True
+                    )
                     if perr <= tol_err:
-                        purities_WGD[sample] = (pbaf + prrd)/2
+                        purities_WGD[sample] = (pbaf + prrd) / 2
                     else:
                         purities_noWGD[sample] = None
                         break
                 if all(p != None for p in purities_WGD.values()):
-                    pair_WGD = (s0, z, (2,2), (4,0))
+                    pair_WGD = (s0, z, (2, 2), (4, 0))
         elif np.all(rd_dist_zs > 0):
             sp.log(msg=f"-----------z={z} above {s0}\n", level="STEP")
             if pair_noWGD == None:
                 lohs_nowgd = [(a, 0) for a in range(3, maxcn + 1)]
-                for (a, b) in lohs_nowgd:
+                for a, b in lohs_nowgd:
                     for sample in samples:
-                        perr, pbaf, prrd = purity_est_err(baf.loc[z, sample], rrdr.loc[z, sample], a, b, False)
+                        perr, pbaf, prrd = purity_est_err(
+                            baf.loc[z, sample], rrdr.loc[z, sample], a, b, False
+                        )
                         if perr <= tol_err:
-                            purities_noWGD[sample] = (pbaf + prrd)/2
+                            purities_noWGD[sample] = (pbaf + prrd) / 2
                         else:
                             purities_noWGD[sample] = None
                             break
                     if all(p != None for p in purities_noWGD.values()):
-                        pair_noWGD = (s0, z, (1,1), (a,b))
+                        pair_noWGD = (s0, z, (1, 1), (a, b))
                         break
 
             if pair_WGD == None:
                 lohs_wgd = [(a, 0) for a in range(4, maxcn_wgd + 1)]
-                for (a, b) in lohs_wgd:
+                for a, b in lohs_wgd:
                     for sample in samples:
-                        perr, pbaf, prrd = purity_est_err(baf.loc[z, sample], rrdr.loc[z, sample], a, b, True)
+                        perr, pbaf, prrd = purity_est_err(
+                            baf.loc[z, sample], rrdr.loc[z, sample], a, b, True
+                        )
                         if perr <= tol_err:
-                            purities_WGD[sample] = (pbaf + prrd)/2
+                            purities_WGD[sample] = (pbaf + prrd) / 2
                         else:
                             purities_WGD[sample] = None
                             break
                     if all(p != None for p in purities_WGD.values()):
-                        pair_WGD = (s0, z, (2,2), (a,b))
+                        pair_WGD = (s0, z, (2, 2), (a, b))
                         break
         elif np.all(rd_dist_zs < 0):
             sp.log(msg=f"-----------z={z} below {s0}\n", level="STEP")
             if pair_noWGD == None:
-                lohs_nowgd = [(1,0)]
-                for (a, b) in lohs_nowgd:
+                lohs_nowgd = [(1, 0)]
+                for a, b in lohs_nowgd:
                     for sample in samples:
-                        perr, pbaf, prrd = purity_est_err(baf.loc[z, sample], rrdr.loc[z, sample], a, b, False)
+                        perr, pbaf, prrd = purity_est_err(
+                            baf.loc[z, sample], rrdr.loc[z, sample], a, b, False
+                        )
                         if perr <= tol_err:
-                            purities_noWGD[sample] = (pbaf + prrd)/2
+                            purities_noWGD[sample] = (pbaf + prrd) / 2
                         else:
                             purities_noWGD[sample] = None
                             break
                     if all(p != None for p in purities_noWGD.values()):
-                        pair_noWGD = (s0, z, (1,1), (a,b))
+                        pair_noWGD = (s0, z, (1, 1), (a, b))
                         break
-                    
+
             if pair_WGD == None:
-                lohs_wgd = [(1,0), (2,0), (3,0)]
-                for (a, b) in lohs_wgd:
+                lohs_wgd = [(1, 0), (2, 0), (3, 0)]
+                for a, b in lohs_wgd:
                     for sample in samples:
-                        perr, pbaf, prrd = purity_est_err(baf.loc[z, sample], rrdr.loc[z, sample], a, b, True)
+                        perr, pbaf, prrd = purity_est_err(
+                            baf.loc[z, sample], rrdr.loc[z, sample], a, b, True
+                        )
                         if perr <= tol_err:
-                            purities_WGD[sample] = (pbaf + prrd)/2
+                            purities_WGD[sample] = (pbaf + prrd) / 2
                         else:
                             purities_WGD[sample] = None
                             break
                     if all(p != None for p in purities_WGD.values()):
-                        pair_WGD = (s0, z, (2,2), (a,b))
+                        pair_WGD = (s0, z, (2, 2), (a, b))
                         break
         else:
-            sp.log(msg=f"cluster {z} has inconsistent relative position to {s0} across samples\n", level="WARN")
+            sp.log(
+                msg=f"cluster {z} has inconsistent relative position to {s0} across samples\n",
+                level="WARN",
+            )
             sp.log(msg=f"RD-distance(z,s)={rd_dist_zs}\n", level="WARN")
             sp.log(msg=f"RD-ratio(z,s)={rd_ratio_zs}\n", level="WARN")
 
         if pair_noWGD != None and pair_WGD != None:
             break
-    
+
     # if pair_noWGD != None:
     #     (_, z, (sa, sb), (za, zb)) = pair_noWGD
     # in noWGD case, pair is not required.
     for sample in samples:
         gamma = 2 / rdr.loc[s0, sample]
         gammas_noWGD[sample] = gamma
-    
+
     if pair_WGD != None:
         (_, z, (_, _), (za, zb)) = pair_WGD
         for sample in samples:
             gamma = get_gamma_WGD(rdr.loc[s0, sample], rdr.loc[z, sample], za + zb)
             gammas_WGD[sample] = gamma
-    
-    return s0, pair_noWGD, gammas_noWGD, pair_WGD, gammas_WGD
 
+    return s0, pair_noWGD, gammas_noWGD, pair_WGD, gammas_WGD

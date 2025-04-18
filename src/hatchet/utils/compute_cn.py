@@ -100,7 +100,15 @@ def main(args=None):
 
     # compute RD scaling factor
     ret_scaling = get_scaling_factor(
-        samples, seg, bbc, balanced_s, unbalanced_z, args["tR"], args["tB"], args["eD"], args["eT"]
+        samples,
+        seg,
+        bbc,
+        balanced_s,
+        unbalanced_z,
+        args["tR"],
+        args["tB"],
+        args["eD"],
+        args["eT"],
     )
     s0, pair_noWGD, gammas_noWGD, pair_WGD, gammas_WGD = ret_scaling
 
@@ -258,21 +266,22 @@ def filtering(
     stdv_baf = np.std(var_baf_matrix, axis=0, ddof=1)
     if v >= 1:
         for j, sample in enumerate(samples):
+            rd_bound = (mv_rd[j] - fstd * stdv_rd[j], mv_rd[j] + fstd * stdv_rd[j])
+            baf_bound = (mv_baf[j] - fstd * stdv_baf[j], mv_baf[j] + fstd * stdv_baf[j])
             sp.log(
-                msg=f"{sample}\tRD=({mv_rd[j]},{stdv_rd[j]})\tBAF=({mv_baf[j]},{stdv_baf[j]})\n",
+                msg=f"{sample}\tRD-variance bound={rd_bound}\tBAF-variance bound={baf_bound}\n",
                 level="INFO",
             )
-        sp.log(
-            msg=f"RD-variance bound={fstd}*{stdv_rd}={fstd * stdv_rd}\n", level="INFO"
-        )
-        sp.log(
-            msg=f"BAF-variance bound={fstd}*{stdv_baf}={fstd * stdv_baf}\n",
-            level="INFO",
-        )
+
     ret_clusters = []
     for i, cluster in enumerate(clusters):
         dv_rd = np.abs(var_rd_matrix[i, :] - mv_rd)
         dv_baf = np.abs(var_baf_matrix[i, :] - mv_baf)
+        if v >= 1:
+            sp.log(
+                msg=f"{cluster}\tRD-variance dev={dv_rd}\tBAF-variance dev={dv_baf}\n",
+                level="INFO",
+            )
         if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
             sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
             continue
