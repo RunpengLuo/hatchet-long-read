@@ -75,7 +75,7 @@ def pairwise_merge(
         # merge s1 and s2
         sp.log(msg=f"merge {s1} and {s2}, drop {s2}\n", level="INFO")
         bbc.loc[bbc["CLUSTER"] == s2, "CLUSTER"] = s1
-        bbc.loc[bbc["#ID"] == s2, "#ID"] = s1
+        seg.loc[seg["#ID"] == s2, "#ID"] = s1
         for sample in samples:
             # BINS	RD	#SNPS	COV	ALPHA	BETA	BAF
             _seg = seg.loc[
