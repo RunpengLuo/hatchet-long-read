@@ -97,8 +97,6 @@ def pairwise_merge(
                 _seg.apply(func=lambda r: r["BAF"] * r["#BINS"], axis=1).sum()
                 / _bins
             )
-            print(_seg)
-            print(s1, _bins, _rd, _snps, _cov, _alpha, _beta, _baf)
             seg.loc[(seg["#ID"] == s1) & (seg["SAMPLE"] == sample), :] = [
                 s1,
                 sample,
