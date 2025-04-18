@@ -100,7 +100,7 @@ def main(args=None):
 
     # compute RD scaling factor
     ret_scaling = get_scaling_factor(
-        samples, seg, bbc, balanced_s, unbalanced_z, args["tR"], args["tB"], args["eT"]
+        samples, seg, bbc, balanced_s, unbalanced_z, args["tR"], args["tB"], args["eD"], args["eT"]
     )
     s0, pair_noWGD, gammas_noWGD, pair_WGD, gammas_WGD = ret_scaling
 
