@@ -8,8 +8,6 @@ import pandas as pd
 import hatchet.utils.Supporting as sp
 from hatchet.utils.ArgParsing import parse_compute_cn_args
 from hatchet.utils.compute_cn_utils import (
-    get_scaling_factor_no_WGD,
-    get_scaling_factor_WGD,
     locate_balanced_clusters,
     pairwise_merge,
     get_scaling_factor,
