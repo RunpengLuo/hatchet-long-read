@@ -186,7 +186,7 @@ def get_scaling_factor(samples: list,
         pair_noWGD = (s0, s1, (1,1), (2,2))
         sp.log(msg=f"found >1 balanced clusters, assign (1,1) and (2,2) to {s0} and {s1}\n", level="INFO")
         for sample in samples:
-            gamma = rdr.loc[s0, sample] / 2
+            gamma = 2 / rdr.loc[s0, sample]
             gammas_noWGD[sample] = gamma
             purity = (0.5 * rdr.loc[s1, sample] / gamma) - 1
             purities_noWGD[sample] = purity
@@ -307,7 +307,7 @@ def get_scaling_factor(samples: list,
     #     (_, z, (sa, sb), (za, zb)) = pair_noWGD
     # in noWGD case, pair is not required.
     for sample in samples:
-        gamma = rdr.loc[s0, sample] / 2
+        gamma = 2 / rdr.loc[s0, sample]
         gammas_noWGD[sample] = gamma
     
     if pair_WGD != None:
