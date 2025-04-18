@@ -206,6 +206,8 @@ def get_scaling_factor(
                     is_cand_loh[z] = False
                     break
 
+    err_noWGD = np.inf
+    err_WGD = np.inf
     for z in sorted(unbalanced_z, key=lambda z: baf.loc[z, :].mean()):
         if not is_cand_loh[z]:
             sp.log(msg=f"\t({z},{s0}) cannot be LOH pair, skip.\n")
@@ -232,6 +234,7 @@ def get_scaling_factor(
                     perr, pbaf, prrd = purity_est_err(
                         baf.loc[z, sample], rrdr.loc[z, sample], 4, 0, True
                     )
+                    err_WGD = min(err_WGD, perr)
                     if perr <= tol_err:
                         purities_WGD[sample] = (pbaf + prrd) / 2
                     else:
@@ -248,6 +251,7 @@ def get_scaling_factor(
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, False
                         )
+                        err_noWGD = min(err_noWGD, perr)
                         if perr <= tol_err:
                             purities_noWGD[sample] = (pbaf + prrd) / 2
                         else:
@@ -264,6 +268,7 @@ def get_scaling_factor(
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, True
                         )
+                        err_WGD = min(err_WGD, perr)
                         if perr <= tol_err:
                             purities_WGD[sample] = (pbaf + prrd) / 2
                         else:
@@ -281,6 +286,7 @@ def get_scaling_factor(
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, False
                         )
+                        err_noWGD = min(err_noWGD, perr)
                         if perr <= tol_err:
                             purities_noWGD[sample] = (pbaf + prrd) / 2
                         else:
@@ -297,6 +303,7 @@ def get_scaling_factor(
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, True
                         )
+                        err_WGD = min(err_WGD, perr)
                         if perr <= tol_err:
                             purities_WGD[sample] = (pbaf + prrd) / 2
                         else:
@@ -315,6 +322,10 @@ def get_scaling_factor(
 
         if pair_noWGD != None and pair_WGD != None:
             break
+
+    if v >= 1:
+        sp.log(msg=f"lowest purity-esimation error (noWGD)={err_noWGD}, bound={tol_err}\n", level="INFO")
+        sp.log(msg=f"lowest purity-esimation error (WGD)={err_WGD}, bound={tol_err}\n", level="INFO")
 
     # if pair_noWGD != None:
     #     (_, z, (sa, sb), (za, zb)) = pair_noWGD
