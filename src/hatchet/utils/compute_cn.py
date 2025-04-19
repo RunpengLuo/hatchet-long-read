@@ -131,7 +131,7 @@ def main(args=None):
                     msg=f"Inferred clonal pair: {s}:({sa},{sb}), {z}:({za},{zb})\n",
                     level="INFO",
                 )
-                if args["fixc_noWGD"]:
+                if args["fixc_nowgd"]:
                     clonal_dip = {s: (sa, sb), z: (za, zb)}
                     sp.log(msg=f"fixed clonal pair\n", level="INFO")
             sp.log(
