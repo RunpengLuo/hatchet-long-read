@@ -2882,9 +2882,9 @@ def parse_compute_cn_args(args=None):
         help="Filter cluster with variance deviates mean-variance by <fil_std>*std(variances)",
     )
     parser.add_argument(
-        "--fixc_noWGD",
+        "--fixc_nowgd",
         action="store_true",
-        default=config.compute_cn.fixc_noWGD,
+        default=config.compute_cn.fixc_nowgd,
         required=False,
         help=(
             "fix copy-number states for inferred clonal pair when no WGD."
@@ -3101,7 +3101,7 @@ def parse_compute_cn_args(args=None):
         "reg_term": args.reg_term,
         "fstd": args.filter_std,
         "merge": args.merge,
-        "fixc_noWGD": args.fixc_noWGD
+        "fixc_nowgd": args.fixc_nowgd
     }
 
 def extractChromosomes(samtools, normal, tumors, reference=None):
