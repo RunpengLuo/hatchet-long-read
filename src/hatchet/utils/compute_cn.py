@@ -50,7 +50,7 @@ def main(args=None):
             )
 
     cluster_refined = False
-    good_clusters = filtering(
+    good_clusters, bad_clusters = filtering(
         bbc=bbc,
         seg=seg,
         samples=samples,
@@ -58,8 +58,15 @@ def main(args=None):
         fstd=args["fstd"],
         v=args["v"],
     )
-    if len(good_clusters) != len(clusters):
-        cluster_refined |= True
+    if len(bad_clusters) > 0:
+        _seg = seg[seg["#ID"].isin(bad_clusters)]
+        _bbc = bbc[bbc["CLUSTER"].isin(bad_clusters)]
+        fseg_path = os.path.join(out_dir, "bulk.bad.seg")
+        _seg.to_csv(fseg_path, header=True, index=False, sep="\t")
+        fbbc_path = os.path.join(out_dir, "bulk.bad.bbc")
+        _bbc.to_csv(fbbc_path, header=True, index=False, sep="\t")
+        
+        cluster_refined = True
         seg = seg[seg["#ID"].isin(good_clusters)]
         bbc = bbc[bbc["CLUSTER"].isin(good_clusters)]
 
@@ -279,7 +286,8 @@ def filtering(
                 level="INFO",
             )
 
-    ret_clusters = []
+    good_clusters = []
+    bad_clusters = []
     for i, cluster in enumerate(clusters):
         dv_rd = np.abs(var_rd_matrix[i, :] - mv_rd)
         dv_baf = np.abs(var_baf_matrix[i, :] - mv_baf)
@@ -291,11 +299,12 @@ def filtering(
             sp.log(msg=f"\tZ(RD)={dv_rd / stdv_rd}\tZ(RD)={dv_baf / stdv_baf}\n", level="INFO")
         if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
             sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
+            bad_clusters.append(cluster)
         else:
-            ret_clusters.append(cluster)
+            good_clusters.append(cluster)
 
-    sp.log(msg=f"remaining clusters: {ret_clusters}\n", level="INFO")
-    return ret_clusters
+    sp.log(msg=f"remaining clusters: {good_clusters}\n", level="INFO")
+    return good_clusters, bad_clusters
 
 
 def execute_python(
