@@ -124,13 +124,16 @@ def main(args=None):
             )
         else:
             sp.log(msg=f"Inferred (1,1) balanced cluster={s0}\n", level="INFO")
+            clonal_dip = {s0: (1, 1)}
             if pair_noWGD != None:
                 (s, z, (sa, sb), (za, zb)) = pair_noWGD
                 sp.log(
                     msg=f"Inferred clonal pair: {s}:({sa},{sb}), {z}:({za},{zb})\n",
                     level="INFO",
                 )
-            clonal_dip = {s0: (1, 1)}
+                if args["fixc_noWGD"]:
+                    clonal_dip = {s: (sa, sb), z: (za, zb)}
+                    sp.log(msg=f"fixed clonal pair\n", level="INFO")
             sp.log(
                 msg="Inferred diploid RD scaling factor gamma per sample:\n",
                 level="INFO",
