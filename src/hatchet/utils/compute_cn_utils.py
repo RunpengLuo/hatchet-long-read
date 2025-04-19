@@ -206,12 +206,29 @@ def get_scaling_factor(
                     is_cand_loh[z] = False
                     break
 
+    cn_nowgd_above = []
+    cn_wgd_above = []
+    # (3,0),(2,1),(4,0),(3,1),(5,0),(4,1),(3,2)...
+    for c in range(3, max(maxcn, maxcn_wgd) + 1):
+        for b in range(0, (c // 2) + 1):
+            a = c - b
+            if a == b:
+                continue
+            if c <= maxcn:
+                cn_nowgd_above.append((a,b))
+            if c <= maxcn_wgd and c >= 5:
+                cn_wgd_above.append((a,b))
+
+    cn_nowgd_below = [(1,0)]
+    cn_wgd_below = [(1,0),(2,0),(3,0),(2,1)]
+
+    if v >= 1:
+        sp.log(msg=f"candiate un-paired clonal states (no WGD): {cn_nowgd_below},{cn_nowgd_above}\n", level="INFO")
+        sp.log(msg=f"candiate un-paired clonal states (WGD): {cn_wgd_below},{cn_wgd_below}\n", level="INFO")
+
     err_noWGD = np.inf
     err_WGD = np.inf
     for z in sorted(unbalanced_z, key=lambda z: baf.loc[z, :].mean()):
-        if not is_cand_loh[z]:
-            sp.log(msg=f"\t({z},{s0}) cannot be LOH pair, skip.\n")
-            continue
         rd_ratio_zs = rdr.loc[z] / rdr.loc[s0]
         rd_dist_zs = rdr.loc[z] - rdr.loc[s0]
         if np.all(np.abs(rd_ratio_zs - 1) <= tol_rd_ratio):
@@ -245,8 +262,9 @@ def get_scaling_factor(
         elif np.all(rd_dist_zs > 0):
             sp.log(msg=f"-----------z={z} above {s0}\n", level="STEP")
             if pair_noWGD == None:
-                lohs_nowgd = [(a, 0) for a in range(3, maxcn + 1)]
-                for a, b in lohs_nowgd:
+                for a, b in cn_nowgd_above:
+                    if b == 0 and not is_cand_loh[z]:
+                        continue
                     for sample in samples:
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, False
@@ -262,8 +280,9 @@ def get_scaling_factor(
                         break
 
             if pair_WGD == None:
-                lohs_wgd = [(a, 0) for a in range(4, maxcn_wgd + 1)]
-                for a, b in lohs_wgd:
+                for a, b in cn_wgd_above:
+                    if b == 0 and not is_cand_loh[z]:
+                        continue
                     for sample in samples:
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, True
@@ -280,8 +299,9 @@ def get_scaling_factor(
         elif np.all(rd_dist_zs < 0):
             sp.log(msg=f"-----------z={z} below {s0}\n", level="STEP")
             if pair_noWGD == None:
-                lohs_nowgd = [(1, 0)]
-                for a, b in lohs_nowgd:
+                for a, b in cn_nowgd_below:
+                    if b == 0 and not is_cand_loh[z]:
+                        continue
                     for sample in samples:
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, False
@@ -297,8 +317,9 @@ def get_scaling_factor(
                         break
 
             if pair_WGD == None:
-                lohs_wgd = [(1, 0), (2, 0), (3, 0)]
-                for a, b in lohs_wgd:
+                for a, b in cn_wgd_below:
+                    if b == 0 and not is_cand_loh[z]:
+                        continue
                     for sample in samples:
                         perr, pbaf, prrd = purity_est_err(
                             baf.loc[z, sample], rrdr.loc[z, sample], a, b, True
