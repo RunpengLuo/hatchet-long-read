@@ -71,7 +71,9 @@ def main(args=None):
         for k in results.keys():
             labels = results[k][2]
             bb["CLUSTER"] = np.repeat(reindex(labels), len(sample_labels))
-            bb.to_csv(f"{outdir}/labels/bb_{k}.tsv", sep='\t', index=False, header=True)
+            bb.to_csv(f"{outdir}/labels/bulk{k}.bbc", sep='\t', index=False, header=True)
+            seg = form_seg(bb, args["diploidbaf"])
+            seg.to_csv(f"{outdir}/labels/bulk{k}.seg", index=False, sep="\t")
 
     best_labels = reindex(best_labels)
     bb["CLUSTER"] = np.repeat(best_labels, len(sample_labels))
