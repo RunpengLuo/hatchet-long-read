@@ -47,6 +47,7 @@ def main(args=None):
             msg="# Clustering bins by RD and BAF across tumor samples using locality\n",
             level="STEP",
         )
+        outdir = args["outbins"][:str.rindex(args["outbins"], "/")]
         (
             best_score,
             best_model,
@@ -54,7 +55,7 @@ def main(args=None):
             best_K,
             results,
         ) = hmm_model_select(
-            args["outbins"][:str.rindex(args["outbins"], "/")],
+            outdir,
             tracks,
             minK=minK,
             maxK=maxK,
@@ -65,6 +66,12 @@ def main(args=None):
             state_selection=args["selection"],
             restarts=args["restarts"],
         )
+
+        os.makedirs(f"{outdir}/labels", exist_ok=True)
+        for k in results.keys():
+            labels = results[k][2]
+            bb["CLUSTER"] = np.repeat(reindex(labels), len(sample_labels))
+            bb.to_csv(f"{outdir}/labels/bb_{k}.tsv", sep='\t', index=False, header=True)
 
     best_labels = reindex(best_labels)
     bb["CLUSTER"] = np.repeat(best_labels, len(sample_labels))
@@ -254,7 +261,6 @@ def hmm_model_select(
     assert state_selection in ["silhouette", "bic"]
 
     # TODO
-    os.makedirs(f"{outdir}/labels", exist_ok=True)
     scores_record = []
     # format input
     tracks = [a for a in tracks if a.shape[0] > 0 and a.shape[1] > 0]
@@ -347,10 +353,9 @@ def hmm_model_select(
             best_K = K
         
         # TODO
-        np.save(f"{outdir}/labels/{K}.npy", np.array(reindex(best_labels), dtype=np.int8))
-        scores_record.append([K, score, beats_the_current_best, ""])
+        scores_record.append([K, my_best_ll, score, beats_the_current_best, ""])
     
-    df = pd.DataFrame(data=scores_record, columns=["K", f"{state_selection}-score", 
+    df = pd.DataFrame(data=scores_record, columns=["K", "log-likelihood", f"{state_selection}-score", 
                                                    "beats-the-curr-best", "selected"])
     df.loc[df["K"] == best_K, "selected"] = "*"
     df.to_csv(f"{outdir}/scores.tsv", sep='\t', index=False, header=True)
