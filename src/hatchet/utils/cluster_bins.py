@@ -11,6 +11,7 @@ from hmmlearn import hmm
 from hatchet.utils.ArgParsing import parse_cluster_bins_args
 import hatchet.utils.Supporting as sp
 
+import os
 
 def main(args=None):
     sp.log(msg="# Parsing and checking input arguments\n", level="STEP")
@@ -53,6 +54,7 @@ def main(args=None):
             best_K,
             results,
         ) = hmm_model_select(
+            args["outbins"][:str.rindex(args["outbins"], "/")],
             tracks,
             minK=minK,
             maxK=maxK,
@@ -236,6 +238,7 @@ def read_bb(bbfile, subset=None, allow_gaps=False):
 
 
 def hmm_model_select(
+    outdir,
     tracks,
     minK=20,
     maxK=50,
@@ -250,6 +253,9 @@ def hmm_model_select(
     assert decode_alg in ["map", "viterbi"]
     assert state_selection in ["silhouette", "bic"]
 
+    # TODO
+    os.makedirs(f"{outdir}/labels", exist_ok=True)
+    scores_record = []
     # format input
     tracks = [a for a in tracks if a.shape[0] > 0 and a.shape[1] > 0]
     if len(tracks) > 1:
@@ -339,6 +345,15 @@ def hmm_model_select(
             best_model = my_best_model
             best_labels = my_best_labels
             best_K = K
+        
+        # TODO
+        np.save(f"{outdir}/labels/{K}.npy", np.array(reindex(best_labels), dtype=np.int8))
+        scores_record.append([K, score, beats_the_current_best, ""])
+    
+    df = pd.DataFrame(data=scores_record, columns=["K", f"{state_selection}-score", 
+                                                   "beats-the-curr-best", "selected"])
+    df.loc[df["K"] == best_K, "selected"] = "*"
+    df.to_csv(f"{outdir}/scores.tsv", sep='\t', index=False, header=True)
 
     return best_score, best_model, best_labels, best_K, rs
 
