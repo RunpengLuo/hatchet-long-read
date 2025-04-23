@@ -33,9 +33,9 @@ def elbow_bic(minK: int, maxK: int, results: dict, state_selection: str, outdir:
     plt.savefig(os.path.join(outdir, f"{state_selection}-curve.png"), dpi=300)
     if elbow_x != None:
         sp.log(msg=f"elbow selection K={int(elbow_x)}\n", level="INFO")
-        return results[int(elbow_x)][2]
+        return results[int(elbow_x)][2], True
     sp.log(msg=f"failed to detect elbow in {state_selection} curve\n", level="INFO")
-    return None
+    return None, False
 
 
 def main(args=None):
@@ -100,8 +100,8 @@ def main(args=None):
             seg = form_seg(bb, args["diploidbaf"])
             seg.to_csv(f"{outdir}/labels/bulk{k}.seg", index=False, sep="\t")
         
-        elbow_labels = elbow_bic(minK, maxK, results, args["selection"], outdir)
-        if elbow_labels != None:
+        elbow_labels, found_elbow = elbow_bic(minK, maxK, results, args["selection"], outdir)
+        if found_elbow:
             best_labels = elbow_labels
 
     best_labels = reindex(best_labels)
