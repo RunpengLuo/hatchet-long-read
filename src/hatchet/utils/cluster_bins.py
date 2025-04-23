@@ -12,6 +12,31 @@ from hatchet.utils.ArgParsing import parse_cluster_bins_args
 import hatchet.utils.Supporting as sp
 
 import os
+import kneed
+import matplotlib.pyplot as plt
+
+def elbow_bic(minK: int, maxK: int, results: dict, state_selection: str, outdir: str):
+    assert state_selection == "bic", "only BIC is supported now"
+    scores = []
+    Ks = [k for k in range(minK, maxK + 1)]
+    for k in Ks:
+        scores.append(results[k][1])
+
+    kl = kneed.KneeLocator(x=Ks, y=scores, curve="convex", direction="decreasing")
+
+    elbow_x, elbow_y = kl.elbow, kl.elbow_y
+    kl.plot_knee(
+        title=f"{state_selection} Curve",
+        xlabel="K",
+        ylabel=f"{state_selection}",
+    )
+    plt.savefig(os.path.join(outdir, f"{state_selection}-curve.png"), dpi=300)
+    if elbow_x != None:
+        sp.log(msg=f"elbow selection K={int(elbow_x)}\n", level="INFO")
+        return results[int(elbow_x)][2]
+    sp.log(msg=f"failed to detect elbow in {state_selection} curve\n", level="INFO")
+    return None
+
 
 def main(args=None):
     sp.log(msg="# Parsing and checking input arguments\n", level="STEP")
@@ -74,6 +99,10 @@ def main(args=None):
             bb.to_csv(f"{outdir}/labels/bulk{k}.bbc", sep='\t', index=False, header=True)
             seg = form_seg(bb, args["diploidbaf"])
             seg.to_csv(f"{outdir}/labels/bulk{k}.seg", index=False, sep="\t")
+        
+        elbow_labels = elbow_bic(minK, maxK, results, args["selection"])
+        if elbow_labels != None:
+            best_labels = elbow_labels
 
     best_labels = reindex(best_labels)
     bb["CLUSTER"] = np.repeat(best_labels, len(sample_labels))
