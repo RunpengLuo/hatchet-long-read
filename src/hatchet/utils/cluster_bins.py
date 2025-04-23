@@ -16,7 +16,9 @@ import kneed
 import matplotlib.pyplot as plt
 
 def elbow_bic(minK: int, maxK: int, results: dict, state_selection: str, outdir: str):
-    assert state_selection == "bic", "only BIC is supported now"
+    if state_selection != "bic":
+        return None, False
+
     scores = []
     Ks = [k for k in range(minK, maxK + 1)]
     for k in Ks:
