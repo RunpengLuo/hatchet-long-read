@@ -100,7 +100,7 @@ def main(args=None):
             seg = form_seg(bb, args["diploidbaf"])
             seg.to_csv(f"{outdir}/labels/bulk{k}.seg", index=False, sep="\t")
         
-        elbow_labels = elbow_bic(minK, maxK, results, args["selection"])
+        elbow_labels = elbow_bic(minK, maxK, results, args["selection"], outdir)
         if elbow_labels != None:
             best_labels = elbow_labels
 
