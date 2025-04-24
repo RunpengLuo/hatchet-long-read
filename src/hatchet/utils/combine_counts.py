@@ -10,7 +10,7 @@ from scipy.special import softmax
 from hatchet.utils.ArgParsing import parse_combine_counts_args
 import hatchet.utils.Supporting as sp
 from hatchet.utils.rd_gccorrect import rd_gccorrect
-
+from hatchet.utils.hatchet_utils import get_centromeres
 
 def main(args=None):
     sp.log(msg="# Parsing and checking input arguments\n", level="STEP")
@@ -35,30 +35,7 @@ def main(args=None):
     n_workers = min(len(chromosomes), threads)
 
     # Read in centromere locations table
-    centromeres = pd.read_table(
-        args["cent_file"],
-        header=None,
-        names=["CHR", "START", "END", "NAME", "gieStain"],
-    )
-
-    # TODO add a feature to handle indepedent regions, via BED format cent_file
-    chr2centro = {}
-    for ch in centromeres.CHR.unique():
-        my_df = centromeres[centromeres.CHR == ch]
-        assert (my_df.gieStain == "acen").all()
-        # Each centromere should consist of 2 adjacent segments
-        assert len(my_df == 2)
-        assert my_df.START.max() == my_df.END.min()
-        if use_chr:
-            if ch.startswith("chr"):
-                chr2centro[ch] = my_df.START.min(), my_df.END.max()
-            else:
-                chr2centro["chr" + ch] = my_df.START.min(), my_df.END.max()
-        else:
-            if ch.startswith("chr"):
-                chr2centro[ch[3:]] = my_df.START.min(), my_df.END.max()
-            else:
-                chr2centro[ch] = my_df.START.min(), my_df.END.max()
+    chr2centro = get_centromeres(args["cent_file"], use_chr)
 
     for ch in chromosomes:
         if ch not in chr2centro:
