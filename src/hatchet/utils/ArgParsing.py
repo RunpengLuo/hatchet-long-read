@@ -655,12 +655,11 @@ def parse_count_reads_args(args=None):
         ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
     else:
         if cent_file != None:
-            log(msg=f"external centromere file is ignored, since {ver} is natively supported by HATCHet.", level="WARN")
-        cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
-        ensure(
-            isfile(cent_file),
-            f"ERROR! HATCHet data is corrupted! {cent_file} is invalid/missing!",
-        )
+            log(msg=f"override native centromere file from HATCHet by {cent_file}\n", level="INFO")
+        else:
+            cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
+            log(msg=f"load native centromere file from HATCHet for {ver}\n", level="INFO")
+        ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
 
     ensure(os.path.exists(args.baffile), f"BAF file not found: {args.baffile}")
     ensure(
@@ -921,12 +920,11 @@ def parse_combine_counts_args(args=None):
         ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
     else:
         if cent_file != None:
-            log(msg=f"external centromere file is ignored, since {ver} is natively supported by HATCHet.", level="WARN")
-        cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
-        ensure(
-            isfile(cent_file),
-            f"ERROR! HATCHet data is corrupted! {cent_file} is invalid/missing!",
-        )
+            log(msg=f"override native centromere file from HATCHet by {cent_file}\n", level="INFO")
+        else:
+            cent_file = path(hatchet.data, f"{ver}.centromeres.txt")
+            log(msg=f"load native centromere file from HATCHet for {ver}\n", level="INFO")
+        ensure(isfile(cent_file), f"Centromere file is invalid {cent_file}")
 
     outdir = os.sep.join(args.outfile.split(os.sep)[:-1])
     ensure(
