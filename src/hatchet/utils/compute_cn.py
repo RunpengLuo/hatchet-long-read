@@ -203,7 +203,7 @@ def main(args=None):
 
     # final model selection between diploid and tetraploid with varying n.
     n_dip, n_tet, best_type = model_selection_final(
-        diploid_sols, tetraploid_sols, out_dir, args["v"]
+        diploid_sols, tetraploid_sols, out_dir, args["g"], args["limit"], args["v"]
     )
 
     # save model selected result here
@@ -437,32 +437,84 @@ def execute_cpp(
     sp.log(msg="cpp optimization is not implemented yet!\n", level="INFO")
     return -1, -1
 
-
-def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: str, v=1):
+def select_diploid(nobjs: list, g: float, limit: float, v=1):
     """
-    1. select n based on elbow criterion for either WGD/no WGD
-    2. then select the final solution based on principle of parsimony (lowest n)
+    select #clones among diploid solutions use manual elbow criterion.
+    """
+    if len(nobjs) <= 2:
+        sp.log(msg=f"select among <=2 solutions, pick the one with minimum IMF objective\n", level="INFO")
+        min_sol = min(nobjs, key=lambda elem: elem[1])
+        return min_sol[0], min_sol[1]
+    div0 = lambda v: v if v > 0.0 else 1.0
+    sp.log(msg=f"model-select among {len(nobjs)} solutions via elbow criterion\n", level="INFO")
+    scores = {}
+    for i, [n, obj] in enumerate(nobjs):
+        if i == 0:
+            left = g
+            if limit != None:
+                left = min(left, limit)
+            right = float(max(obj - nobjs[i + 1][1], 0.0) / div0(obj))
+        elif i == len(nobjs) - 1:
+            prev_obj = nobjs[i - 1][1]
+            left = float(max(prev_obj - obj, 0.0) / div0(prev_obj))
+            if limit != None:
+                left = min(left, limit)
+            right = g
+        else:
+            prev_obj = nobjs[i - 1][1]
+            left = float(max(prev_obj - obj, 0.0) / div0(prev_obj))
+            if limit != None:
+                left = min(left, limit)
+            right = float(max(obj - nobjs[i + 1][1], 0.0) / div0(obj))
+        scores[n] = left - right
+        if v >= 1:
+            sp.log(msg=f"approx 2nd derivative score for n={n} is {scores[n]}\n", level="INFO")
+    chosen = max(nobjs, key=lambda elem: scores[elem[0]])
+    return chosen[0], chosen[1]
+
+def select_tetraploid(nobjs: list, nobjs_dip: list, g: float, limit: float, v=1):
+    """
+    select #clones among diploid solutions use manual elbow criterion.
+    """
+    if len(nobjs) <= 2:
+        sp.log(msg=f"select among <=2 solutions, pick the one with minimum IMF objective\n", level="INFO")
+        min_sol = min(nobjs, key=lambda elem: elem[1])
+        return min_sol[0], min_sol[1]
+    div0 = lambda v: v if v > 0.0 else 1.0
+    sp.log(msg=f"model-select among {len(nobjs)} solutions via elbow criterion\n", level="INFO")
+    scores = {}
+    for i, [n, obj] in enumerate(nobjs):
+        if i == 0:
+            left = g
+            if nobjs_dip != None:
+                left = max(left, float(max(nobjs_dip[i][1] - nobjs_dip[i + 1][1], 0.0) / div0(nobjs_dip[i][1])))
+            if limit != None:
+                left = min(left, limit)
+            right = float(max(obj - nobjs[i + 1][1], 0.0) / div0(obj))
+        elif i == len(nobjs) - 1:
+            prev_obj = nobjs[i - 1][1]
+            left = float(max(prev_obj - obj, 0.0) / div0(prev_obj))
+            if limit != None:
+                left = min(left, limit)
+            right = g
+        else:
+            prev_obj = nobjs[i - 1][1]
+            left = float(max(prev_obj - obj, 0.0) / div0(prev_obj))
+            if limit != None:
+                left = min(left, limit)
+            right = float(max(obj - nobjs[i + 1][1], 0.0) / div0(obj))
+        scores[n] = left - right
+        if v >= 1:
+            sp.log(msg=f"approx 2nd derivative score for n={n} is {scores[n]}\n", level="INFO")
+    chosen = max(nobjs, key=lambda elem: scores[elem[0]])
+    return chosen[0], chosen[1]
+
+def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: str, g: float, limit: float, v=1):
+    """
+    1. for either WGD/no WGD, select n based on manual elbow criterion.
+    2. select the final solution based on principle of parsimony (lowest n)
     TODO handle the case when elbow criterion failed
     """
-
-    def select_best_n(data: list, problem_type: str):
-        sp.log(msg=f"running model selection for {problem_type}\n", level="INFO")
-        sorted_data = sorted(data, key=lambda elem: elem[1])
-        df = pd.DataFrame(data=sorted_data, columns=["n", "IMF-objective"])
-        df, sol_index = model_select(
-            df,
-            "n",
-            "IMF-objective",
-            os.path.join(out_dir, f"pareto_curve.{problem_type}.png"),
-            verbose=True,
-        )
-        df.to_csv(
-            os.path.join(out_dir, f"model_selections.{problem_type}.tsv"),
-            sep="\t",
-            header=True,
-            index=False,
-        )
-        return df.loc[sol_index, "n"], df.loc[sol_index, "IMF-objective"]
 
     if len(diploid_sols) == 0 and len(tetraploid_sols) == 0:
         sp.log(
@@ -473,9 +525,11 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
 
     n2 = 0
     obj2 = 0
+    data_diploid = None
     if len(diploid_sols) > 0:
         data_diploid = [[n, imf_obj] for n, (_, imf_obj) in diploid_sols.items()]
-        (n2, obj2) = select_best_n(data_diploid, "diploid")
+        data_diploid = sorted(data_diploid, key=lambda elem: elem[0])
+        (n2, obj2) = select_diploid(data_diploid, g, limit, v=v)
         sp.log(
             msg=f"best diploid solution is n={n2} with IMF-objective={obj2}\n",
             level="INFO",
@@ -485,7 +539,7 @@ def model_selection_final(diploid_sols: dict, tetraploid_sols: dict, out_dir: st
     obj4 = 0
     if len(tetraploid_sols) > 0:
         data_tetraploid = [[n, imf_obj] for n, (_, imf_obj) in tetraploid_sols.items()]
-        (n4, obj4) = select_best_n(data_tetraploid, "tetraploid")
+        (n4, obj4) = select_tetraploid(data_tetraploid, data_diploid, g, limit, v=v)
         sp.log(
             msg=f"best tetraploid solution is n={n4} with IMF-objective={obj4}\n",
             level="INFO",

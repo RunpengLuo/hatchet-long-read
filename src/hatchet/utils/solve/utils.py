@@ -202,7 +202,7 @@ def filter_non_pareto(points: np.ndarray):
     return is_pareto
 
 
-def model_select(df: pd.DataFrame, xid: str, yid: str, pareto_img: str, verbose: bool):
+def model_select_elbow(df: pd.DataFrame, xid: str, yid: str, pareto_img: str, verbose: bool):
     """
     given the set of solutions with two minimizing objective <xid> and <yid>
     1) select the pareto-optimal set,
@@ -321,7 +321,7 @@ def model_selection_instance(
         subset=["IMF-objective", f"{pname}-objective"], keep="first", ignore_index=True
     )
 
-    df, sol_index = model_select(
+    df, sol_index = model_select_elbow(
         df,
         f"{pname}-objective",
         "IMF-objective",
