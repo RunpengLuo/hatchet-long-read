@@ -103,8 +103,8 @@ def main(args=None):
             seg.to_csv(f"{outdir}/labels/bulk{k}.seg", index=False, sep="\t")
         
         elbow_labels, found_elbow = elbow_bic(minK, maxK, results, args["selection"], outdir)
-        if found_elbow:
-            best_labels = elbow_labels
+        # if found_elbow:
+        #     best_labels = elbow_labels
 
     best_labels = reindex(best_labels)
     bb["CLUSTER"] = np.repeat(best_labels, len(sample_labels))
