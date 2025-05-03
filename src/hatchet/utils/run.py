@@ -92,6 +92,7 @@ def main(args=None):
     if config.run.genotype_snps:
         snps = ""
         if config.genotype_snps.snps:
+            # assumes same coordinate as config.run.reference
             snps = config.genotype_snps.snps
         elif config.genotype_snps.reference_version:
             # load builtin supported refvers and SNPs URLs
@@ -113,8 +114,8 @@ def main(args=None):
             ) not in snps_mapping:
                 raise RuntimeError(
                     (
-                        "Please specify valid values of reference_version and chr_notation. "
-                        f"Valid pairs include: {snps_mapping.keys()}"
+                        "Please provide custom SNP file or specify valid values of "
+                        f"reference_version and chr_notation. Valid pairs include: {snps_mapping.keys()}"
                     )
                 )
             else:
@@ -122,6 +123,10 @@ def main(args=None):
                     config.genotype_snps.reference_version,
                     config.genotype_snps.chr_notation,
                 ]
+        else:
+            raise ValueError(
+                error("Neither SNP nor reference_version is provided/valid")
+            )
 
         os.makedirs(f"{output}/snps", exist_ok=True)
         genotype_snps(
