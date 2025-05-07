@@ -17,6 +17,7 @@ from hatchet.utils.Supporting import (
 
 def sort_chroms(chromosomes: list):
     assert len(chromosomes) != 0
+    chromosomes = [str(c) for c in chromosomes]
     ch = "chr" if str(chromosomes[0]).startswith("chr") else ""
     chr2ord = {}
     for i in range(1,23):

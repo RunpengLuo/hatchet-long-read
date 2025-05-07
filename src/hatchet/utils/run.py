@@ -23,6 +23,7 @@ from hatchet.utils.download_panel import main as download_panel
 from hatchet.utils.phase_snps import main as phase_snps
 from hatchet.utils.Supporting import log, error
 
+from hatchet.utils.phase_snps_lr import main as phase_snps_lr
 
 def main(args=None):
     parser = argparse.ArgumentParser(
@@ -48,6 +49,16 @@ def main(args=None):
             extra_args = ["-j", str(config.run.processes)]
     except KeyError:
         pass
+
+    run_modes = ["NGS", "TGS"]
+    if config.run.run_mode not in run_modes:
+        raise ValueError(
+            error(
+                f"{config.run.run_mode} is unsupported, HATCHet supports: {run_modes}"
+            )
+        )
+    run_mode = config.run.run_mode
+    log(msg=f"Running HATCHet in {run_mode} mode\n", level="INFO")
 
     # ----------------------------------------------------
 
@@ -148,7 +159,7 @@ def main(args=None):
                 )
             )
 
-        if not config.download_panel.refpaneldir:
+        if not config.download_panel.refpaneldir and run_mode == "NGS":
             raise ValueError(
                 error(
                     (
@@ -159,22 +170,37 @@ def main(args=None):
             )
 
         os.makedirs(f"{output}/phase", exist_ok=True)
-        phase_snps(
-            args=[
-                "-D",
-                config.download_panel.refpaneldir,
-                "-g",
-                config.run.reference,
-                "-V",
-                config.genotype_snps.reference_version,
-                "-o",
-                f"{output}/phase/",
-                "-L",
-            ]
-            + glob.glob(f"{output}/snps/*.vcf.gz")
-            + (["-N"] if config.genotype_snps.chr_notation else [])
-            + extra_args
-        )
+        if run_mode == "NGS":  # default mode
+            phase_snps(
+                args=[
+                    "-D",
+                    config.download_panel.refpaneldir,
+                    "-g",
+                    config.run.reference,
+                    "-V",
+                    config.genotype_snps.reference_version,
+                    "-o",
+                    f"{output}/phase/",
+                    "-L",
+                ]
+                + glob.glob(f"{output}/snps/*.vcf.gz")
+                + (["-N"] if config.genotype_snps.chr_notation else [])
+                + extra_args
+            )
+        elif run_mode == "TGS":
+            phase_snps_lr(
+                args=[
+                    "-N",
+                    config.run.normal,
+                    "-g",
+                    config.run.reference,
+                    "-o",
+                    f"{output}/phase/",
+                    "-L",
+                ]
+                + glob.glob(f"{output}/snps/*.vcf.gz")
+                + extra_args
+            )
 
     # ----------------------------------------------------
     if config.run.count_alleles:
