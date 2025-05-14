@@ -1268,7 +1268,8 @@ def run_chromosome(
             normal_df_ch = normal_df[normal_df.CHR == chromosome]
 
         sp.log(msg=f"Binning p arm of chromosome {chromosome}\n", level="INFO")
-        if len(np.where(positions <= centromere_start)[0]) > 0:
+        # FIXME fix the binning issue!! also related to count_reads part
+        if len(np.where(positions < centromere_start)[0]) > 0:
             # There may not be a SNP between the centromere end and the next SNP threshold
             # Goal for p arm is to END at the FIRST threshold that is AFTER the LAST SNP BEFORE the centromere
             last_snp_before_centromere = positions[
@@ -1366,7 +1367,7 @@ def run_chromosome(
 
         sp.log(msg=f"Binning q arm of chromosome {chromosome}\n", level="INFO")
 
-        if len(np.where(positions >= centromere_end)[0]) > 0:
+        if len(np.where(positions > centromere_end)[0]) > 0:
             # There may not be a SNP between the centromere end and the next SNP threshold
             # Goal for q arm is to start at the latest threshold that is before the first SNP after the centromere
             first_snp_after_centromere = positions[

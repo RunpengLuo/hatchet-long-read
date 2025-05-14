@@ -550,18 +550,53 @@ def run_chromosome(
         else:
             positions, _, _ = read_snps(baf_file, chromosome, all_names)
 
-        thresholds = np.trunc(
-            np.vstack([positions[:-1], positions[1:]]).mean(axis=0)
+        # thresholds = np.trunc(
+        #     np.vstack([positions[:-1], positions[1:]]).mean(axis=0)
+        # ).astype(np.uint32)
+        # last_idx_p = np.argwhere(thresholds > centromere_start)[0][0]
+        # first_idx_q = np.argwhere(thresholds > centromere_end)[0][0]
+        # all_thresholds = np.concatenate(
+        #     [
+        #         [1],
+        #         thresholds[:last_idx_p],
+        #         [centromere_start],
+        #         [centromere_end],
+        #         thresholds[first_idx_q:],
+        #     ]
+        # )
+
+        snp_idx_before_centromere_start = np.where(positions < centromere_start)[0][-1]
+        if positions[snp_idx_before_centromere_start] >= centromere_start:
+            # no SNPs before centromere_start
+            positions_p = np.array([], dtype=np.int32)
+        else:
+            if snp_idx_before_centromere_start == len(positions):
+                # this is last SNP already
+                positions_p = positions
+            else:
+                positions_p = positions[:snp_idx_before_centromere_start + 1]
+
+        thresholds_p = np.ceil(
+        np.vstack([positions_p[:-1], positions_p[1:]]).mean(axis=0)
         ).astype(np.uint32)
-        last_idx_p = np.argwhere(thresholds > centromere_start)[0][0]
-        first_idx_q = np.argwhere(thresholds > centromere_end)[0][0]
+
+        snp_idx_after_centromere_end = np.where(positions > centromere_end)[0][0]
+        if positions[snp_idx_after_centromere_end] <= centromere_end:
+            # no SNPs after centromere_end
+            positions_q = np.array([], dtype=np.int32)
+        else:
+            positions_q = positions[snp_idx_after_centromere_end:]
+        thresholds_q = np.ceil(
+        np.vstack([positions_q[:-1], positions_q[1:]]).mean(axis=0)
+        ).astype(np.uint32)
+
         all_thresholds = np.concatenate(
             [
                 [1],
-                thresholds[:last_idx_p],
+                thresholds_p,
                 [centromere_start],
                 [centromere_end],
-                thresholds[first_idx_q:],
+                thresholds_q
             ]
         )
 
