@@ -576,7 +576,7 @@ def run_chromosome(
             else:
                 positions_p = positions[:snp_idx_before_centromere_start + 1]
 
-        thresholds_p = np.ceil(
+        thresholds_p = np.trunc(
         np.vstack([positions_p[:-1], positions_p[1:]]).mean(axis=0)
         ).astype(np.uint32)
 
@@ -586,7 +586,7 @@ def run_chromosome(
             positions_q = np.array([], dtype=np.int32)
         else:
             positions_q = positions[snp_idx_after_centromere_end:]
-        thresholds_q = np.ceil(
+        thresholds_q = np.trunc(
         np.vstack([positions_q[:-1], positions_q[1:]]).mean(axis=0)
         ).astype(np.uint32)
 
