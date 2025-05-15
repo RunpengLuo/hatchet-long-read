@@ -120,6 +120,15 @@ def main(args=None):
     )
     s0, pair_noWGD, gammas_noWGD, pair_WGD, gammas_WGD = ret_scaling
 
+    # save scaling factor for plot-cn module
+    gamma_outfile = os.path.join(out_dir, "gammas.tsv")
+    with open(gamma_outfile, 'w') as fd:
+        for sample in samples:
+            gamma_noWGD = gammas_noWGD.get(sample, 0)
+            gamma_WGD = gammas_WGD.get(sample, 0)
+            fd.write(f"{sample}\t{gamma_noWGD}\t{gamma_WGD}\n")
+        fd.close()
+
     # optimization step
     first_n, last_n = args["ln"], args["un"] + 1
 
