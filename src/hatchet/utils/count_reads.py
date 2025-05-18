@@ -564,28 +564,38 @@ def run_chromosome(
         #         thresholds[first_idx_q:],
         #     ]
         # )
-
-        snp_idx_before_centromere_start = np.where(positions < centromere_start)[0][-1]
-        if positions[snp_idx_before_centromere_start] >= centromere_start:
-            # no SNPs before centromere_start
-            positions_p = np.array([], dtype=np.int32)
-        else:
-            if snp_idx_before_centromere_start == len(positions):
-                # this is last SNP already
-                positions_p = positions
+        snp_indices_p_arm = np.where(positions < centromere_start)[0]
+        if len(snp_indices_p_arm) > 0:
+            snp_idx_before_centromere_start = snp_indices_p_arm[-1]
+            if positions[snp_idx_before_centromere_start] >= centromere_start:
+                # no SNPs before centromere_start
+                positions_p = np.array([], dtype=np.int32)
             else:
-                positions_p = positions[:snp_idx_before_centromere_start + 1]
+                if snp_idx_before_centromere_start == len(positions):
+                    # this is last SNP already
+                    positions_p = positions
+                else:
+                    positions_p = positions[:snp_idx_before_centromere_start + 1]
+        else:
+            log(msg=f"WARNING, no SNPs are found for {chromosome} p-arm\n", level="WARN")
+            positions_p = np.array([], dtype=np.int32)
 
         thresholds_p = np.trunc(
         np.vstack([positions_p[:-1], positions_p[1:]]).mean(axis=0)
         ).astype(np.uint32)
 
-        snp_idx_after_centromere_end = np.where(positions > centromere_end)[0][0]
-        if positions[snp_idx_after_centromere_end] <= centromere_end:
-            # no SNPs after centromere_end
-            positions_q = np.array([], dtype=np.int32)
+        snp_indices_q_arm = np.where(positions > centromere_end)[0]
+        if len(snp_indices_q_arm) > 0:
+            snp_idx_after_centromere_end = np.where(positions > centromere_end)[0][0]
+            if positions[snp_idx_after_centromere_end] <= centromere_end:
+                # no SNPs after centromere_end
+                positions_q = np.array([], dtype=np.int32)
+            else:
+                positions_q = positions[snp_idx_after_centromere_end:]
         else:
-            positions_q = positions[snp_idx_after_centromere_end:]
+            log(msg=f"WARNING, no SNPs are found for {chromosome} q-arm\n", level="WARN")
+            positions_q = np.array([], dtype=np.int32)
+
         thresholds_q = np.trunc(
         np.vstack([positions_q[:-1], positions_q[1:]]).mean(axis=0)
         ).astype(np.uint32)
