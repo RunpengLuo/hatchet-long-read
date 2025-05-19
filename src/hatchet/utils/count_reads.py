@@ -472,7 +472,8 @@ def form_counts_array(
 
     return arr, thresholds
 
-
+# TODO use chr.sizes file instead
+# current code is not accurate
 def get_chr_end(stem, all_names, chromosome):
     starts_files = []
     for name in all_names:
@@ -539,31 +540,15 @@ def run_chromosome(
 
         if xy: # XY case
             log(
-                msg="Running on sex chromosome -- ignoring SNPs and min SNP reads\n",
+                msg=f"Running on XY sample {chromosome} -- ignoring SNPs\n",
                 level="INFO",
             )
 
-            # TODO: do this procedure only for XY
             last_start = get_chr_end(outdir, all_names, chromosome)
             positions = np.arange(5000, last_start, 5000)
-
         else:
             positions, _, _ = read_snps(baf_file, chromosome, all_names)
 
-        # thresholds = np.trunc(
-        #     np.vstack([positions[:-1], positions[1:]]).mean(axis=0)
-        # ).astype(np.uint32)
-        # last_idx_p = np.argwhere(thresholds > centromere_start)[0][0]
-        # first_idx_q = np.argwhere(thresholds > centromere_end)[0][0]
-        # all_thresholds = np.concatenate(
-        #     [
-        #         [1],
-        #         thresholds[:last_idx_p],
-        #         [centromere_start],
-        #         [centromere_end],
-        #         thresholds[first_idx_q:],
-        #     ]
-        # )
         snp_indices_p_arm = np.where(positions < centromere_start)[0]
         if len(snp_indices_p_arm) > 0:
             positions_p = positions[snp_indices_p_arm]

@@ -1217,36 +1217,19 @@ def run_chromosome(
             dtype=np.uint32,
         )
 
-        # TODO: identify whether XX or XY, and only avoid SNPs/BAFs for XY
         if xy:
             sp.log(
-                msg="Running on sex chromosome -- ignoring SNPs \n",
+                msg=f"Running on XY sample {chromosome} -- ignoring SNPs and min SNP reads\n",
                 level="INFO",
             )
             min_snp_reads = 0
 
-            # TODO: do this procedure only for XY individuals
-            ### construct dummy SNP positions and all-0 snpcounts array for binning
-            before_centromere = complete_thresholds[
-                complete_thresholds <= centromere_start
-            ]
-            after_centromere = complete_thresholds[
-                complete_thresholds >= centromere_end
-            ]
-            positions_p = np.mean(
-                np.vstack([before_centromere[:-1], before_centromere[1:]]),
-                axis=0,
-            ).astype(np.uint64)
-            positions_q = np.mean(
-                np.vstack([after_centromere[:-1], after_centromere[1:]]),
-                axis=0,
-            ).astype(np.uint64)
-            positions = np.concatenate([positions_p, positions_q])
+            chr_end = complete_thresholds[-1]
+            positions = np.arange(5000, chr_end, 5000)
             snp_counts = np.zeros((len(positions), len(all_names) - 1), dtype=np.int8)
             snpsv = None
-
         else:
-            # sp.log(msg=f"Reading SNPs file for chromosome {chromosome}\n", level = "INFO")
+            sp.log(msg=f"Reading SNPs file for chromosome {chromosome}\n", level = "INFO")
             # Load SNP positions and counts for this chromosome
             positions, snp_counts, snpsv = read_snps(
                 baffile, chromosome, all_names, phasefile=phasefile
@@ -1269,28 +1252,20 @@ def run_chromosome(
 
         sp.log(msg=f"Binning p arm of chromosome {chromosome}\n", level="INFO")
         # FIXME fix the binning issue!! also related to count_reads part
-        if len(np.where(positions < centromere_start)[0]) > 0:
+        snp_indices_p_arm = np.where(positions < centromere_start)[0]
+        if len(snp_indices_p_arm) > 0:
             # There may not be a SNP between the centromere end and the next SNP threshold
             # Goal for p arm is to END at the FIRST threshold that is AFTER the LAST SNP BEFORE the centromere
-            last_snp_before_centromere = positions[
-                np.where(positions < centromere_start)[0][-1]
-            ]
-            last_threshold_before_centromere = complete_thresholds[
-                np.where(complete_thresholds > last_snp_before_centromere)[0][0]
-            ]
-
-            p_idx = np.where(complete_thresholds <= last_threshold_before_centromere)[0]
-            p_thresholds = complete_thresholds[p_idx]
-            p_counts = total_counts[p_idx]
-
-            p_snp_idx = np.where(positions <= last_threshold_before_centromere)[0]
-            p_positions = positions[p_snp_idx]
-            p_snpcounts = snp_counts[p_snp_idx]
+            p_positions = positions[snp_indices_p_arm]
+            p_snpcounts = snp_counts[snp_indices_p_arm]
+            p_indices = np.where(complete_thresholds <= centromere_start)[0]
+            p_thresholds = complete_thresholds[p_indices]
+            p_totalcounts = total_counts[p_indices]
 
             # Identify bins
             bins_p = adaptive_bins_arm(
                 snp_thresholds=p_thresholds,
-                total_counts=p_counts,
+                total_counts=p_totalcounts,
                 snp_positions=p_positions,
                 snp_counts=p_snpcounts,
                 min_snp_reads=min_snp_reads,
@@ -1299,11 +1274,9 @@ def run_chromosome(
 
             starts_p = bins_p[0]
             ends_p = bins_p[1]
-            # Partition SNPs for BAF inference
 
             # Infer BAF
             if xy:
-                # TODO: compute BAFs for XX
                 dfs_p = None
                 bafs_p = None
                 mu_phase_p = None
@@ -1366,28 +1339,19 @@ def run_chromosome(
             bb_p = None
 
         sp.log(msg=f"Binning q arm of chromosome {chromosome}\n", level="INFO")
-
-        if len(np.where(positions > centromere_end)[0]) > 0:
+        snp_indices_q_arm = np.where(positions > centromere_end)[0]
+        if len(snp_indices_q_arm) > 0:
             # There may not be a SNP between the centromere end and the next SNP threshold
             # Goal for q arm is to start at the latest threshold that is before the first SNP after the centromere
-            first_snp_after_centromere = positions[
-                np.where(positions > centromere_end)[0][0]
-            ]
-            first_threshold_after_centromere = complete_thresholds[
-                np.where(complete_thresholds < first_snp_after_centromere)[0][-1]
-            ]
-
-            q_idx = np.where(complete_thresholds >= first_threshold_after_centromere)[0]
-            q_thresholds = complete_thresholds[q_idx]
-            q_counts = total_counts[q_idx]
-
-            q_snp_idx = np.where(positions >= first_threshold_after_centromere)[0]
-            q_positions = positions[q_snp_idx]
-            q_snpcounts = snp_counts[q_snp_idx]
+            q_positions = positions[snp_indices_q_arm]
+            q_snpcounts = snp_counts[snp_indices_q_arm]
+            q_indices = np.where(complete_thresholds >= centromere_end)[0]
+            q_thresholds = complete_thresholds[q_indices]
+            q_totalcounts = total_counts[q_indices]
 
             bins_q = adaptive_bins_arm(
                 snp_thresholds=q_thresholds,
-                total_counts=q_counts,
+                total_counts=q_totalcounts,
                 snp_positions=q_positions,
                 snp_counts=q_snpcounts,
                 min_snp_reads=min_snp_reads,
