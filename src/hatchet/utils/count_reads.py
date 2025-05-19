@@ -555,14 +555,15 @@ def run_chromosome(
             thresholds_p = np.trunc(
             np.vstack([positions_p[:-1], positions_p[1:]]).mean(axis=0)
             ).astype(np.uint32)
-            if len(thresholds_p) > 0:
-                if thresholds_p[0] != 1:
-                    thresholds_p = np.concatenate([[1], thresholds_p])
-            else:
-                thresholds_p = np.array([1])
         else:
             log(msg=f"WARNING, no SNPs are found for {chromosome} p-arm\n", level="WARN")
             thresholds_p = np.array([], dtype=np.int32)
+
+        if len(thresholds_p) == 0:
+            thresholds_p = np.array([1], dtype=np.int32)
+        
+        if thresholds_p[0] != 1:
+            thresholds_p = np.concatenate([[1], thresholds_p])
 
         snp_indices_q_arm = np.where(positions > centromere_end)[0]
         if len(snp_indices_q_arm) > 0:
