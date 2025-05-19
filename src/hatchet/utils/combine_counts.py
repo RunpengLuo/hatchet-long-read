@@ -371,7 +371,7 @@ def adaptive_bins_arm(
     # handle the case of 1 bin
     if len(ends) == 0:
         sp.log(
-            msg="WARNING: found only 1 bin in chromosome arm, may not meet MSR and MTR\t",
+            msg="WARNING: found only 1 bin in chromosome arm, may not meet MSR and MTR\n",
             level="WARN",
         )
         assert len(starts) == 0
