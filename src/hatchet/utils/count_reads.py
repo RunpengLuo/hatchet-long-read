@@ -567,13 +567,12 @@ def run_chromosome(
         snp_indices_p_arm = np.where(positions < centromere_start)[0]
         if len(snp_indices_p_arm) > 0:
             positions_p = positions[snp_indices_p_arm]
+            thresholds_p = np.trunc(
+            np.vstack([positions_p[:-1], positions_p[1:]]).mean(axis=0)
+            ).astype(np.uint32)
         else:
             log(msg=f"WARNING, no SNPs are found for {chromosome} p-arm\n", level="WARN")
-            positions_p = np.array([], dtype=np.int32)
-
-        thresholds_p = np.trunc(
-        np.vstack([positions_p[:-1], positions_p[1:]]).mean(axis=0)
-        ).astype(np.uint32)
+            thresholds_p = np.array([], dtype=np.int32)
 
         if thresholds_p[0] != 1:
             thresholds_p = np.concatenate([[1], thresholds_p])
@@ -581,13 +580,12 @@ def run_chromosome(
         snp_indices_q_arm = np.where(positions > centromere_end)[0]
         if len(snp_indices_q_arm) > 0:
             positions_q = positions[snp_indices_q_arm]
+            thresholds_q = np.trunc(
+            np.vstack([positions_q[:-1], positions_q[1:]]).mean(axis=0)
+            ).astype(np.uint32)
         else:
             log(msg=f"WARNING, no SNPs are found for {chromosome} q-arm\n", level="WARN")
-            positions_q = np.array([], dtype=np.int32)
-
-        thresholds_q = np.trunc(
-        np.vstack([positions_q[:-1], positions_q[1:]]).mean(axis=0)
-        ).astype(np.uint32)
+            thresholds_q = np.array([], dtype=np.int32)
 
         all_thresholds = np.concatenate(
             [
