@@ -550,12 +550,16 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
     bafs, phases, ll = max(runs.values(), key=lambda x: x[-1])
 
     # TODO test
-    mean_phase = phases.mean()
+    # we can also weighted by DP if needed
+    frac_phases = phases.copy()
+    phase_normal = np.abs(frac_phases - 0.5).mean()
+    recalc_baf = phase_normal <= 0.01
+
     # Need hard phasing to assign ref/alt reads to alpha/beta
     phases = np.round(phases).astype(np.int8)
 
     # allelic balanced threshold inferred from normal BAF bin
-    Nthres = compute_MAE(normal_snps.ALT.to_numpy(), normal_snps.REF.to_numpy())
+    # Nthres = compute_MAE(normal_snps.ALT.to_numpy(), normal_snps.REF.to_numpy())
 
     # Compose results table
     for i in range(len(samples)):
@@ -569,12 +573,16 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
         alpha = np.sum(np.choose(phases, [refs[i], alts[i]]))
         beta = np.sum(np.choose(phases, [alts[i], refs[i]]))
         baf = bafs[i]
-        baf, _, _ = baf_recalc(baf, alts[i], refs[i], Nthres) ##### Test BAF recalc method
+        if recalc_baf:
+            baf = random_baf(refs[i], alts[i])
+        else:
+            baf = bafs[i]
+        # baf, _, _ = baf_recalc(baf, alts[i], refs[i], Nthres) ##### Test BAF recalc method
         cov = np.sum(alpha + beta) / n_snps
 
         result[sample] = n_snps, cov, baf, alpha, beta
-    # TODO test
-    return result, mean_phase
+
+    return result
 
 ##### Test recompute-BAF method
 # compute mean absolute error
@@ -600,7 +608,7 @@ def baf_recalc(baf: float, alts: np.ndarray, refs: np.ndarray, threshold=0.1):
         return baf, False, mae
     else:
         rand_baf = random_baf(refs, alts)
-        mbaf = max(min(rand_baf, 1 - rand_baf), baf)
+        mbaf = max(rand_baf, baf)
         return mbaf, True, mae
 #####
 
@@ -873,7 +881,7 @@ def collapse_blocks(df, blocks, singletons, orphans, ch):
     ).sort_values(by=["CHR", "START", "SAMPLE"])
 
 
-def merge_data(bins, dfs, bafs, mu_phases, sample_names, chromosome):
+def merge_data(bins, dfs, bafs, sample_names, chromosome):
     """
     Merge bins data (starts, ends, total counts, RDRs) with SNP data and BAF data for each bin.
     Parameters:
@@ -912,7 +920,6 @@ def merge_data(bins, dfs, bafs, mu_phases, sample_names, chromosome):
 
             if dfs is not None:
                 nsnps, cov, baf, alpha, beta = bafs[i][sample]
-                mu_phase = mu_phases[i]
                 assert snpcounts_from_df[sample] == alpha + beta, (i, sample)
             else:
                 nsnps, cov, baf, alpha, beta = 0, 0, 0, 0, 0
@@ -930,8 +937,7 @@ def merge_data(bins, dfs, bafs, mu_phases, sample_names, chromosome):
                     beta,
                     baf,
                     total,
-                    normal_reads,
-                    mu_phase
+                    normal_reads
                 ]
             )
 
@@ -949,8 +955,7 @@ def merge_data(bins, dfs, bafs, mu_phases, sample_names, chromosome):
             "BETA",
             "BAF",
             "TOTAL_READS",
-            "NORMAL_READS",
-            "MU_PHASE"
+            "NORMAL_READS"
         ],
     )
 
@@ -1313,9 +1318,8 @@ def run_chromosome(
                     for i in range(len(starts_p))
                 ] # TODO
                 bafs_p = [tp[0] for tp in tp_p]
-                mu_phase_p = [tp[1] for tp in tp_p]
 
-            bb_p = merge_data(bins_p, dfs_p, bafs_p, mu_phase_p, all_names, chromosome)
+            bb_p = merge_data(bins_p, dfs_p, bafs_p, all_names, chromosome)
 
             bafs_p = bb_p.pivot(
                 index=["#CHR", "START"], columns="SAMPLE", values="BAF"
@@ -1401,9 +1405,8 @@ def run_chromosome(
                     for i in range(len(starts_q))
                 ] #TODO
                 bafs_q = [tp[0] for tp in tp_q]
-                mu_phase_q = [tp[1] for tp in tp_q]
 
-            bb_q = merge_data(bins_q, dfs_q, bafs_q, mu_phase_q, all_names, chromosome)
+            bb_q = merge_data(bins_q, dfs_q, bafs_q, all_names, chromosome)
 
             bafs_q = bb_q.pivot(
                 index=["#CHR", "START"], columns="SAMPLE", values="BAF"
