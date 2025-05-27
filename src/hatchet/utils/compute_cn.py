@@ -305,7 +305,7 @@ def filtering(
                 msg=f"{cluster}\tRD-variance={var_rd_matrix[i, :]}\tBAF-variance={var_baf_matrix[i, :]}\n",
                 level="INFO",
             )
-            sp.log(msg=f"\tZ(RD)={dv_rd / stdv_rd}\tZ(RD)={dv_baf / stdv_baf}\n", level="INFO")
+            sp.log(msg=f"\tZ(RD)={dv_rd / stdv_rd}\tZ(BAF)={dv_baf / stdv_baf}\n", level="INFO")
         if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
             sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
             bad_clusters.append(cluster)
