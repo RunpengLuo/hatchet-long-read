@@ -1306,7 +1306,7 @@ def run_chromosome(
                     for i in range(len(starts_p))
                 ]
                 # TODO test
-                tp_p = [
+                bafs_p = [
                     compute_baf_wrapper(
                         dfs_p[i],
                         normal_p[i],
@@ -1317,7 +1317,6 @@ def run_chromosome(
                     )
                     for i in range(len(starts_p))
                 ] # TODO
-                bafs_p = [tp[0] for tp in tp_p]
 
             bb_p = merge_data(bins_p, dfs_p, bafs_p, all_names, chromosome)
 
@@ -1393,7 +1392,7 @@ def run_chromosome(
                 ]
 
                 # Infer BAF
-                tp_q = [
+                bafs_q = [
                     compute_baf_wrapper(
                         dfs_q[i],
                         normal_q[i],
@@ -1404,7 +1403,6 @@ def run_chromosome(
                     )
                     for i in range(len(starts_q))
                 ] #TODO
-                bafs_q = [tp[0] for tp in tp_q]
 
             bb_q = merge_data(bins_q, dfs_q, bafs_q, all_names, chromosome)
 
