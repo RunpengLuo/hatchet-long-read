@@ -550,10 +550,9 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
     bafs, phases, ll = max(runs.values(), key=lambda x: x[-1])
 
     # TODO test
-    # we can also weighted by DP if needed
-    frac_phases = phases.copy()
-    phase_normal = np.abs(frac_phases - 0.5).mean()
-    recalc_baf = phase_normal <= 0.01
+    normal_bias = get_rej_threshold(normal_snps)
+    tumor_bias = np.abs(phases - 0.5).mean()
+    recalc_baf = tumor_bias <= normal_bias
 
     # Need hard phasing to assign ref/alt reads to alpha/beta
     phases = np.round(phases).astype(np.int8)
@@ -582,10 +581,18 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
 
         result[sample] = n_snps, cov, baf, alpha, beta
 
-    return result
+    return result, normal_bias, tumor_bias
 
 ##### Test recompute-BAF method
-# compute mean absolute error
+def get_rej_threshold(normal_snps: pd.DataFrame):
+    nsnps = len(normal_snps)
+    alts = normal_snps.ALT.to_numpy().reshape((1, nsnps))
+    refs = normal_snps.REF.to_numpy().reshape((1, nsnps))
+    runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.05, 0.5, 0.05)}
+    _, phases, _ = max(runs.values(), key=lambda x: x[-1])
+    rej_threshold = np.abs(phases - 0.5).mean()
+    return rej_threshold
+
 def compute_MAE(alts: np.ndarray, refs: np.ndarray, exp_mean=0.5):
     data = alts/np.clip(alts + refs, a_min=1, a_max=None)
     data = data[data != 0]  
@@ -1284,7 +1291,8 @@ def run_chromosome(
             if xy:
                 dfs_p = None
                 bafs_p = None
-                mu_phase_p = None
+                nbias_p = None
+                tbias_p = None
             else:
                 dfs_p = [
                     snpsv[(snpsv.POS >= starts_p[i]) & (snpsv.POS <= ends_p[i])]
@@ -1306,7 +1314,7 @@ def run_chromosome(
                     for i in range(len(starts_p))
                 ]
                 # TODO test
-                bafs_p = [
+                res_p = [
                     compute_baf_wrapper(
                         dfs_p[i],
                         normal_p[i],
@@ -1317,6 +1325,9 @@ def run_chromosome(
                     )
                     for i in range(len(starts_p))
                 ] # TODO
+                bafs_p = [res[0] for res in res_p]
+                nbias_p = [res[1] for res in res_p]
+                tbias_p = [res[2] for res in res_p]
 
             bb_p = merge_data(bins_p, dfs_p, bafs_p, all_names, chromosome)
 
@@ -1337,6 +1348,9 @@ def run_chromosome(
                 # flatten these results out and put them back into the BAF array
                 bb_p["ORIGINAL_BAF"] = bb_p.BAF
                 bb_p["BAF"] = corrected_bafs_p.flatten()
+            if not xy:
+                bb_p["NORMAL_BIAS"] = np.array(nbias_p)
+                bb_p["TUMOR_BIAS"] = np.array(tbias_p)
         else:
             sp.log(msg=f"No SNPs found in p arm for {chromosome}\n", level="INFO")
             bb_p = None
@@ -1367,7 +1381,8 @@ def run_chromosome(
             if xy:
                 dfs_q = None
                 bafs_q = None
-                mu_phase_q = None
+                nbias_q = None
+                tbias_q = None
             else:
                 # Partition SNPs for BAF inference
                 dfs_q = [
@@ -1392,7 +1407,7 @@ def run_chromosome(
                 ]
 
                 # Infer BAF
-                bafs_q = [
+                res_q = [
                     compute_baf_wrapper(
                         dfs_q[i],
                         normal_q[i],
@@ -1403,6 +1418,9 @@ def run_chromosome(
                     )
                     for i in range(len(starts_q))
                 ] #TODO
+                bafs_q = [res[0] for res in res_q]
+                nbias_q = [res[1] for res in res_q]
+                tbias_q = [res[2] for res in res_q]
 
             bb_q = merge_data(bins_q, dfs_q, bafs_q, all_names, chromosome)
 
@@ -1417,6 +1435,9 @@ def run_chromosome(
                 # flatten these results out and put them back into the BAF array
                 bb_q["ORIGINAL_BAF"] = bb_q.BAF
                 bb_q["BAF"] = corrected_bafs_q.flatten()
+            if not xy:
+                bb_q["NORMAL_BIAS"] = np.array(nbias_q)
+                bb_q["TUMOR_BIAS"] = np.array(tbias_q)
         else:
             sp.log(msg=f"No SNPs found in q arm for {chromosome}\n", level="INFO")
             bb_q = None
