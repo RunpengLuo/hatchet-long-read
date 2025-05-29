@@ -584,13 +584,14 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
     return result, normal_bias, tumor_bias
 
 ##### Test recompute-BAF method
-def get_rej_threshold(normal_snps: pd.DataFrame):
+def get_rej_threshold(normal_snps: pd.DataFrame, upper_bound=0.01):
     nsnps = len(normal_snps)
     alts = normal_snps.ALT.to_numpy().reshape((1, nsnps))
     refs = normal_snps.REF.to_numpy().reshape((1, nsnps))
     runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.05, 0.5, 0.05)}
     _, phases, _ = max(runs.values(), key=lambda x: x[-1])
-    rej_threshold = np.abs(phases - 0.5).mean()
+    # avoid the germline CNV case
+    rej_threshold = min(np.abs(phases - 0.5).mean(), upper_bound)
     return rej_threshold
 
 def compute_MAE(alts: np.ndarray, refs: np.ndarray, exp_mean=0.5):
@@ -1351,6 +1352,9 @@ def run_chromosome(
             if not xy:
                 bb_p["NORMAL_BIAS"] = np.array(nbias_p)
                 bb_p["TUMOR_BIAS"] = np.array(tbias_p)
+            else:
+                bb_p["NORMAL_BIAS"] = 0.0
+                bb_p["TUMOR_BIAS"] = 0.0
         else:
             sp.log(msg=f"No SNPs found in p arm for {chromosome}\n", level="INFO")
             bb_p = None
@@ -1438,6 +1442,9 @@ def run_chromosome(
             if not xy:
                 bb_q["NORMAL_BIAS"] = np.array(nbias_q)
                 bb_q["TUMOR_BIAS"] = np.array(tbias_q)
+            else:
+                bb_q["NORMAL_BIAS"] = 0.0
+                bb_q["TUMOR_BIAS"] = 0.0
         else:
             sp.log(msg=f"No SNPs found in q arm for {chromosome}\n", level="INFO")
             bb_q = None
