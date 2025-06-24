@@ -549,16 +549,18 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
     runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.05, 0.5, 0.05)}
     bafs, phases, ll = max(runs.values(), key=lambda x: x[-1])
 
-    # TODO test
-    normal_bias = get_rej_threshold(normal_snps)
-    tumor_bias = np.abs(phases - 0.5).mean()
-    recalc_baf = tumor_bias <= normal_bias
-
     # Need hard phasing to assign ref/alt reads to alpha/beta
     phases = np.round(phases).astype(np.int8)
 
-    # allelic balanced threshold inferred from normal BAF bin
-    # Nthres = compute_MAE(normal_snps.ALT.to_numpy(), normal_snps.REF.to_numpy())
+    # TODO correct allelic balanced EM BAF for potential blocks only
+    normal_bias = 0
+    tumor_bias = 0
+    # recalc_baf = tumor_bias <= normal_bias
+    mean_baf = bafs.mean()
+    if mean_baf >= 0.45:
+        thres = max(0.01, est_error_multisample(alts, refs, significance=0.05, bootstrap=100))
+        if abs(0.5 - mean_baf) >= thres:
+            bafs, phases = random_baf(refs, alts)
 
     # Compose results table
     for i in range(len(samples)):
@@ -572,10 +574,6 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
         alpha = np.sum(np.choose(phases, [refs[i], alts[i]]))
         beta = np.sum(np.choose(phases, [alts[i], refs[i]]))
         baf = bafs[i]
-        if recalc_baf:
-            baf = random_baf(refs[i], alts[i])
-        else:
-            baf = bafs[i]
         # baf, _, _ = baf_recalc(baf, alts[i], refs[i], Nthres) ##### Test BAF recalc method
         cov = np.sum(alpha + beta) / n_snps
 
@@ -583,41 +581,66 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
 
     return result, normal_bias, tumor_bias
 
-##### Test recompute-BAF method
-def get_rej_threshold(normal_snps: pd.DataFrame, upper_bound=0.01):
-    nsnps = len(normal_snps)
-    alts = normal_snps.ALT.to_numpy().reshape((1, nsnps))
-    refs = normal_snps.REF.to_numpy().reshape((1, nsnps))
-    runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.05, 0.5, 0.05)}
-    _, phases, _ = max(runs.values(), key=lambda x: x[-1])
-    # avoid the germline CNV case
-    rej_threshold = min(np.abs(phases - 0.5).mean(), upper_bound)
-    return rej_threshold
-
-def compute_MAE(alts: np.ndarray, refs: np.ndarray, exp_mean=0.5):
-    data = alts/np.clip(alts + refs, a_min=1, a_max=None)
-    data = data[data != 0]  
-    return np.mean(np.abs(data - exp_mean))
-
 def random_baf(refs: np.ndarray, alts: np.ndarray):
-    phases = bernoulli.rvs(0.5, size=len(refs)) # random phasing
-    alpha = np.sum(np.choose(phases, [refs, alts]))
-    beta = np.sum(np.choose(phases, [alts, refs]))
-    return min(alpha, beta) / (alpha + beta)
+    totals = refs + alts
+    totals_sum = np.sum(totals, axis=1)
+    n_samples, n_snps = totals.shape
+    phases = np.random.binomial(n=1, p=0.5, size=n_snps).astype(np.int8) # random phasing
+    betas = (refs @ phases[:, np.newaxis] + alts @ (1 - phases)[:, np.newaxis]).reshape(-1)
+    bafs = betas / totals_sum
+    if np.mean(bafs) > 0.5:
+        phases = 1 - phases
+        betas = (refs @ phases[:, np.newaxis] + alts @ (1 - phases)[:, np.newaxis]).reshape(-1)
+        bafs = betas / totals_sum
+    return bafs, phases
+
+def est_error_multisample(alts: np.ndarray, refs: np.ndarray, significance=0.05, bootstrap=100):
+    totals = alts + refs
+    n_samples, n_snps = alts.shape
+    altss = np.random.binomial(n=totals, p=0.5, size=(bootstrap, n_samples, n_snps))
+    refss = totals - altss
+    boots = np.zeros(bootstrap, dtype=np.float128)
+    for i in range(bootstrap):
+        runs = {b: multisample_em(altss[i], refss[i], b) for b in np.arange(0.40, 0.51, 0.01)}
+        # mean BAF across samples
+        boots[i] = max(runs.values(), key=lambda x: x[-1])[0].mean()
+    
+    # mirror to obtain mhBAF
+    boots = np.minimum(boots, 1 - boots)
+    # compute sign left CI as threshold
+    boots = np.sort(boots)
+    boots = boots[int(round(bootstrap * significance)):]
+    return 0.5 - boots[0]
+
+##### Test recompute-BAF method
+# def get_rej_threshold(normal_snps: pd.DataFrame, upper_bound=0.01):
+#     nsnps = len(normal_snps)
+#     alts = normal_snps.ALT.to_numpy().reshape((1, nsnps))
+#     refs = normal_snps.REF.to_numpy().reshape((1, nsnps))
+#     runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.05, 0.5, 0.05)}
+#     _, phases, _ = max(runs.values(), key=lambda x: x[-1])
+#     # avoid the germline CNV case
+#     rej_threshold = min(np.abs(phases - 0.5).mean(), upper_bound)
+#     return rej_threshold
+
+# def compute_MAE(alts: np.ndarray, refs: np.ndarray, exp_mean=0.5):
+#     data = alts/np.clip(alts + refs, a_min=1, a_max=None)
+#     data = data[data != 0]  
+#     return np.mean(np.abs(data - exp_mean))
 
 # re-compute BAF by estimating if it's allelic balanced
-def baf_recalc(baf: float, alts: np.ndarray, refs: np.ndarray, threshold=0.1):
-    if len(refs) < 2:
-        return baf, False, 0.0
+# def baf_recalc(baf: float, alts: np.ndarray, refs: np.ndarray, threshold=0.1):
+#     if len(refs) < 2:
+#         return baf, False, 0.0
     
-    mae = compute_MAE(alts, refs)
-    if mae > threshold:
-        # allelic imbalanced, farther to 0.5 than normal sample.
-        return baf, False, mae
-    else:
-        rand_baf = random_baf(refs, alts)
-        mbaf = max(rand_baf, baf)
-        return mbaf, True, mae
+#     mae = compute_MAE(alts, refs)
+#     if mae > threshold:
+#         # allelic imbalanced, farther to 0.5 than normal sample.
+#         return baf, False, mae
+#     else:
+#         rand_baf = random_baf(refs, alts)
+#         mbaf = max(rand_baf, baf)
+#         return mbaf, True, mae
 #####
 
 def multisample_em(alts, refs, start, tol=10e-6):
