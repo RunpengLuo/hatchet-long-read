@@ -556,11 +556,11 @@ def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block,
     normal_bias = 0
     tumor_bias = 0
     # recalc_baf = tumor_bias <= normal_bias
-    mean_baf = bafs.mean()
-    if mean_baf >= 0.45:
-        thres = max(0.01, est_error_multisample(alts, refs, significance=0.05, bootstrap=100))
-        if abs(0.5 - mean_baf) >= thres:
-            bafs, phases = random_baf(refs, alts)
+    # mean_baf = bafs.mean()
+    # if mean_baf >= 0.45:
+    #     thres = max(0.01, est_error_multisample(alts, refs, significance=0.05, bootstrap=100))
+    #     if abs(0.5 - mean_baf) >= thres:
+    #         bafs, phases = random_baf(refs, alts)
 
     # Compose results table
     for i in range(len(samples)):
