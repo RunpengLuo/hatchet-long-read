@@ -460,11 +460,11 @@ def apply_EM(totals_in, alts_in):
 
 
 def compute_baf_wrapper(
-    bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha, multisample
+    bin_snps, blocksize, max_snps_per_block, test_alpha, multisample
 ):
     if multisample:
         return compute_baf_task_multi(
-            bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha
+            bin_snps, blocksize, max_snps_per_block, test_alpha
         )
     else:
         return compute_baf_task_single(
