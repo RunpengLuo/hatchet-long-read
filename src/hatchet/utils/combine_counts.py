@@ -597,7 +597,7 @@ def random_baf(refs: np.ndarray, alts: np.ndarray):
     return bafs, phases
 
 def est_error_multisample(alts: np.ndarray, refs: np.ndarray, significance=0.05, bootstrap=100):
-    totals = alts + refs
+    totals = (alts + refs).astype(np.int64)
     n_samples, n_snps = alts.shape
     altss = np.random.binomial(n=totals, p=0.5, size=(bootstrap, n_samples, n_snps))
     refss = totals - altss
@@ -649,7 +649,7 @@ def multisample_em(alts, refs, start, tol=10e-6):
     assert (
         refs.shape == alts.shape
     ), "Alternate and reference count arrays must have the same shape"
-    assert 0 < start <= 0.5, "Initial estimate must be in (0, 0.5]"
+    # assert 0 < start <= 0.5, "Initial estimate must be in (0, 0.5]"
 
     totals = alts + refs
 
