@@ -147,18 +147,23 @@ def main(args=None):
         sp.log("# NOTE: adding NORMAL_READS column to bb file", level="INFO")
         big_bb["NORMAL_READS"] = (big_bb.CORRECTED_READS / big_bb.RD).astype(np.uint32)
 
-    sp.log(
-        msg="# Performing GC bias correction on read depth signal\n",
-        level="STEP",
-    )
-
     autosomes = set(
         [ch for ch in big_bb["#CHR"] if not (ch.endswith("X") or ch.endswith("Y"))]
     )
     autosomal_bb = big_bb[big_bb["#CHR"].isin(autosomes)].copy()
 
-    # perform GC bias correction
-    autosomal_bb = rd_gccorrect(autosomal_bb, referencefasta)
+    if args["run_mode"] == "TGS":
+        sp.log(
+            msg="GC bias correction skipped for TGS mode\n",
+            level="STEP",
+        )
+    else:
+        sp.log(
+            msg="# Performing GC bias correction on read depth signal\n",
+            level="STEP",
+        )
+        # perform GC bias correction
+        autosomal_bb = rd_gccorrect(autosomal_bb, referencefasta)
 
     # Convert intervals from closed to half-open to match .1bed/HATCHet standard format
     autosomal_bb.END = autosomal_bb.END + 1

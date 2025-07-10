@@ -1003,6 +1003,7 @@ def parse_combine_counts_args(args=None):
         "XX": args.XX,
         "no_normal": no_normal,
         "gc_correct": args.gc_correct,
+        "run_mode": config.run.run_mode
     }
 
 
