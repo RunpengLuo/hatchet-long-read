@@ -190,13 +190,13 @@ def read_snps(baf_file, ch, all_names, phasefile=None):
     # Read in HATCHet BAF table
     all_snps = pd.read_table(
         baf_file,
-        names=["CHR", "POS", "SAMPLE", "ALT", "REF"],
+        names=["CHR", "POS", "SAMPLE", "REF", "ALT"],
         dtype={
             "CHR": object,
             "POS": np.uint32,
             "SAMPLE": object,
-            "ALT": np.uint32,
             "REF": np.uint32,
+            "ALT": np.uint32,
         },
     )
 
@@ -460,11 +460,11 @@ def apply_EM(totals_in, alts_in):
 
 
 def compute_baf_wrapper(
-    bin_snps, blocksize, max_snps_per_block, test_alpha, multisample
+    bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha, multisample
 ):
     if multisample:
         return compute_baf_task_multi(
-            bin_snps, blocksize, max_snps_per_block, test_alpha
+            bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha
         )
     else:
         return compute_baf_task_single(
@@ -513,7 +513,7 @@ def compute_baf_task_single(bin_snps, blocksize, max_snps_per_block, test_alpha)
     return result
 
 
-def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
+def compute_baf_task_multi(bin_snps, normal_snps, blocksize, max_snps_per_block, test_alpha):
     """
     Estimates the BAF for the bin containing exactly <bin_snps> SNPs.
     <bin_snps> is a dataframe with at least ALT and REF columns containing read counts.
@@ -558,10 +558,20 @@ def compute_baf_task_multi(bin_snps, blocksize, max_snps_per_block, test_alpha):
     phases = np.round(phases).astype(np.int8)
 
     # TODO correct allelic balanced EM BAF for potential blocks only
-    mean_baf = bafs.mean()
-    if mean_baf >= 0.45:
-        thres = max(0.01, est_error_multisample(alts, refs, significance=0.05, bootstrap=100))
-        if abs(0.5 - mean_baf) >= thres:
+    # If normal sample is provided, check if BAF needs to be recomputed
+    if normal_snps is None or len(normal_snps) == 0:
+        # bootstrap method
+        mean_baf = bafs.mean()
+        if mean_baf >= 0.45:
+            thres = max(0.01, est_error_multisample(alts, refs, significance=0.05, bootstrap=100))
+            if abs(0.5 - mean_baf) >= thres:
+                bafs, phases = random_baf(refs, alts)
+    else:
+        # compute threshold via normal EM BAF
+        normal_bias = get_rej_threshold(normal_snps)
+        tumor_bias = np.abs(phases - 0.5).mean()
+        recalc_baf = tumor_bias <= normal_bias
+        if recalc_baf:
             bafs, phases = random_baf(refs, alts)
 
     # Compose results table
@@ -615,15 +625,15 @@ def est_error_multisample(alts: np.ndarray, refs: np.ndarray, significance=0.05,
     return 0.5 - boots[0]
 
 ##### Test recompute-BAF method
-# def get_rej_threshold(normal_snps: pd.DataFrame, upper_bound=0.01):
-#     nsnps = len(normal_snps)
-#     alts = normal_snps.ALT.to_numpy().reshape((1, nsnps))
-#     refs = normal_snps.REF.to_numpy().reshape((1, nsnps))
-#     runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.05, 0.5, 0.05)}
-#     _, phases, _ = max(runs.values(), key=lambda x: x[-1])
-#     # avoid the germline CNV case
-#     rej_threshold = min(np.abs(phases - 0.5).mean(), upper_bound)
-#     return rej_threshold
+def get_rej_threshold(normal_snps: pd.DataFrame, upper_bound=0.01):
+    nsnps = len(normal_snps)
+    alts = normal_snps.ALT.to_numpy().reshape((1, nsnps))
+    refs = normal_snps.REF.to_numpy().reshape((1, nsnps))
+    runs = {b: multisample_em(alts, refs, b) for b in np.arange(0.40, 0.51, 0.01)}
+    _, phases, _ = max(runs.values(), key=lambda x: x[-1])
+    # avoid the germline CNV case
+    rej_threshold = min(np.abs(phases - 0.5).mean(), upper_bound)
+    return rej_threshold
 
 # def compute_MAE(alts: np.ndarray, refs: np.ndarray, exp_mean=0.5):
 #     data = alts/np.clip(alts + refs, a_min=1, a_max=None)
@@ -1272,6 +1282,21 @@ def run_chromosome(
             positions, snp_counts, snpsv = read_snps(
                 baffile, chromosome, all_names, phasefile=phasefile
             )
+            # TODO hack to get normal.1bed for now
+            sp.log(msg=f"FLAG here, running normal-sample guard {chromosome}\n", level="INFO")
+            normal1 = baffile[:str.rindex(baffile, "/")] + "/normal.1bed"
+            normal_df = pd.read_table(
+                normal1,
+                names=["CHR", "POS", "SAMPLE", "REF", "ALT"],
+                dtype={
+                    "CHR": object,
+                    "POS": np.uint32,
+                    "SAMPLE": object,
+                    "REF": np.uint32,
+                    "ALT": np.uint32,
+                },
+            )
+            normal_df_ch = normal_df[normal_df.CHR == chromosome]
 
         sp.log(msg=f"Binning p arm of chromosome {chromosome}\n", level="INFO")
         # FIXME fix the binning issue!! also related to count_reads part
@@ -1317,9 +1342,15 @@ def run_chromosome(
                             >= min_snp_reads
                         ), i
 
+                normal_p = [
+                    normal_df_ch[(normal_df_ch.POS >= starts_p[i]) & (normal_df_ch.POS <= ends_p[i])]
+                    for i in range(len(starts_p))
+                ]
+
                 bafs_p = [
                     compute_baf_wrapper(
                         dfs_p[i],
+                        normal_p[i],
                         blocksize,
                         max_snps_per_block,
                         test_alpha,
@@ -1393,10 +1424,16 @@ def run_chromosome(
                             >= min_snp_reads
                         ), i
 
+                normal_q = [
+                    normal_df_ch[(normal_df_ch.POS >= starts_q[i]) & (normal_df_ch.POS <= ends_q[i])]
+                    for i in range(len(starts_q))
+                ]
+
                 # Infer BAF
                 bafs_q = [
                     compute_baf_wrapper(
                         dfs_q[i],
+                        normal_q[i],
                         blocksize,
                         max_snps_per_block,
                         test_alpha,
