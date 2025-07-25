@@ -375,7 +375,7 @@ def hmm_model_select(
             score = silhouette_score(C, my_best_labels, metric="precomputed")
             beats_the_current_best = score > best_score
         else:  # bic
-            score = model.bic(X)
+            score = my_best_model.bic(X)
             beats_the_current_best = score < best_score
 
         rs[K] = my_best_ll, score, my_best_labels
