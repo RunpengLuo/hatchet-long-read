@@ -255,10 +255,12 @@ def filtering(
     samples: list,
     clusters: list,
     fstd=2.0,
+    min_nbins=10,
     v=1,
 ):
     """
     filter&merge clusters before optimization step
+    0. filter any cluster has #bins<min_nbins
     1. compute per-sample per-cluster variance SCV,
     2. compute per-sample MV and STDV
     3. filter a cluster if it has |SCV - MV| >= 2 * STDV for all samples.
@@ -275,16 +277,23 @@ def filtering(
         for j, sample in enumerate(samples):
             bbc_ = bbc[(bbc["SAMPLE"] == sample) & (bbc["CLUSTER"] == cluster)]
             seg_ = seg[(seg["SAMPLE"] == sample) & (seg["#ID"] == cluster)]
+            seg_baf = seg_["BAF"].iloc[0]
+            seg_rdr = seg_["RD"].iloc[0]
             var_rd_matrix[i, j] = np.linalg.norm(
-                bbc_["RD"] - seg_["RD"], 2
+                bbc_["RD"] - seg_rdr, 2
             ) / len(bbc_)
             var_baf_matrix[i, j] = np.linalg.norm(
-                bbc_["BAF"] - seg["BAF"], 2
+                bbc_["BAF"] - seg_baf, 2
             ) / len(bbc_)
-    mv_rd = np.mean(var_rd_matrix, axis=0)
-    stdv_rd = np.std(var_rd_matrix, axis=0, ddof=1)
-    mv_baf = np.mean(var_baf_matrix, axis=0)
-    stdv_baf = np.std(var_baf_matrix, axis=0, ddof=1)
+
+    cluster_filtered = np.zeros(len(clusters), dtype=bool)
+    for i, cluster in enumerate(clusters):
+        cluster_filtered[i] = seg[seg["#ID"] == cluster]["#BINS"].iloc[0] < min_nbins
+
+    mv_rd = np.mean(var_rd_matrix[~cluster_filtered, :], axis=0)
+    stdv_rd = np.std(var_rd_matrix[~cluster_filtered, :], axis=0, ddof=1)
+    mv_baf = np.mean(var_baf_matrix[~cluster_filtered, :], axis=0)
+    stdv_baf = np.std(var_baf_matrix[~cluster_filtered, :], axis=0, ddof=1)
     if v >= 1:
         for j, sample in enumerate(samples):
             lb_rd = mv_rd[j] - fstd * stdv_rd[j]
@@ -299,15 +308,16 @@ def filtering(
     good_clusters = []
     bad_clusters = []
     for i, cluster in enumerate(clusters):
+        nbins = seg[seg["#ID"] == cluster]["#BINS"].iloc[0]
         dv_rd = np.abs(var_rd_matrix[i, :] - mv_rd)
         dv_baf = np.abs(var_baf_matrix[i, :] - mv_baf)
         if v >= 1:
             sp.log(
-                msg=f"{cluster}\tRD-variance={var_rd_matrix[i, :]}\tBAF-variance={var_baf_matrix[i, :]}\n",
+                msg=f"\t#ID={cluster}\t#bins={nbins}\tRD-variance={var_rd_matrix[i, :]}\tBAF-variance={var_baf_matrix[i, :]}\n",
                 level="INFO",
             )
             sp.log(msg=f"\tZ(RD)={dv_rd / stdv_rd}\tZ(BAF)={dv_baf / stdv_baf}\n", level="INFO")
-        if np.all(dv_rd > (fstd * stdv_rd)) and np.all(dv_baf > (fstd * stdv_baf)):
+        if np.all(dv_rd > (fstd * stdv_rd)) or np.all(dv_baf > (fstd * stdv_baf)) or cluster_filtered[i]:
             sp.log(msg=f"cluster {cluster} is outlier, removed\n", level="INFO")
             bad_clusters.append(cluster)
         else:
