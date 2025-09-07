@@ -274,7 +274,7 @@ def filtering(
     for i, cluster in enumerate(clusters):
         for j, sample in enumerate(samples):
             bbc_ = bbc[(bbc["SAMPLE"] == sample) & (bbc["CLUSTER"] == cluster)]
-            seg_ = seg[(seg["SAMPLE" == sample]) & (seg["#ID"] == cluster)]
+            seg_ = seg[(seg["SAMPLE"] == sample) & (seg["#ID"] == cluster)]
             var_rd_matrix[i, j] = np.linalg.norm(
                 bbc_["RD"] - seg_["RD"], 2
             ) / len(bbc_)
