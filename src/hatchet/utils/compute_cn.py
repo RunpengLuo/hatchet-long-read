@@ -274,11 +274,12 @@ def filtering(
     for i, cluster in enumerate(clusters):
         for j, sample in enumerate(samples):
             bbc_ = bbc[(bbc["SAMPLE"] == sample) & (bbc["CLUSTER"] == cluster)]
+            seg_ = seg[(seg["SAMPLE" == sample]) & (seg["#ID"] == cluster)]
             var_rd_matrix[i, j] = np.linalg.norm(
-                bbc_["RD"] - np.mean(bbc_["RD"]), 2
+                bbc_["RD"] - seg_["RD"], 2
             ) / len(bbc_)
             var_baf_matrix[i, j] = np.linalg.norm(
-                bbc_["BAF"] - np.mean(bbc_["BAF"]), 2
+                bbc_["BAF"] - seg["BAF"], 2
             ) / len(bbc_)
     mv_rd = np.mean(var_rd_matrix, axis=0)
     stdv_rd = np.std(var_rd_matrix, axis=0, ddof=1)
