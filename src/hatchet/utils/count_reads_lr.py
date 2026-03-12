@@ -30,7 +30,7 @@ from hatchet.utils.count_reads import count_chromosome_wrapper, get_chr_end
 import time
 
 def main(args=None):
-    log(msg="count_reads_lr test version\n", level="STEP")
+    log(msg="count_reads_lr beta version\n", level="STEP")
     log(msg="# Parsing and checking input arguments\n", level="STEP")
     args = parse_count_reads_args(args)
     logArgs(args, 80)
@@ -59,7 +59,7 @@ def main(args=None):
     use_chr = args["use_chr"] # bam file use_chr
 
     baffile = args["baf_file"]
-    segfile = args["seg_file"]
+    segfile = args["seg_file"] # optional if refversion is provided
     refversion = args["refversion"]
 
     # TODO think about whether we use custom segfile here
@@ -79,32 +79,41 @@ def main(args=None):
         raise ValueError(error("No chromosomes present in both BAM file and segment file / refversion"))
     chromosomes = sort_chroms(chromosomes)
 
-    #
-    # compute samtools starts.gz TODO can be optimized
-    if any(not os.path.isfile(f) for f in expected_starts_files(outdir, chromosomes, names)):
-        n_tasks_samtools = len(bams) * len(chromosomes)
-        samtools_params = zip(
-            np.repeat(chromosomes, len(bams)),
-            [outdir] * n_tasks_samtools,
-            [samtools] * n_tasks_samtools,
-            bams * len(chromosomes),
-            names * len(chromosomes),
-            [readquality] * n_tasks_samtools,
-        )
-        n_workers_samtools, _ = workload_assignment(processes, n_tasks_samtools)
-        log(msg=f"count_chromosome-num_worker={n_workers_samtools}\tnum_tasks={n_tasks_samtools}\n", level="STEP")
-        try:
-            with Pool(n_workers_samtools) as p:
-                p.map(count_chromosome_wrapper, samtools_params)
-        except Exception as e:
-            log(msg=f"ERROR! count_chromosome raise exception: {e}\n",level="ERROR")
-            p.terminate()
-            raise ValueError()
-        finally:
-            p.join()
-            log(msg="All count_chromosome finished\n", level="STEP")
-    else:
-        log(msg="found all count_chromosome intermediate files, skip\n", level="STEP")
+
+    # compute thresholds/bins per segment, one snp per bin
+    # use mosdepth to compute per-bin read-depth
+    
+
+
+
+
+
+    # #
+    # # compute samtools starts.gz TODO can be optimized
+    # if any(not os.path.isfile(f) for f in expected_starts_files(outdir, chromosomes, names)):
+    #     n_tasks_samtools = len(bams) * len(chromosomes)
+    #     samtools_params = zip(
+    #         np.repeat(chromosomes, len(bams)),
+    #         [outdir] * n_tasks_samtools,
+    #         [samtools] * n_tasks_samtools,
+    #         bams * len(chromosomes),
+    #         names * len(chromosomes),
+    #         [readquality] * n_tasks_samtools,
+    #     )
+    #     n_workers_samtools, _ = workload_assignment(processes, n_tasks_samtools)
+    #     log(msg=f"count_chromosome-num_worker={n_workers_samtools}\tnum_tasks={n_tasks_samtools}\n", level="STEP")
+    #     try:
+    #         with Pool(n_workers_samtools) as p:
+    #             p.map(count_chromosome_wrapper, samtools_params)
+    #     except Exception as e:
+    #         log(msg=f"ERROR! count_chromosome raise exception: {e}\n",level="ERROR")
+    #         p.terminate()
+    #         raise ValueError()
+    #     finally:
+    #         p.join()
+    #         log(msg="All count_chromosome finished\n", level="STEP")
+    # else:
+    #     log(msg="found all count_chromosome intermediate files, skip\n", level="STEP")
 
     #
     # compute mosdepth with --by BED option

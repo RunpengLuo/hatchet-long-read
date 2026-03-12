@@ -782,7 +782,7 @@ def parse_combine_counts_args(args=None):
     )
     parser.add_argument(
         "-m",
-        "--max_spb",
+        "-",
         required=False,
         default=config.combine_counts.max_spb,
         type=int,

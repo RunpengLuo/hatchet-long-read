@@ -458,7 +458,7 @@ def profiles(tumor, clones, props, args, out):
     addchrplt(pos)
     plt.savefig(os.path.join(args["rundir"], out), bbox_inches="tight")
 
-
+# FIXME https://github.com/raphael-group/hatchet/issues/238
 def allelicprofiles(tumor, clones, props, args, out):
     proj = join(tumor, clones, args["profileres"])
 

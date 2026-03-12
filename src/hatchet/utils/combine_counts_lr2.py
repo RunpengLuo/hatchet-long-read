@@ -168,34 +168,7 @@ def main(args):
                     bin_end = bin_thres[-1][1]
 
                     # compute mhBAF
-                    bin_bafs_h1 = np.zeros(n_tumors, dtype=np.float64)
-                    bin_bafs_h2 = np.zeros(n_tumors, dtype=np.float64)
-                    bin_cov = np.zeros(n_tumors, dtype=np.uint32)
-                    bin_alpha = np.zeros(n_tumors, dtype=np.uint32)
-                    bin_beta = np.zeros(n_tumors, dtype=np.uint32)
-                    for s in range(n_tumors):
-                        sample_name = all_names[s if no_normal else s + 1]
-                        # add one to convert back to 1-based indexing for SNP position
-                        bin_snps = snp_sv[(snp_sv.SAMPLE == sample_name) & (snp_sv.POS >= bin_snp_pos[0] + 1) & (snp_sv.POS <= bin_snp_pos[-1] + 1)]
-                        assert len(bin_snps) == num_snps, f"unmatched, {len(bin_snps)} vs {num_snps}; {bin_snp_pos[0]}-{bin_snp_pos[-1]}"
-                        phases = bin_snps.FLIP.astype(np.uint8).to_numpy()
-                        alpha = np.sum(np.choose(phases, [bin_snps.REF, bin_snps.ALT]))
-                        beta = np.sum(np.choose(phases, [bin_snps.ALT, bin_snps.REF]))
-                        bin_alpha[s] = alpha
-                        bin_beta[s] = beta
-                        bin_bafs_h1[s] = beta / (alpha + beta)
-                        bin_bafs_h2[s] = alpha / (alpha + beta)
-                        bin_cov[s] = np.ceil((alpha + beta) / num_snps)
-
-                    if np.mean(bin_bafs_h1) < np.mean(bin_bafs_h2):
-                        bin_bafs = bin_bafs_h1
-                    else:
-                        bin_bafs = bin_bafs_h2
-                        bin_tmp = bin_alpha
-                        bin_alpha = bin_beta
-                        bin_beta = bin_tmp
-                    
-                    bin_bafs = np.clip(bin_bafs, a_min=0.0, a_max=1.0)
+                    bin_bafs, bin_cov, bin_alpha, bin_beta = compute_baf_ref_only(n_tumors, num_snps, snp_sv, bin_snp_pos)
 
                     # compute normal, tumor reads
                     total_reads = np.sum(bin_totals[:, even_index], axis=0)
@@ -260,6 +233,38 @@ def main(args):
     big_bb.to_csv(outfile, index=False, sep="\t")
     log(msg=f"combine-counts-lr completed, processed time (exclude sp): {time.process_time()-ts}sec\n", level="STEP")
     return
+
+def compute_baf_ref_only(n_tumors: int, num_snps: int, snp_sv: pd.DataFrame, bin_snp_pos: np.ndarray):
+    samples = sorted(snp_sv.SAMPLE.unique())
+
+    bin_bafs_h1 = np.zeros(n_tumors, dtype=np.float64)
+    bin_bafs_h2 = np.zeros(n_tumors, dtype=np.float64)
+    bin_cov = np.zeros(n_tumors, dtype=np.uint32)
+    bin_alpha = np.zeros(n_tumors, dtype=np.uint32)
+    bin_beta = np.zeros(n_tumors, dtype=np.uint32)
+    for s, sample_name in enumerate(samples):
+        # add one to convert back to 1-based indexing for SNP position
+        bin_snps = snp_sv[(snp_sv.SAMPLE == sample_name) & (snp_sv.POS >= bin_snp_pos[0] + 1) & (snp_sv.POS <= bin_snp_pos[-1] + 1)]
+        assert len(bin_snps) == num_snps, f"unmatched, {len(bin_snps)} vs {num_snps}; {bin_snp_pos[0]}-{bin_snp_pos[-1]}"
+        phases = bin_snps.FLIP.astype(np.uint8).to_numpy()
+        alpha = np.sum(np.choose(phases, [bin_snps.REF, bin_snps.ALT]))
+        beta = np.sum(np.choose(phases, [bin_snps.ALT, bin_snps.REF]))
+        bin_alpha[s] = alpha
+        bin_beta[s] = beta
+        bin_bafs_h1[s] = beta / (alpha + beta)
+        bin_bafs_h2[s] = alpha / (alpha + beta)
+        bin_cov[s] = np.ceil((alpha + beta) / num_snps)
+
+    if np.mean(bin_bafs_h1) < np.mean(bin_bafs_h2):
+        bin_bafs = bin_bafs_h1
+    else:
+        bin_bafs = bin_bafs_h2
+        bin_tmp = bin_alpha
+        bin_alpha = bin_beta
+        bin_beta = bin_tmp
+    
+    bin_bafs = np.clip(bin_bafs, a_min=0.0, a_max=1.0)
+    return bin_bafs, bin_cov, bin_alpha, bin_beta
 
 if __name__ == "__main__":
     main()

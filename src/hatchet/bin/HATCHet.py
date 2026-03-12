@@ -886,6 +886,11 @@ def readBBC(filename):
 
 
 def readSEG(filename):
+    """
+    Return:
+        - samples: list of tumor sample names
+        - seg: dict
+    """
     samples = set()
     seg = {}
     with open(filename, "r") as f:
@@ -920,6 +925,8 @@ def readSEG(filename):
 
 def computeSizes(seg, bbc, samples):
     sample = list(samples)[0]
+
+    # genome length per cluster
     size = {
         idx: sum(
             float(b[1] - b[0])
@@ -929,6 +936,8 @@ def computeSizes(seg, bbc, samples):
         )
         for idx in seg
     }
+
+    # weighted average BAF, by cluster-size per cluster, per sample
     for idx in seg:
         for p in samples:
             seg[idx][p]["avgbaf"] = (
@@ -942,7 +951,7 @@ def computeSizes(seg, bbc, samples):
             )
     return size
 
-
+# FIXME bug, after merge average baf is not updated.
 def filtering(bbc, seg, size, ts, tc, mB, mR, samples, v):
     sample = list(samples)[0]
     totsize = float(sum(seg[1] - seg[0] for c in bbc for seg in bbc[c]))
@@ -1037,6 +1046,11 @@ def filtering(bbc, seg, size, ts, tc, mB, mR, samples, v):
 
 
 def findNeutralCluster(seg, size, td, samples, v):
+    """
+    1. find clusters that have BAF closed to 0.5 (all tumor samples) within threshold.
+    2. select the cluster with max number of segments.
+    return the cluster ID.
+    """
     selected = set(
         idx
         for idx in seg
@@ -1110,26 +1124,33 @@ def makeBaseCMD(args, e):
 
 
 def findClonalClusters(fseg, neutral, size, tB, tR, samples, v):
-    topbaf = {p: float(min(fseg[idx][p]["avgbaf"] for idx in fseg)) for p in samples}
-    heigh = {
-        p: (abs(fseg[neutral][p]["avgbaf"] - topbaf[p]) / 4.0) > tB for p in samples
-    }
+    """
+    run by tetraploid only
+    tB: tolerance BAF 0.04
+    tR: tolerance RDR 0.08
+    TODO why use avgbaf in first part and use cluster-bin inferred baf in second part?
+    """
+    # min cluster BAF in this sample.
+    minBAF = {p: float(min(fseg[idx][p]["avgbaf"] for idx in fseg)) for p in samples}
 
     location = {}
     level = {}
+    clusters = []
     for idx in fseg:
-        locp = []
+        # up to 4 closest level per sample.
+        baf_level = {}
+        # closest level, top/bot/both, per sample
         levp = {}
 
         for p in samples:
-            t = topbaf[p]
+            t = minBAF[p]
             n = fseg[neutral][p]["avgbaf"]
             x = fseg[idx][p]["avgbaf"]
             d = {
-                "top": abs(t - x),
+                "top": abs(t - x), # dist to min cluster BAF
                 "mid": abs(((t + n) / 2.0) - x),
                 "midbot": abs(((t + 3 * n) / 4.0) - x),
-                "bot": abs(n - x),
+                "bot": abs(n - x), # dist to neutral cluster BAF
             }
 
             if d["top"] < d["bot"] and abs(d["top"] - d["bot"]) > tB:
@@ -1139,33 +1160,30 @@ def findClonalClusters(fseg, neutral, size, tB, tR, samples, v):
             else:
                 levp[p] = ["top", "bot"]
 
-            c = argmin(d)
-            locp.append(c)
-            if c != "top" and d["top"] <= tB:
-                locp.append("top")
-            if c != "mid" and d["mid"] <= tB:
-                locp.append("mid")
-            if c != "midbot" and d["midbot"] <= tB:
-                locp.append("midbot")
-            if c != "bot" and d["bot"] <= tB:
-                locp.append("bot")
+            c = argmin(d) # closest level.
+            baf_level[p] = [c]
+            for level, dist in d.items():
+                if c != level and dist <= tB:
+                    baf_level[p].append(level)
 
-        count = Counter([levv for p in samples for levv in levp[p]])
-        count = sorted(count.keys(), key=(lambda x: count[x]), reverse=True)
+        count = Counter([levv for p in samples for levv in levp[p]]) # unroll and reduce
+        count = sorted(count.keys(), key=(lambda x: count[x]), reverse=True) # {top: #1, bot: #2}
+
+        baf_level = Counter([levb for p in samples for levb in baf_level[p]])
+        max_levb = argmax(baf_level) # most frequent occured boundary among all samples
 
         for lev in count:
-            if False not in set(lev in levp[p] for p in samples):
+            # all samples are closed to same boundary `lev`
+            if all(lev in levp[p] for p in samples):
                 level[idx] = lev
-                locp = Counter(locp)
-                loc = argmax(locp)
-                location[idx] = loc
+                location[idx] = max_levb
+                if idx != neutral:
+                    clusters.append(idx)
                 break
+    
+    # potential clonal cluster IDs, selected from BAF levels
+    clusters = sorted(clusters, key=lambda i: size[i], reverse=True)
 
-    clusters = sorted(
-        [idx for idx in fseg if idx != neutral and idx in location],
-        key=(lambda i: size[i]),
-        reverse=True,
-    )
     allclonal = [
         (2, 0),
         (2, 1),
@@ -1183,21 +1201,24 @@ def findClonalClusters(fseg, neutral, size, tB, tR, samples, v):
     best_scale = ()
     best_value = 0
 
+    # Really wired term
+    heigh = lambda p: abs(minBAF[p] - fseg[neutral][p]["avgbaf"]) > 4.0 * tB
+
     for cluster in clusters:
+        eqbaf = lambda p: abs(fseg[cluster][p]["baf"] - fseg[neutral][p]["baf"]) <= tB
+        eqrdr = lambda p: abs(fseg[cluster][p]["rdr"] - fseg[neutral][p]["rdr"]) <= tR
+
+        if any(eqbaf(p) and heigh(p) for p in samples):
+            continue
+        if any(eqbaf(p) and eqrdr(p) and heigh(p) for p in samples):
+            continue
+
         rightpos = sum(
             (fseg[cluster][p]["rdr"] - fseg[neutral][p]["rdr"]) > tR for p in samples
         )
         leftpos = sum(
             (fseg[cluster][p]["rdr"] - fseg[neutral][p]["rdr"]) < -tR for p in samples
         )
-
-        eqbaf = lambda p: abs(fseg[cluster][p]["baf"] - fseg[neutral][p]["baf"]) <= tB
-        eqrdr = lambda p: abs(fseg[cluster][p]["rdr"] - fseg[neutral][p]["rdr"]) <= tR
-
-        if True in set(eqbaf(p) and heigh[p] for p in samples):
-            continue
-        if True in set(eqbaf(p) and eqrdr(p) and heigh[p] for p in samples):
-            continue
 
         if rightpos == len(samples):
             if location[cluster] == "bot" or location[cluster] == "midbot":
@@ -1256,13 +1277,13 @@ def findClonalClusters(fseg, neutral, size, tB, tR, samples, v):
                 # Avoid division by 0 in this case by skipping (shouldn't happen often because RDR=0 is very strange)
                 continue
             purity = {p: calcPurity(fseg[neutral][p]['rdr'], sum(opt), fseg[cluster][p]['rdr']) for p in samples}
-            if False in set(0.0 <= purity[p] <= 1.0 for p in samples):
+            if not all(0.0 <= purity[p] <= 1.0 for p in samples):
                 continue
             scaling = {
                 p: calcScalingFactor(purity[p], fseg[neutral][p]["rdr"])
                 for p in samples
             }
-            if False in set(scaling[p] >= 0.0 for p in samples):
+            if not all(scaling[p] >= 0.0 for p in samples):
                 continue
             curr_pattern = {}
             curr_pattern[neutral] = (2, 2)
@@ -1358,7 +1379,7 @@ def parseClonalClusters(clonal, fseg, size, samples, v):
         p: calcPurity(fseg[neutral][p]["rdr"], cn, fseg[second][p]["rdr"])
         for p in samples
     }
-    if False in set(0.0 <= purity[p] <= 1.0 for p in samples):
+    if not all(0.0 <= purity[p] <= 1.0 for p in samples):
         raise RuntimeError(
             error(
                 "The specified clonal clusters do not allow for scaling because resulting purity is {}!".format(
@@ -1369,7 +1390,7 @@ def parseClonalClusters(clonal, fseg, size, samples, v):
     scaling = {
         p: calcScalingFactor(purity[p], fseg[neutral][p]["rdr"]) for p in samples
     }
-    if False in set(scaling[p] >= 0.0 for p in samples):
+    if not all(scaling[p] >= 0.0 for p in samples):
         raise RuntimeError(
             error(
                 "The specified clonal clusters do not allow for scaling because resulting scaling factor is {}!".format(

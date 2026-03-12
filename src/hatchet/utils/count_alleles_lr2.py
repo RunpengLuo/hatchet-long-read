@@ -360,13 +360,14 @@ def count_alleles_from_stdout(stdout, samplename):
             filter(lambda x: x[0] in alleles, zip(p, q)),
         )
     )
-    form = lambda p: (
-        samplename,
-        p[0],
-        p[1],
-        mkcounts(p[2].split(','), p[3].split(',')),
-    )
-    return [form(line.strip().split()) for line in stdout.strip().split('\n') if line != '']
+    ret = []
+    for line in stdout.strip().split('\n'):
+        if line == "":
+            continue
+        p = line.strip().split()
+        form = (samplename, p[0], p[1], mkcounts(p[2].split(','), p[3].split(',')))
+        ret.append(form)
+    return ret
 
 
 if __name__ == '__main__':

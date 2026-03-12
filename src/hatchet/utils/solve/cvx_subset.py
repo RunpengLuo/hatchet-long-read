@@ -51,7 +51,7 @@ class CVXSubset:
         self.penalty_param = penalty_param
         self.baf = baf
 
-        self.tol = 0.001 # TODO make as argument?
+        self.tol = 0.001  # TODO make as argument?
 
         self.mode = "FULL"
 
@@ -122,7 +122,7 @@ class CVXSubset:
             for _k in range(k):
                 u_aux[(_n, _k)] = pe.Var(domain=pe.Binary)
                 model.add_component(f"u_aux_{_n + 1}_{_k + 1}", u_aux[(_n, _k)])
-        
+
         # fix copy-numbers
         for _m, (a, b) in copy_numbers.items():
             cluster_id = f_a.index[_m]
@@ -141,7 +141,7 @@ class CVXSubset:
         # purity constraint
         for _k in range(k):
             model.constraints.add(sum(self.u[_n][_k] for _n in range(n)) == 1)
-        
+
         for _n in range(n):
             for _k in range(k):
                 model.constraints.add(u_aux[(_n, _k)] >= self.u[_n][_k])
@@ -167,14 +167,13 @@ class CVXSubset:
                 model.constraints.add(float(f_b_values[_k]) - b_dot <= yB[(_m, _k)])
                 model.constraints.add(b_dot - float(f_b_values[_k]) <= yB[(_m, _k)])
 
-
         objective = 0
         for _m in range(m):
             for _k in range(k):
                 objective += (yA[(_m, _k)] + yB[(_m, _k)]) * self.w[
                     self.cluster_ids[_m]
                 ]
-        
+
         # set penalties
         model.obj = pe.Objective(expr=objective, sense=pe.minimize)
         self.model = model

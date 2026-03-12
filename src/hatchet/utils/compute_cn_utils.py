@@ -85,8 +85,8 @@ def pairwise_merge(
             _cov = (
                 _seg.apply(func=lambda r: r["COV"] * r["#BINS"], axis=1).sum() / _bins
             )
-            _alpha = _seg["ALPHA"].sum()
-            _beta = _seg["BETA"].sum()
+            _alpha = _seg["ALPHA"].sum() if "ALPHA" in _seg else 0
+            _beta = _seg["BETA"].sum() if "BETA" in _seg else 0
             _baf = (
                 _seg.apply(func=lambda r: r["BAF"] * r["#BINS"], axis=1).sum() / _bins
             )

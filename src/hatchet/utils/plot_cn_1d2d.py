@@ -121,6 +121,11 @@ def generate_1D2D_plots(
                 ],
             )
 
+    log("Compute transparency\n", level="INFO")
+    alphas = get_transparency(bbc, by=[f"cn_clone{i+1}" for i in range(n_clones)], 
+                              one_tail=0.25, tail_alpha=0.2, nontail_alpha=1)
+    bbc = pd.concat([bbc, alphas], axis=True)
+
     log("Plotting copy-number states in 2D\n", level="INFO")
     if by_sample:
         plot_clusters(
@@ -349,6 +354,7 @@ def plot_genome(
         props = np.array([bbc_.iloc[0, 2 * i + 12] for i in range(n_clones + 1)]).round(
             6
         )
+        print(idx, sample, props)
         n_clones2, gamma = compute_gamma(bbc_)
         assert n_clones2 == n_clones
 
@@ -394,14 +400,14 @@ def plot_genome(
                 colors.append((0, 0, 0, 1))
 
             ## FIXME DEBUG save result
-            temp_fname = f"{save_prefix}_{sample}_{chromosome}.tsv"
-            print(f"SAVE temp file {temp_fname}")
-            temp_df = bbc.loc[:, [chrkey, "START", "END", "SAMPLE", "RD", "BAF", 
-                           "cn_normal", "u_normal", "cn_clone1", "u_clone1"]]
-            temp_df.loc[:, "FCN_LINE"] = [x[0][1] for x in fcn_lines]
-            temp_df.loc[:, "BAF_LINE"] = [x[0][1] for x in baf_lines]
-            temp_df.loc[:, "FCN"] = bbc.RD * gamma
-            temp_df.to_csv(temp_fname, index=False, sep='\t', header=True)
+            # temp_fname = f"{save_prefix}_{sample}_{chromosome}.tsv"
+            # print(f"SAVE temp file {temp_fname}")
+            # temp_df = bbc.loc[:, [chrkey, "START", "END", "SAMPLE", "RD", "BAF", 
+            #                "cn_normal", "u_normal", "cn_clone1", "u_clone1"]]
+            # temp_df.loc[:, "FCN_LINE"] = [x[0][1] for x in fcn_lines]
+            # temp_df.loc[:, "BAF_LINE"] = [x[0][1] for x in baf_lines]
+            # temp_df.loc[:, "FCN"] = bbc.RD * gamma
+            # temp_df.to_csv(temp_fname, index=False, sep='\t', header=True)
 
             lc_fcn = collections.LineCollection(fcn_lines, linewidth=2, colors=colors)
             axes[idx * 2 + 0].add_collection(lc_fcn)
@@ -441,10 +447,10 @@ def plot_genome(
                 ]
 
             axes[idx * 2 + 0].scatter(
-                midpoint, bbc.RD * gamma, s=markersize, alpha=1, c=my_colors
+                midpoint, bbc.RD * gamma, s=markersize, alpha=bbc.transparency, c=my_colors
             )
             axes[idx * 2 + 1].scatter(
-                midpoint, bbc.BAF, s=markersize, alpha=1, c=my_colors
+                midpoint, bbc.BAF, s=markersize, alpha=bbc.transparency, c=my_colors
             )
 
         if show_centromeres:
@@ -572,6 +578,7 @@ def plot_clusters(
             6
         )
         n_clones2, gamma = compute_gamma(bbc_)
+        log(f"estimated gamma={gamma}\n", level="INFO")
         assert n_clones2 == n_clones, (n_clones2, n_clones)
 
         if n_clones == 1:
@@ -649,7 +656,7 @@ def plot_clusters(
 
         else:
             assert coloring == "original"
-            my_ax.scatter(bbc_.BAF, bbc_.RD * gamma, c=my_colors, s=1)
+            my_ax.scatter(bbc_.BAF, bbc_.RD * gamma, c=my_colors, s=1, alpha=bbc_.transparency)
 
             exs = []
             eys = []
@@ -740,6 +747,39 @@ def plot_clusters(
         plt.savefig(fname)
 
     plt.close()
+
+def get_transparency(bbc: pd.DataFrame, by=["CLUSTER"], one_tail=0.25, tail_alpha=0.2, nontail_alpha=1.0) -> pd.Series:
+    """
+    for each cluster,
+    set transparency to 0.5 if the data has RD or BAF in both tails.
+    #TODO add parameters to cmd line
+    """
+    def get_alpha_one_row(row, per_grp_thres):
+        rd, baf = row["RD"], row["BAF"]
+        rd_l, rd_r, baf_l, baf_r = per_grp_thres[row["GRB_KEY"]]
+        if rd <= rd_l or rd >= rd_r or baf <= baf_l or baf >= baf_r:
+            return tail_alpha
+        else:
+            return nontail_alpha
+    get_left_threshold = lambda arr: arr[min(max(0, int(len(arr) * one_tail)), len(arr) - 1)]
+    get_right_threshold = lambda arr: arr[min(max(0, int(len(arr) * (1-one_tail))), len(arr) - 1)]
+    
+    grb_col = bbc.apply(func=lambda r: ":".join(r[k] for k in by), axis=1)
+    grb_col.name = "GRB_KEY"
+
+    per_grp_thres = {}
+    for key in grb_col.unique():
+        df = bbc[grb_col == key]
+        rd = sorted(df["RD"].tolist())
+        baf = sorted(df["BAF"].tolist())
+        per_grp_thres[key] = [get_left_threshold(rd), get_right_threshold(rd),
+                                  get_left_threshold(baf), get_right_threshold(baf)]
+    
+    print(list(per_grp_thres.items()))
+    alphas = pd.concat([bbc, grb_col], axis=1).apply(func=lambda r: get_alpha_one_row(r, per_grp_thres), axis=1)
+    alphas.name = "transparency"
+
+    return alphas
 
 
 if __name__ == "__main__":
