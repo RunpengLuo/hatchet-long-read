@@ -204,7 +204,8 @@ def plot_scaling_2d(
     use_editable_fonts()
 
     clusters = sorted(bbcs["CLUSTER"].unique().tolist())
-    palette = set_palette(num_colors=len(clusters))
+    with plt.rc_context():
+        palette = set_palette(num_colors=len(clusters))
     pal = {str(c): palette[i] for i, c in enumerate(clusters)}
 
     panels = [("noWGD", scaling["diploid"])]
