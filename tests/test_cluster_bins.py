@@ -56,7 +56,7 @@ class TestClusterBinsOutputFormat:
     def test_seg_columns(self, cluster_bins_result):
         bbc_dir, _ = cluster_bins_result
         seg = pd.read_table(os.path.join(bbc_dir, "bulk.seg"), sep="\t")
-        required = {"#ID", "SAMPLE", "#BINS", "#SNPS", "LENGTH", "BAF", "RD"}
+        required = {"CLUSTER", "SAMPLE", "#BINS", "#SNPS", "LENGTH", "BAF", "RD"}
         assert required.issubset(set(seg.columns)), (
             f"Missing columns: {required - set(seg.columns)}"
         )
@@ -74,7 +74,7 @@ class TestClusterBinsClusterSeparation:
     def test_at_least_3_clusters(self, cluster_bins_result):
         bbc_dir, _ = cluster_bins_result
         seg = pd.read_table(os.path.join(bbc_dir, "bulk.seg"), sep="\t")
-        n_clusters = seg["#ID"].nunique()
+        n_clusters = seg["CLUSTER"].nunique()
         assert n_clusters >= 3, f"Expected >= 3 clusters, got {n_clusters}"
 
     def test_cluster_rdr_spread(self, cluster_bins_result):

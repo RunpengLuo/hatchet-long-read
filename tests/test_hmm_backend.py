@@ -55,7 +55,7 @@ def test_numba_backend_runs(synthetic_data, tmp_path, monkeypatch):
     assert (bbc["RD"] > 0).all()
     assert (bbc["BAF"] >= 0).all() and (bbc["BAF"] <= 1).all()
     seg = pd.read_table(os.path.join(out, "bulk.seg"), sep="\t")
-    assert seg["#ID"].nunique() >= 3
+    assert seg["CLUSTER"].nunique() >= 3
 
 
 @pytest.mark.skipif(not hmm._CPP_IMPORTABLE, reason="_hmm_cpp extension not compiled")
@@ -71,6 +71,6 @@ def test_backends_agree_on_cluster_count(synthetic_data, tmp_path, monkeypatch):
     monkeypatch.setattr(hmm, "_USE_CPP", False)
     nb_out = _run_cluster_bins(bb_dir, genome_sizes, regions_bed, str(tmp_path / "nb"))
 
-    n_cpp = pd.read_table(os.path.join(cpp_out, "bulk.seg"), sep="\t")["#ID"].nunique()
-    n_nb = pd.read_table(os.path.join(nb_out, "bulk.seg"), sep="\t")["#ID"].nunique()
+    n_cpp = pd.read_table(os.path.join(cpp_out, "bulk.seg"), sep="\t")["CLUSTER"].nunique()
+    n_nb = pd.read_table(os.path.join(nb_out, "bulk.seg"), sep="\t")["CLUSTER"].nunique()
     assert abs(n_cpp - n_nb) <= 1, f"cluster counts diverge: C++={n_cpp}, Numba={n_nb}"
