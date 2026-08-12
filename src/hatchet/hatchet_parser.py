@@ -282,8 +282,13 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         "--skip_mhbafs",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Skip mhBAF folding after decoding. By default, clusters with BAF > 0.5 "
-        "have their BAF means and per-bin phases flipped to enforce the minor-allele convention.",
+        help="Clusters with averaged BAF > 0.5 are folded to minor-haplotype convection. set to skip."
+    )
+    parser.add_argument(
+        "--wide_format",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="EXPERIMENTAL: write BBC in memory-efficient wide gzip TSV format.",
     )
     add_arguments_plot_style(parser)
     return parser
@@ -308,6 +313,12 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         required=True,
         type=str,
         help="Filename for SEG table (e.g., results/best.seg.ucn)",
+    )
+    parser.add_argument(
+        "--wide_format",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="EXPERIMENTAL: read BBC in wide file format.",
     )
 
     ##################################################

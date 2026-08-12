@@ -42,6 +42,8 @@ filter_std: 2.0
 min_nbins: 10
 ub_nbins: 50
 skip_mhbafs: false
+# EXPERIMENTAL: wide BBC output (cluster-bins writer + compute-cn reader)
+wide_format: false
 
 ##################################################
 # compute-cn
