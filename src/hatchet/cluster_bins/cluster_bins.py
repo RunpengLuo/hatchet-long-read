@@ -12,13 +12,14 @@ from hatchet.utils import (
     normalize_args,
     setup_logging,
 )
-from hatchet.io_utils import read_genome_sizes, read_sample_file
+from hatchet.io_utils import read_genome_sizes, read_sample_file, write_bbc_file
 from hatchet import filenames as fn
 from hatchet.cluster_bins.cluster_utils import (
     compute_baf_se,
     compute_rdr_se,
     estimate_BB_dispersion_normal,
     estimate_BB_dispersion_segment,
+    estimate_ig_beta,
     estimate_rdr_vars,
     filter_clusters,
     label_balanced_clusters,
@@ -69,11 +70,11 @@ def run(args=None):
     """
     args = normalize_args(args)
     setup_logging(args)
+    DEBUG = logging.getLogger().isEnabledFor(logging.DEBUG)
     logging.info("cluster bins")
     _log_done = log_step_start()
-
-    plot_style = get_plot_style(args)
-
+    
+    # inputs
     bb_dir = args["bb_dir"]
     bb_file = os.path.join(bb_dir, fn.BB_TSV_GZ)
     sample_file = os.path.join(bb_dir, fn.SAMPLE_IDS)
@@ -82,21 +83,33 @@ def run(args=None):
     a_mfile = os.path.join(bb_dir, fn.BB_A_ALLELE_NPZ)
     b_mfile = os.path.join(bb_dir, fn.BB_B_ALLELE_NPZ)
     t_mfile = os.path.join(bb_dir, fn.BB_T_ALLELE_NPZ)
+
+    # aux
+    plot_style = get_plot_style(args)
     genome_size = args["genome_size"]
     region_bed = args["region_bed"]
+
+    # outputs
     out_dir = args["bbc_dir"]
+    wide_format = args["wide_format"]
+    out_bbc = fn.BULK_BBC(out_dir, wide_format)
+    out_seg = fn.BULK_SEG(out_dir, wide_format)
     os.makedirs(out_dir, exist_ok=True)
+    label_dir = fn.LABELS_DIR(out_dir)
+    plot_dir = fn.PLOTS_DIR(out_dir)
+    os.makedirs(label_dir, exist_ok=True)
+    os.makedirs(plot_dir, exist_ok=True)
     add_file_logging(out_dir, "cluster-bins")
     log_arguments(args)
 
-    out_bbc = os.path.join(out_dir, fn.BULK_BBC)
-    out_seg = os.path.join(out_dir, fn.BULK_SEG)
-    if not args["force"] and os.path.exists(out_bbc) and os.path.exists(out_seg):
-        logging.info(
-            f"skip cluster-bins: {out_bbc} and {out_seg} already exist (use --force to re-run)"
-        )
-        _log_done("cluster-bins", out_file=os.path.join(out_dir, fn.RUNTIME_LOG))
-        return
+    # HMM parameters
+    seed = args["seed"]
+    decode_method = args["decode_method"]
+    score_method = args["score_method"]
+    score_criteria = args["score_criteria"]
+    log_rdr = args["log_rdr"]
+    init_method = args["init_method"]
+    training_method = args["training_method"]
 
     min_tau = args["min_tau"]
     max_tau = args["max_tau"]
@@ -116,111 +129,79 @@ def run(args=None):
     n_local_trials = args["n_local_trials"]
     n_iter = args["niters"]
 
-    seed = args["seed"]
-    decode_method = args["decode_method"]
-    score_method = args["score_method"]
-    score_criteria = args["score_criteria"]
-    log_rdr = args["log_rdr"]
-    init_method = args["init_method"]
-    training_method = args["training_method"]
+    # TODO better format with an indicator vector rather than offset.
     baf_k_start = 0 if args["free_baf_c0"] else 1
 
-    label_dir = os.path.join(out_dir, fn.LABELS_DIR)
-    plot_dir = os.path.join(out_dir, fn.PLOTS_DIR)
-    os.makedirs(label_dir, exist_ok=True)
-    os.makedirs(plot_dir, exist_ok=True)
+    if not args["force"] and os.path.exists(out_bbc) and os.path.exists(out_seg):
+        logging.info(
+            f"skip cluster-bins: {out_bbc} and {out_seg} already exist (use --force to re-run)"
+        )
+        _log_done("cluster-bins")
+        return
 
     ##################################################
     logging.info("load arguments")
     sample_df, normal_idx, tumor_idx, assay2samples = read_sample_file(sample_file)
+    tumor_col_idx = {ti: si for si, ti in enumerate(tumor_idx)}
     samples = sample_df["SAMPLE"].tolist()
     tumor_samples = [samples[i] for i in tumor_idx]
 
     bbs = pd.read_table(bb_file, sep="\t")
-
-    X_depths = np.load(depth_mfile)["mat"].astype(np.float32)
-    X_depths_tumor = X_depths[:, tumor_idx]
-
-    X_rdrs = np.load(rdr_mfile)["mat"].astype(np.float32)
-    X_alphas_all = np.load(a_mfile)["mat"].astype(np.int32)
-    X_betas_all = np.load(b_mfile)["mat"].astype(np.int32)
-    X_totals_all = np.load(t_mfile)["mat"].astype(np.int32)
-    X_alphas = X_alphas_all[:, tumor_idx]
-    X_betas = X_betas_all[:, tumor_idx]
-    X_totals = X_totals_all[:, tumor_idx]
-    nbbs, ntumor_samples = X_rdrs.shape
-    assert len(bbs) == nbbs, f"unmatched {len(bbs)} and {nbbs}"
-
-    X_log_rdrs = np.log(np.clip(X_rdrs, 1e-6, None)).astype(np.float32)
-    X_hmm_rdrs = X_log_rdrs if log_rdr else X_rdrs
-
-    ##################################################
-    logging.info("prepare HMM inputs")
+    logging.debug(f"BB.columns={list(bbs.columns)}")
     X_lengths = (
         bbs.groupby(by="region_id", sort=False).agg("size").to_numpy(dtype=np.int64)
     )
     nsegments = len(X_lengths)
-    assert np.sum(X_lengths) == nbbs, f"unmatched {np.sum(X_lengths)} and {nbbs}"
-    logging.info(f"#bbs={nbbs}, #segments={nsegments}")
 
+    chrom_sizes = read_genome_sizes(genome_size)
+
+    ##################################################
+    ## BB dataframe sanity check
+    X_depths = np.load(depth_mfile)["mat"].astype(np.float32)
+    X_depths_tumor = X_depths[:, tumor_idx]
+
+    X_rdrs = np.load(rdr_mfile)["mat"].astype(np.float32)
+    nbbs, ntumor_samples = X_rdrs.shape
+    assert len(bbs) == nbbs, f"unmatched {len(bbs)} and {nbbs}"
+    assert np.sum(X_lengths) == nbbs, f"unmatched {np.sum(X_lengths)} and {nbbs}"
+    logging.info(f"#bbs={nbbs}, #segments={nsegments}, #tumor_samples={ntumor_samples}")
+
+    X_alphas_all = np.load(a_mfile)["mat"].astype(np.int32)
+    X_betas_all = np.load(b_mfile)["mat"].astype(np.int32)
+    X_totals_all = np.load(t_mfile)["mat"].astype(np.int32)
+
+    ##################################################
+    # HMM inputs
+    X_hmm_rdrs = X_rdrs
+    if log_rdr:
+        X_hmm_rdrs = np.log(np.clip(X_rdrs, 1e-6, None)).astype(np.float32)
+    X_alphas = X_alphas_all[:, tumor_idx]
+    X_betas = X_betas_all[:, tumor_idx]
+    X_totals = X_totals_all[:, tumor_idx]
     X_bafs = np.clip(X_betas / X_totals, baf_eps, 1 - baf_eps)
-    switchprobs = bbs["switchprobs"].to_numpy()
 
     X_hmm_rdrs = np.ascontiguousarray(X_hmm_rdrs, dtype=np.float64)
     X_alphas = np.ascontiguousarray(X_alphas, dtype=np.float64)  # (N, M)
     X_betas = np.ascontiguousarray(X_betas, dtype=np.float64)  # (N, M)
     X_totals = np.ascontiguousarray(X_totals, dtype=np.float64)  # (N, M)
     X_bafs = np.ascontiguousarray(X_bafs, dtype=np.float64)  # (N, M)
+
+    # phase switch probabilities
+    switchprobs = bbs["switchprobs"].to_numpy()
     log_switchprobs = np.ascontiguousarray(np.log(switchprobs), dtype=np.float64)
     log_stayprobs = np.ascontiguousarray(np.log(1 - switchprobs), dtype=np.float64)
 
     ##################################################
-    logging.debug(
-        f"nbbs={nbbs}, ntumor_samples={ntumor_samples}, bbs.columns={list(bbs.columns)}"
-    )
-    bbcs = pd.DataFrame(
-        {
-            "#CHR": np.repeat(bbs["#CHR"].to_numpy(), ntumor_samples),
-            "START": np.repeat(bbs["START"].to_numpy(), ntumor_samples),
-            "END": np.repeat(bbs["END"].to_numpy(), ntumor_samples),
-            "SAMPLE": np.tile(tumor_samples, nbbs),
-            "#SNPS": np.repeat(bbs["#SNPS"].to_numpy(), ntumor_samples),
-        }
-    )
-    bbcs["CLUSTER"] = 0
-    bbcs["RD"] = X_rdrs.ravel()
-    bbcs["COV"] = X_depths_tumor.ravel()
-
-    bbs["CLUSTER"] = 0
-    bbs["PHASE"] = 0.0
-    bbs["PHASE_POSTS"] = 0.0
-
-    ##################################################
-    plot_rdr_baf(
-        tumor_samples,
-        bbs,
-        X_bafs,
-        X_rdrs,
-        genome_size,
-        region_bed,
-        xlab="BAF",
-        ylab="RDR",
-        out_dir=plot_dir,
-        out_prefix="raw_",
-        style=plot_style,
-    )
-
+    # initialize HMM emission parameters
     baf_taus0 = np.zeros(ntumor_samples, dtype=np.float32)
-    tumor_pos = {ti: si for si, ti in enumerate(tumor_idx)}
     for grp in assay2samples.values():
-        cols = [tumor_pos[ti] for ti in grp["tumor"]]
+        cols = [tumor_col_idx[ti] for ti in grp["tumor"]]
         if not cols:
             continue
         if grp["normal"]:
-            ni = grp["normal"][0]
             baf_taus0[cols] = estimate_BB_dispersion_normal(
-                X_alphas_all[:, ni],
-                X_betas_all[:, ni],
+                X_alphas_all[:, grp["normal"]],
+                X_betas_all[:, grp["normal"]],
                 min_tau=min_tau,
                 max_tau=max_tau,
             )
@@ -234,22 +215,22 @@ def run(args=None):
                 min_tau=min_tau,
                 max_tau=max_tau,
             )
-    logging.info("estimated BAF per-sample dispersion:      %s", np.round(baf_taus0, 3))
-
     rdr_vars0 = estimate_rdr_vars(X_hmm_rdrs, X_lengths, min_var=min_covar)
-    logging.info("estimated RDR per-sample variance:      %s", np.round(rdr_vars0, 3))
+    ig_beta = estimate_ig_beta(ig_alpha, rdr_vars0)
+    logging.info("Init emission parameters:")
+    for si, sample in enumerate(tumor_samples):
+        logging.info(
+            "  %s: BAF tau=%.3f, RDR var=%.3f, IG beta=%.6f",
+            sample,
+            baf_taus0[si],
+            rdr_vars0[0, si],
+            ig_beta[0, si],
+        )
+    logging.info("IG prior alpha=%.2f)", ig_alpha)
 
-    ig_beta = rdr_vars0 * (ig_alpha + 1)
-    logging.info("IG prior: alpha=%.2f, beta=%s", ig_alpha, np.round(ig_beta, 6))
-
-    chrom_sizes = read_genome_sizes(genome_size)
-    DEBUG = logging.getLogger().isEnabledFor(logging.DEBUG)
-
-    logging.info("HMM init method: %s", init_method)
     if init_method == "kmeans_plus_plus":
-        X_mhbafs = np.minimum(X_bafs, 1.0 - X_bafs)
         inits_maxK, inits_diag = init_hmm_kmeans_plus_plus(
-            X_mhbafs=X_mhbafs,
+            X_bafs=X_bafs,
             X_rdrs=X_hmm_rdrs,
             rdr_vars=rdr_vars0,
             K=maxK,
@@ -291,10 +272,6 @@ def run(args=None):
         sample_names=tumor_samples,
     )
 
-    ##################################################
-    score_records = []
-    elbo_data = []  # list of (K, all_elbo_traces, best_it)
-
     sorted_inits = sorted(inits_maxK.items(), key=lambda x: x[1][-1], reverse=False)
     inits_run = dict(sorted_inits[:top_restarts])
 
@@ -324,6 +301,14 @@ def run(args=None):
         len(inits_maxK),
     )
 
+    ##################################################
+    # inference
+    score_records = []
+    elbo_data = []  # list of (K, all_elbo_traces, best_it)
+
+    bbs["CLUSTER"] = 0
+    bbs["PHASE"] = 0.0
+    bbs["PHASE_POSTS"] = 0.0
     for K in range(minK, maxK + 1):
         logging.info("==================================================")
         logging.info(
@@ -398,7 +383,7 @@ def run(args=None):
         trace_dir = os.path.join(out_dir, fn.TRACES_DIR)
         os.makedirs(trace_dir, exist_ok=True)
         np.savez_compressed(
-            os.path.join(trace_dir, fn.k_em_trace(K)),
+            fn.K_EM_TRACE(out_dir, K),
             elbo_trace=np.array(best_sol["elbo_trace"]),
             rdr_means=best_sol["trace_rdr_means"],
             rdr_vars=best_sol["trace_rdr_vars"],
@@ -517,22 +502,28 @@ def run(args=None):
 
         bbs["PHASE"] = k_phases
         bbs["PHASE_POSTS"] = best_sol["phase_posts"][:, 1]
-        bbs[["#CHR", "START", "END", "PHASE", "PHASE_POSTS", "switchprobs"]].to_csv(
-            os.path.join(label_dir, fn.bulk_k_phased(K)),
-            sep="\t",
-            header=True,
-            index=False,
-        )
+        if not wide_format:
+            bbs[["#CHR", "START", "END", "PHASE", "PHASE_POSTS", "switchprobs"]].to_csv(
+                fn.BULK_K_PHASED(out_dir, K),
+                sep="\t",
+                header=True,
+                index=False,
+            )
 
-        bbcs["CLUSTER"] = np.repeat(k_labels, ntumor_samples)
-        bbcs["BAF"] = k_bafs.ravel()
-        bbcs["BETA"] = k_betas_phased.ravel().astype(int)
-        bbcs["ALPHA"] = (X_totals - k_betas_phased).ravel().astype(int)
+        field_mats = {
+            "RD": X_rdrs,
+            "COV": X_depths_tumor,
+            "BAF": k_bafs.astype(np.float32),
+            "ALPHA": (X_totals - k_betas_phased).astype(np.int32),
+            "BETA": k_betas_phased.astype(np.int32),
+        }
         k_baf_ses = compute_baf_se(k_labels, k_bafs, k_cids)
         k_rdr_ses = compute_rdr_se(k_labels, k_rdr_vars_nat, k_cids)
         k_segs = mat2segs(
-            bbcs,
+            bbs,
+            k_labels,
             tumor_samples,
+            field_mats,
             k_baf_means,
             k_baf_taus,
             k_baf_ses,
@@ -541,16 +532,18 @@ def run(args=None):
             k_rdr_ses,
             k_cids,
         )
-        k_segs["is_balanced"] = k_segs["#ID"].isin(balanced_ids)
-        k_segs["is_filtered"] = k_segs["#ID"].isin(filtered_ids)
-        bbcs.to_csv(
-            os.path.join(label_dir, fn.bulk_k_bbc(K)),
-            sep="\t",
-            header=True,
-            index=False,
+        k_segs["is_balanced"] = k_segs["CLUSTER"].isin(balanced_ids)
+        k_segs["is_filtered"] = k_segs["CLUSTER"].isin(filtered_ids)
+        write_bbc_file(
+            fn.BULK_BBC_k(out_dir, wide_format, K),
+            bbs,
+            k_labels,
+            field_mats,
+            tumor_samples,
+            is_wide_format=wide_format,
         )
         k_segs.to_csv(
-            os.path.join(label_dir, fn.bulk_k_seg(K)),
+            fn.BULK_SEG_k(out_dir, wide_format, K),
             sep="\t",
             header=True,
             index=False,
@@ -569,22 +562,29 @@ def run(args=None):
 
     ##################################################
     # copy best-K results to top-level output
-    for src_name, dst_name in (
-        (fn.bulk_k_bbc(best_K), fn.BULK_BBC),
-        (fn.bulk_k_seg(best_K), fn.BULK_SEG),
-    ):
-        shutil.copy2(
-            os.path.join(label_dir, src_name),
-            os.path.join(out_dir, dst_name),
+    copy_pairs = [
+        (
+            fn.BULK_BBC_k(out_dir, wide_format, best_K),
+            fn.BULK_BBC(out_dir, wide_format),
+        ),
+        (
+            fn.BULK_SEG_k(out_dir, wide_format, best_K),
+            fn.BULK_SEG(out_dir, wide_format),
+        ),
+    ]
+    if not wide_format:
+        copy_pairs.append(
+            (
+                fn.BULK_K_PHASED(out_dir, best_K),
+                os.path.join(out_dir, fn.BB_PHASED_TSV_GZ),
+            )
         )
+    for src_path, dst_path in copy_pairs:
+        shutil.copy2(src_path, dst_path)
     shutil.copy2(
-        os.path.join(label_dir, fn.bulk_k_phased(best_K)),
-        os.path.join(out_dir, fn.BB_PHASED_TSV_GZ),
-    )
-    shutil.copy2(
-        os.path.join(plot_dir, fn.k_plot(best_K)),
-        os.path.join(out_dir, fn.bulk_k_plot(best_K)),
+        fn.K_PLOT(out_dir, best_K),
+        fn.BULK_K_PLOT(out_dir, best_K),
     )
 
-    _log_done("cluster-bins", out_file=os.path.join(out_dir, fn.RUNTIME_LOG))
+    _log_done("cluster-bins")
     return

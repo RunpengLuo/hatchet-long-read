@@ -35,8 +35,26 @@ def init_hmm_cna_plus_plus(
     centroids explain each bin.  Repeats for `restarts` independent restarts;
     all are returned so the caller can screen with short EM runs and pick the best.
 
+    Args:
+        X_rdrs: (N, M) RDR values.
+        X_bafs: (N, M) raw BAF values.
+        X_alphas: (N, M) A-haplotype allele counts.
+        X_betas: (N, M) B-haplotype allele counts.
+        X_totals: (N, M) total allele counts (alpha + beta).
+        baf_taus0: (M,) initial Beta-Binomial dispersion per sample.
+        rdr_vars: (1, M) initial RDR variances per sample.
+        K: number of clusters to seed.
+        random_state: base random seed for candidate sampling.
+        restarts: number of independent seeding runs.
+        n_local_trials: candidates evaluated per seeding step; None -> max(2 + round(log K), 1).
+        log_rdr: seed the first centroid RDR in log space.
+        baf_eps: lower bound clipping BAF candidates to avoid degenerate Beta-Binomial params.
+        bal_margin: half-width of the |BAF - 0.5| band defining balanced bins for the RDR anchor.
+        collect_diag: return per-restart seeding diagnostics in the second output.
+
     Returns:
         params_dict: dict mapping restart index → [baf_means, rdr_means, rdr_vars, potential].
+        diag_dict: per-restart diagnostics if collect_diag else empty dict.
     """
     logging.info(
         f"cna++ seeding, K={K}, restarts={restarts}, random_state={random_state}"
@@ -226,7 +244,7 @@ def init_hmm_cna_plus_plus(
 ##################################################
 def init_hmm_kmeans_plus_plus(
     X_rdrs: np.ndarray,
-    X_mhbafs: np.ndarray,
+    X_bafs: np.ndarray,
     rdr_vars: np.ndarray,
     K: int,
     random_state: int = 42,
@@ -242,7 +260,7 @@ def init_hmm_kmeans_plus_plus(
 
     Args:
         X_rdrs: (N, M) RDR values.
-        X_mhbafs: (N, M) mhBAF values, folded to [0, 0.5].
+        X_bafs: (N, M) raw BAF values; folded per-bin to mhBAF via convert_mhbafs.
         rdr_vars: (1, M) or (K, M) initial RDR variances — tiled to (K, M) for output.
         K: number of clusters.
         random_state: base random seed; each restart uses random_state + it.
@@ -258,6 +276,7 @@ def init_hmm_kmeans_plus_plus(
         f"kmeans++ seeding, K={K}, restarts={restarts}, random_state={random_state}"
     )
     N, M = X_rdrs.shape
+    X_mhbafs = convert_mhbafs(X_bafs)
     X_feat = np.hstack([X_rdrs, X_mhbafs])  # (N, 2M)
 
     params_dict = {}
