@@ -212,7 +212,7 @@ def plot_scaling_2d(
     if scaling.get("tetraploid") is not None:
         panels.append(("WGD", scaling["tetraploid"]))
 
-    cent = segs.set_index(["#ID", "SAMPLE"])[["RD", "BAF"]]
+    cent = segs.set_index(["CLUSTER", "SAMPLE"])[["RD", "BAF"]]
 
     pdf = PdfPages(out_file)
     for sample in samples:

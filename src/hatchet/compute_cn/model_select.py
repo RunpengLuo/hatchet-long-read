@@ -1,4 +1,3 @@
-import os
 import logging
 
 import kneed
@@ -57,7 +56,7 @@ def _compute_loglik_from_ucn(ucn_file: str, n: int, gammas: dict, segs: pd.DataF
         ucn_file: path to the results.{ploidy}.n{n}.bbc.ucn.tsv file.
         n:        total number of clones (including normal).
         gammas:   dict {sample_id: gamma} for RDR-to-FCN scaling.
-        segs:     DataFrame with columns #ID, SAMPLE, RD-var, BAF-tau.
+        segs:     DataFrame with columns CLUSTER, SAMPLE, RD-var, BAF-tau.
 
     Returns:
         (ll, n_obs, n_clusters, n_samples): log-likelihood, observation count,
@@ -68,7 +67,7 @@ def _compute_loglik_from_ucn(ucn_file: str, n: int, gammas: dict, segs: pd.DataF
     # Build lookup for HMM-estimated variance/dispersion
     seg_lookup = {}
     for _, row in segs.iterrows():
-        seg_lookup[(row["#ID"], row["SAMPLE"])] = (
+        seg_lookup[(row["CLUSTER"], row["SAMPLE"])] = (
             float(row["RD-var"]),
             float(row["BAF-tau"]),
         )
@@ -150,7 +149,7 @@ def model_selection_ploidy(
     def _compute_scores(ploidy):
         gammas = scaling[ploidy]["gammas"]
         ns_sorted = sorted(chosen_sols[ploidy].keys())
-        first_ucn = os.path.join(out_dir, fn.results_bbc_ucn(ploidy, ns_sorted[0]))
+        first_ucn = fn.RESULTS_BBC_UCN(out_dir, ploidy, ns_sorted[0])
         ll_n1, nobs_n1, n_clusters, n_samples = _compute_loglik_from_ucn(
             first_ucn, 1, gammas, segs
         )
@@ -159,7 +158,7 @@ def model_selection_ploidy(
         ns_all = [1] + ns_sorted
         lls = [ll_n1]
         for clone_n in ns_sorted:
-            ucn_file = os.path.join(out_dir, fn.results_bbc_ucn(ploidy, clone_n))
+            ucn_file = fn.RESULTS_BBC_UCN(out_dir, ploidy, clone_n)
             ll, nobs, n_clusters, n_samples = _compute_loglik_from_ucn(
                 ucn_file, clone_n, gammas, segs
             )

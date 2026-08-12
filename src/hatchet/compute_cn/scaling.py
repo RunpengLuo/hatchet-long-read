@@ -32,7 +32,7 @@ def get_scaling_factor(
     logging.info("Infer scaling factors & tumor purity")
 
     def _pivot(col):
-        return segs.pivot(index="#ID", columns="SAMPLE", values=col)[samples]
+        return segs.pivot(index="CLUSTER", columns="SAMPLE", values=col)[samples]
 
     rdr, baf = _pivot("RD"), _pivot("BAF")
     baf_se, rd_var = _pivot("BAF-se"), _pivot("RD-var")
@@ -48,7 +48,7 @@ def get_scaling_factor(
     user_balanced = {c for c, cn in fix_cn_dip.items() if cn == (1, 1)} | {
         c for c, cn in fix_cn_tet.items() if cn == (2, 2)
     }
-    seg_balanced = segs.drop_duplicates("#ID").set_index("#ID")["is_balanced"]
+    seg_balanced = segs.drop_duplicates("CLUSTER").set_index("CLUSTER")["is_balanced"]
     balanced_s = [c for c in clusters if c in user_balanced or seg_balanced.loc[c]]
     imbalanced_z = [c for c in clusters if c not in balanced_s]
     if not balanced_s:

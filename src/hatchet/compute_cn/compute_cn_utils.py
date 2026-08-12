@@ -27,16 +27,16 @@ def build_data(bbcs, segs, segment=False):
     seg_to_cluster and chr_boundaries.
     """
     if not segment:
-        segs_sorted = segs.sort_values(["#ID", "SAMPLE"])
-        rdr = segs_sorted.pivot(index="#ID", columns="SAMPLE", values="RD")
-        baf = segs_sorted.pivot(index="#ID", columns="SAMPLE", values="BAF")
-        rdr_se = segs_sorted.pivot(index="#ID", columns="SAMPLE", values="RD-se")
-        baf_se = segs_sorted.pivot(index="#ID", columns="SAMPLE", values="BAF-se")
-        nbins = segs_sorted.pivot(index="#ID", columns="SAMPLE", values="#BINS")
+        segs_sorted = segs.sort_values(["CLUSTER", "SAMPLE"])
+        rdr = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="RD")
+        baf = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="BAF")
+        rdr_se = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="RD-se")
+        baf_se = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="BAF-se")
+        nbins = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="#BINS")
         first_sample = sorted(segs["SAMPLE"].unique())[0]
         lengths = (
             segs.loc[segs["SAMPLE"] == first_sample]
-            .set_index("#ID")["LENGTH"]
+            .set_index("CLUSTER")["LENGTH"]
             .sort_index()
         )
         weights = 100 * lengths / lengths.sum()
@@ -88,11 +88,10 @@ def build_data(bbcs, segs, segment=False):
         sid_map[row["_seg_int"]] = f"{cid}:{chrom}:{idx}"
     agg["_seg_id"] = agg["_seg_int"].map(sid_map)
 
-    seg_cols = ["#ID", "SAMPLE", "RD", "BAF", "RD-se", "BAF-se"]
+    seg_cols = ["CLUSTER", "SAMPLE", "RD", "BAF", "RD-se", "BAF-se"]
     agg = agg.merge(
         segs[seg_cols],
-        left_on=["CLUSTER", "SAMPLE"],
-        right_on=["#ID", "SAMPLE"],
+        on=["CLUSTER", "SAMPLE"],
         how="left",
     )
 
@@ -123,7 +122,7 @@ def build_data(bbcs, segs, segment=False):
     n_segs, n_samples = rdr.shape
     logging.info(
         f"segment mode: {n_segs} genomic segments x {n_samples} samples "
-        f"(from {len(segs['#ID'].unique())} clusters)"
+        f"(from {len(segs['CLUSTER'].unique())} clusters)"
     )
 
     return {
@@ -289,7 +288,7 @@ def store_instance_tofile(pool_instances, input_data, sol_dir, solve_mode):
     header = "\t".join(cols)
 
     for sol_id, sol in pool_instances.items():
-        path = os.path.join(sol_dir, fn.solution_tsv(solve_mode, sol_id))
+        path = fn.SOLUTION_TSV(sol_dir, solve_mode, sol_id)
         with open(path, "w") as fd:
             _write_solution_tsv(
                 fd,
@@ -308,14 +307,13 @@ def store_instance_tofile(pool_instances, input_data, sol_dir, solve_mode):
 
             tree = sol.get("tree")
             if tree is not None and isinstance(tree, LabeledCloneTree):
-                prefix = os.path.join(sol_dir, fn.solution_stem(solve_mode, sol_id))
-                with open(f"{prefix}.nwk", "w") as f:
+                with open(fn.SOLUTION_NWK(sol_dir, solve_mode, sol_id), "w") as f:
                     f.write(tree.to_newick() + "\n")
                 d = tree.to_dict()
                 d["imf_obj"] = sol.get("imf_obj")
                 d["tree_obj"] = sol.get("tree_obj")
                 d["u"] = sol.get("u")
-                with open(f"{prefix}.json", "w") as f:
+                with open(fn.SOLUTION_JSON(sol_dir, solve_mode, sol_id), "w") as f:
                     _json.dump(d, f, indent=2)
 
 

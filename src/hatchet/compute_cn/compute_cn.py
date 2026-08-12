@@ -11,7 +11,7 @@ from hatchet.utils import (
     normalize_args,
     setup_logging,
 )
-from hatchet.io_utils import read_bbc_file
+from hatchet.io_utils import read_bbc_file, read_seg_file
 from hatchet import filenames as fn
 from hatchet.compute_cn.compute_cn_utils import (
     store_gammas,
@@ -54,18 +54,18 @@ def run(args=None):
     os.makedirs(out_dir, exist_ok=True)
     add_file_logging(out_dir, "compute-cn")
     log_arguments(args)
-    plot_dir = os.path.join(out_dir, fn.PLOTS_DIR)
+    plot_dir = fn.PLOTS_DIR(out_dir)
     sols_dir = os.path.join(out_dir, fn.SOLS_DIR)
     os.makedirs(plot_dir, exist_ok=True)
     os.makedirs(sols_dir, exist_ok=True)
 
-    bbcs = read_bbc_file(bbc_file)
-    segs = pd.read_table(seg_file, sep="\t")
+    bbcs = read_bbc_file(bbc_file, is_wide_format=args["wide_format"])
+    segs = read_seg_file(seg_file)
 
     samples = sorted(bbcs["SAMPLE"].unique().tolist())
 
     # Remove clusters marked as filtered by cluster-bins
-    filtered_ids = segs.loc[segs["is_filtered"], "#ID"].unique().tolist()
+    filtered_ids = segs.loc[segs["is_filtered"], "CLUSTER"].unique().tolist()
     if filtered_ids:
         logging.info(f"Excluding filtered clusters from seg: {filtered_ids}")
         segs = segs[~segs["is_filtered"]].reset_index(drop=True)
@@ -122,14 +122,14 @@ def run(args=None):
             min_ci_margin=args["min_ci_margin"],
         )
         store_solve_input(
-            os.path.join(out_dir, fn.SOLS_DIR, fn.solver_input(ploidy)),
+            fn.SOLVER_INPUT(out_dir, ploidy),
             fcn_data,
         )
 
         for n in range(minClone, maxClone):
-            out_bbc = os.path.join(out_dir, fn.results_bbc_ucn(ploidy, n))
-            out_seg = os.path.join(out_dir, fn.results_seg_ucn(ploidy, n))
-            sol_dir = os.path.join(out_dir, fn.SOLS_DIR, fn.ploidy_n_subdir(ploidy, n))
+            out_bbc = fn.RESULTS_BBC_UCN(out_dir, ploidy, n)
+            out_seg = fn.RESULTS_SEG_UCN(out_dir, ploidy, n)
+            sol_dir = fn.PLOIDY_N_SUBDIR(os.path.join(out_dir, fn.SOLS_DIR), ploidy, n)
             if (
                 not args["force"]
                 and os.path.exists(out_bbc)
@@ -185,7 +185,7 @@ def run(args=None):
                 )
 
             pid = args["patient_id"] or "panel"
-            nplot_dir = os.path.join(plot_dir, fn.ploidy_n_subdir(ploidy, n))
+            nplot_dir = fn.PLOIDY_N_SUBDIR(plot_dir, ploidy, n)
             run_plot_cn(
                 args,
                 out_bbc,
@@ -206,7 +206,7 @@ def run(args=None):
                 title=f"{ploidy} n={n}",
                 solve_mode=solve_mode,
                 sample_names=fcn_data["sample_ids"],
-                out_name=fn.pool_pdf(pid, ploidy, n),
+                out_name=fn.POOL_CNP_PDF(pid, ploidy, n),
             )
 
     if obj_dfs:
@@ -233,28 +233,26 @@ def run(args=None):
     # Write chosen per-ploidy
     for ploidy, n in chosen_n.items():
         shutil.copy2(
-            os.path.join(out_dir, fn.results_bbc_ucn(ploidy, n)),
-            os.path.join(out_dir, fn.chosen_bbc_ucn(ploidy)),
+            fn.RESULTS_BBC_UCN(out_dir, ploidy, n),
+            fn.CHOSEN_BBC_UCN(out_dir, ploidy),
         )
         shutil.copy2(
-            os.path.join(out_dir, fn.results_seg_ucn(ploidy, n)),
-            os.path.join(out_dir, fn.chosen_seg_ucn(ploidy)),
+            fn.RESULTS_SEG_UCN(out_dir, ploidy, n),
+            fn.CHOSEN_SEG_UCN(out_dir, ploidy),
         )
-        logging.info(
-            f"chosen {ploidy} n={n}: {os.path.join(out_dir, fn.chosen_bbc_ucn(ploidy))}"
-        )
+        logging.info(f"chosen {ploidy} n={n}: {fn.CHOSEN_BBC_UCN(out_dir, ploidy)}")
 
     # Write best (across ploidies)
     shutil.copy2(
-        os.path.join(out_dir, fn.chosen_bbc_ucn(best_ploidy)),
+        fn.CHOSEN_BBC_UCN(out_dir, best_ploidy),
         os.path.join(out_dir, fn.BEST_BBC_UCN),
     )
     shutil.copy2(
-        os.path.join(out_dir, fn.chosen_seg_ucn(best_ploidy)),
+        fn.CHOSEN_SEG_UCN(out_dir, best_ploidy),
         os.path.join(out_dir, fn.BEST_SEG_UCN),
     )
     logging.info(f"model-selected: {best_ploidy} n={best_n}")
-    _log_done("compute-cn", out_file=os.path.join(out_dir, fn.RUNTIME_LOG))
+    _log_done("compute-cn")
 
 
 def solve(
