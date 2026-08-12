@@ -387,7 +387,7 @@ def evaluate_pool_solutions(result_dir, snv_df, gamma=0.05):
         if not m:
             continue
         pparam, pidx = m.group(1), m.group(2)
-        sol_subdir = os.path.join(sols_dir, fn.ploidy_n_subdir(ploidy, n_clones))
+        sol_subdir = fn.PLOIDY_N_SUBDIR(sols_dir, ploidy, n_clones)
         sol_file = os.path.join(
             sol_subdir, f"cd_sol{pparam}_pool{pidx}.tsv"
         )  # legacy format

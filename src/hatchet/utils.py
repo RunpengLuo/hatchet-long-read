@@ -74,7 +74,7 @@ class _RSSSampler(threading.Thread):
 
 
 def log_step_start():
-    """Start a profiling step; returns finish(name, out_file=None) that logs wall/cpu/peak_rss.
+    """Start a profiling step; returns finish(name) that logs wall/cpu/peak_rss.
 
     peak_rss is the concurrent peak of the whole process tree (workers, CBC
     subprocess) sampled via psutil, falling back to rusage max(self, child).
@@ -89,7 +89,7 @@ def log_step_start():
         sampler = _RSSSampler()
         sampler.start()
 
-    def finish(name, out_file=None):
+    def finish(name):
         wall = time.perf_counter() - t_wall
         cpu = time.process_time() - t_cpu
         ru_self = resource.getrusage(resource.RUSAGE_SELF)
@@ -115,9 +115,6 @@ def log_step_start():
             ("peak_rss_largest_child_gb", f"{peak_child:.3f}"),
         ]
         logging.info(f"{name} runtime:\n" + "\n".join(f"  {k}: {v}" for k, v in rows))
-        if out_file is not None:
-            with open(out_file, "w") as fh:
-                fh.write("".join(f"{k}\t{v}\n" for k, v in rows))
 
     return finish
 
@@ -144,7 +141,7 @@ def add_file_logging(out_dir: str, command: str = "hatchet") -> None:
     level = (
         logging.root.level if logging.root.level != logging.WARNING else logging.INFO
     )
-    fh = logging.FileHandler(os.path.join(out_dir, fn.command_log(command)), mode="w")
+    fh = logging.FileHandler(fn.COMMAND_LOG(out_dir, command), mode="w")
     fh.setLevel(level)
     fh.setFormatter(
         logging.Formatter(

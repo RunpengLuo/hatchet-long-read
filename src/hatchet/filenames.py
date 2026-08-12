@@ -11,11 +11,17 @@ Notes:
     current producer and is intentionally not represented here.
 """
 
+import os
+
 # =============================================================================
 # Subdirectories
 # =============================================================================
-LABELS_DIR = "labels"  # cluster-bins per-K BBC/SEG
-PLOTS_DIR = "plots"  # cluster-bins + compute-cn plots
+LABELS_DIR = lambda out_dir: os.path.join(
+    out_dir, "labels"
+)  # cluster-bins per-K BBC/SEG
+PLOTS_DIR = lambda out_dir: os.path.join(
+    out_dir, "plots"
+)  # cluster-bins + compute-cn plots
 TRACES_DIR = "traces"  # cluster-bins EM traces
 INIT_DIAG_DIR = "init_diag"  # cluster-bins init diagnostics
 SOLS_DIR = "sols"  # compute-cn per-(ploidy, n) solutions
@@ -36,48 +42,44 @@ BB_T_ALLELE_NPZ = "bb.Tallele.npz"
 # =============================================================================
 # cluster-bins outputs (bbc_dir)
 # =============================================================================
-BULK_BBC = "bulk.bbc"
-BULK_SEG = "bulk.seg"
+# Top-level BBC/SEG: full path resolved here; BBC extension picked by wide_format
+# (wide_format is unused for SEG, kept for a uniform call signature).
+BULK_BBC = lambda out_dir, wide_format: os.path.join(
+    out_dir, "bulk.bbc.tsv.gz" if wide_format else "bulk.bbc"
+)
+BULK_SEG = lambda out_dir, wide_format: os.path.join(out_dir, "bulk.seg")
 BB_PHASED_TSV_GZ = "bb.phased.tsv.gz"
 MODEL_SCORES_TSV = "model_scores.tsv"
 MODEL_SCORES_PDF = "model_scores.pdf"
 ELBO_TRACES_PDF = "elbo_traces.pdf"
 HMM_INIT_PDF = "hmm_init.pdf"
 
-
-def bulk_k_bbc(k) -> str:
-    """Per-K clustered BBC under labels/."""
-    return f"bulk{k}.bbc"
-
-
-def bulk_k_seg(k) -> str:
-    """Per-K segment SEG under labels/."""
-    return f"bulk{k}.seg"
-
-
-def bulk_k_phased(k) -> str:
-    """Per-K phased bins under labels/."""
-    return f"bulk{k}.bb.phased.tsv.gz"
+# wide-format BBC per-sample FORMAT keys in on-disk order and their dtypes.
+WIDE_BBC_FIELDS = ["RD", "COV", "BAF", "ALPHA", "BETA"]
+FORMAT_DTYPE = {
+    "RD": "float32",
+    "COV": "float32",
+    "BAF": "float32",
+    "ALPHA": "int32",
+    "BETA": "int32",
+}
 
 
-def k_em_trace(k) -> str:
-    """Per-K EM parameter trace under traces/."""
-    return f"K{k}.em_trace.npz"
-
-
-def k_plot(k) -> str:
-    """Per-K 1D/2D plot under plots/."""
-    return f"K{k}.pdf"
-
-
-def bulk_k_plot(k) -> str:
-    """Best-K plot copied to the top-level bbc_dir."""
-    return f"bulk.K{k}.pdf"
-
-
-def init_pdf(name) -> str:
-    """Per-init-method HMM init diagnostic under init_diag/."""
-    return f"{name}_init.pdf"
+# Per-K BBC/SEG under labels/: full path resolved here; BBC extension picked by
+# wide_format (unused for SEG, kept for a uniform call signature).
+BULK_BBC_k = lambda out_dir, wide_format, k: os.path.join(
+    LABELS_DIR(out_dir), f"bulk{k}.bbc.tsv.gz" if wide_format else f"bulk{k}.bbc"
+)
+BULK_SEG_k = lambda out_dir, wide_format, k: os.path.join(
+    LABELS_DIR(out_dir), f"bulk{k}.seg"
+)
+BULK_K_PHASED = lambda out_dir, k: os.path.join(
+    LABELS_DIR(out_dir), f"bulk{k}.bb.phased.tsv.gz"
+)
+K_EM_TRACE = lambda out_dir, k: os.path.join(out_dir, TRACES_DIR, f"K{k}.em_trace.npz")
+K_PLOT = lambda out_dir, k: os.path.join(PLOTS_DIR(out_dir), f"K{k}.pdf")
+BULK_K_PLOT = lambda out_dir, k: os.path.join(out_dir, f"bulk.K{k}.pdf")
+INIT_PDF = lambda plot_dir, name: os.path.join(plot_dir, f"{name}_init.pdf")
 
 
 # =============================================================================
@@ -95,49 +97,36 @@ OBJECTIVES_TSV = "objectives.tsv"
 U0_SEEDS_TSV = "u0_seeds.tsv"
 
 
-def solver_input(ploidy) -> str:
-    """Per-ploidy solver input under sols/."""
-    return f"solver_input.{ploidy}.tsv"
-
-
-def results_bbc_ucn(ploidy, n) -> str:
-    """Per-(ploidy, n) bin-level UCN."""
-    return f"results.{ploidy}.n{n}.bbc.ucn.tsv"
-
-
-def results_seg_ucn(ploidy, n) -> str:
-    """Per-(ploidy, n) segment-level UCN."""
-    return f"results.{ploidy}.n{n}.seg.ucn.tsv"
-
-
-def chosen_bbc_ucn(ploidy) -> str:
-    """Model-selected bin-level UCN for one ploidy."""
-    return f"chosen.{ploidy}.bbc.ucn"
-
-
-def chosen_seg_ucn(ploidy) -> str:
-    """Model-selected segment-level UCN for one ploidy."""
-    return f"chosen.{ploidy}.seg.ucn"
-
-
-def ploidy_n_subdir(ploidy, n) -> str:
-    """Per-(ploidy, n) leaf directory name (under sols/ and plots/)."""
-    return f"{ploidy}_n{n}"
-
-
-def solution_stem(solve_mode, sol_id) -> str:
-    """Per-solution filename stem (extension appended by the caller: .tsv/.nwk/.json)."""
-    return f"{solve_mode}_{sol_id}"
-
-
-def solution_tsv(solve_mode, sol_id) -> str:
-    """Per-solution detail TSV under a sols/<ploidy>_n<n>/ directory."""
-    return solution_stem(solve_mode, sol_id) + ".tsv"
-
-
-def pool_pdf(pid, ploidy, n) -> str:
-    """Pool CNP panel for one (ploidy, n)."""
-    return f"{pid}.pool_{ploidy}_n{n}.pdf"
+SOLVER_INPUT = lambda out_dir, ploidy: os.path.join(
+    out_dir, SOLS_DIR, f"solver_input.{ploidy}.tsv"
+)
+RESULTS_BBC_UCN = lambda out_dir, ploidy, n: os.path.join(
+    out_dir, f"results.{ploidy}.n{n}.bbc.ucn.tsv"
+)
+RESULTS_SEG_UCN = lambda out_dir, ploidy, n: os.path.join(
+    out_dir, f"results.{ploidy}.n{n}.seg.ucn.tsv"
+)
+CHOSEN_BBC_UCN = lambda out_dir, ploidy: os.path.join(
+    out_dir, f"chosen.{ploidy}.bbc.ucn"
+)
+CHOSEN_SEG_UCN = lambda out_dir, ploidy: os.path.join(
+    out_dir, f"chosen.{ploidy}.seg.ucn"
+)
+# parent_dir is the sols/ or plots/ dir this leaf subdir lives under.
+PLOIDY_N_SUBDIR = lambda parent_dir, ploidy, n: os.path.join(
+    parent_dir, f"{ploidy}_n{n}"
+)
+SOLUTION_TSV = lambda sol_dir, solve_mode, sol_id: os.path.join(
+    sol_dir, f"{solve_mode}_{sol_id}.tsv"
+)
+SOLUTION_NWK = lambda sol_dir, solve_mode, sol_id: os.path.join(
+    sol_dir, f"{solve_mode}_{sol_id}.nwk"
+)
+SOLUTION_JSON = lambda sol_dir, solve_mode, sol_id: os.path.join(
+    sol_dir, f"{solve_mode}_{sol_id}.json"
+)
+# Per-(ploidy, n) pool CNP panel; out_name only (joined with its plot dir by the caller).
+POOL_CNP_PDF = lambda pid, ploidy, n: f"{pid}.pool_{ploidy}_n{n}.pdf"
 
 
 # =============================================================================
@@ -148,17 +137,10 @@ POOL_EVAL_TSV = "pool_eval.tsv"
 EVAL_SUMMARY_TSV = "eval_summary.tsv"
 
 
-def vaf_1d_pdf(sample) -> str:
-    """Per-sample VAF 1D plot."""
-    return f"{sample}.vaf_1d.pdf"
+VAF_1D_PDF = lambda out_dir, sample: os.path.join(out_dir, f"{sample}.vaf_1d.pdf")
 
 
 # =============================================================================
 # logs
 # =============================================================================
-RUNTIME_LOG = "runtime.log"
-
-
-def command_log(command) -> str:
-    """Per-command file log written into the command's output directory."""
-    return f"{command}.log"
+COMMAND_LOG = lambda out_dir, command: os.path.join(out_dir, f"{command}.log")

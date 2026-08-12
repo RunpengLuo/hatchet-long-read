@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 import numpy as np
 
@@ -87,7 +86,7 @@ def plot_init_sampling_probs(
         bar_width = (bin_edges_1d[1] - bin_edges_1d[0]) * 0.9
         rdr_ylim_1d = float(np.nanpercentile(X_rdrs, 99)) * 1.1
 
-    out = os.path.join(plot_dir, fn.init_pdf(name))
+    out = fn.INIT_PDF(plot_dir, name)
     pdf_pages = PdfPages(out)
     prev_summed = None
 

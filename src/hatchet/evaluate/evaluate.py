@@ -151,7 +151,7 @@ def run(args=None):
                     states = [(int(a), int(b)) for a, b in a_b]
                     _, _, _, exp_baf = compute_expected_baf_fcn(states, clone_props)
                     segs_plot.at[idx, "predicted_VAF"] = exp_baf
-                out_plot = os.path.join(out_dir, fn.vaf_1d_pdf(sample))
+                out_plot = fn.VAF_1D_PDF(out_dir, sample)
                 plot_vaf_1d(sample_df, segs_plot, genome_axis, out_plot)
 
     if summary_rows:
