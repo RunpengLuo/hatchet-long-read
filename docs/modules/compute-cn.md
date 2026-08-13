@@ -3,7 +3,19 @@
 
 ## Input
 
-The BBC and SEG tables produced by `cluster-bins` (`--bbc`, `--seg`; e.g. `bbc/bulk.bbc` and `bbc/bulk.seg`), plus the reference `--genome_size` and `--region_bed`. See [reference.md#output](../reference.md#output) for the `bbc/` file layout.
+The BBC and SEG tables produced by `cluster-bins` (`--bbc`, `--seg`; e.g. `bbc/bulk.bbc` and `bbc/bulk.seg`), plus the reference `--genome_size` and `--region_bed`. See [cluster-bins Output](cluster-bins.md#output) for the `bbc/` file layout.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--bbc` | *(required)* | Input BBC table (e.g., `bbc/bulk.bbc`; with `--wide_format`, `bbc/bulk.bbc.tsv.gz`) |
+| `--seg` | *(required)* | Input SEG table (e.g., `bbc/bulk.seg`) |
+| `--wide_format` | False | EXPERIMENTAL: read wide-format BBC/SEG written by cluster-bins `--wide_format`, and write the `.ucn` outputs in the matching wide layout |
+| `--result_dir` | *(required)* | Output directory for computed CN results |
+| `--genome_size` | *(required)* | Reference chromosome sizes file |
+| `--region_bed` | *(required)* | Reference chromosome BED file |
+| `--patient_id` | `panel` | Output filename prefix for per-(ploidy, n) plots |
+| `--force` | False | Re-solve even if results already exist (default: skip existing) |
+| `--verbosity` | 0 | Verbose level: 0, 1, or 2 |
 
 ## Usage
 
@@ -36,7 +48,42 @@ usage: hatchet compute-cn [-h] --result_dir RESULT_DIR --bbc BBC --seg SEG
 
 ## Main parameters
 
-Here we describe the main parameters. See [reference.md#compute-cn](../reference.md#compute-cn) for the full parameter description.
+Here we describe the main parameters; the full deconvolution and optimization parameter table follows.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--mode` | `cd` | Solver mode: `cd`, `ilp`, or `both` |
+| `--solver` | `gurobi` | ILP solver backend: `gurobi` or `cbc` |
+| `--model_select` | `bic` | Clone-number/ploidy selection: `elbow` or `bic` |
+| `--timelimit` | None | ILP solver time limit in seconds |
+| `--obj_type` | `imf` | Fitting objective: `imf` (weighted L1) or `ci` (CI-violation hinge) |
+| `--fcn_ci_alpha` | 0.05 | Significance level for the FCN confidence interval (0.05 -> 95% CI) |
+| `--min_ci_margin` | 0.1 | Hard minimum CI half-width in FCN space |
+| `--minClone` | 2 | Minimum number of tumor clones |
+| `--maxClone` | 4 | Maximum number of tumor clones |
+| `--diploid` | False | Solve under diploid assumption |
+| `--tetraploid` | False | Solve under tetraploid/WGD assumption |
+| `--reg_term` | `DBOX_L1` | Regularizer: `RAW`, `MAXCN`, `DBOX_L1`, `DBOX_L0`, `DROOT_SUM`, or `DADJ_SUM` |
+| `--reg_steps` | 15 | Number of steps in the regularization path |
+| `--reg_bound` | 0.15 | Maximum penalty weight for the regularization path |
+| `--fix_cn_dip` | None | Fix diploid cluster CN states, e.g. `6:2|0;8:3|1` |
+| `--fix_cn_tet` | None | Fix tetraploid cluster CN states, e.g. `6:4|2` |
+| `--zero_cn_thres` | 0.005 | Clusters with weight ≥ this fraction of total cannot take a (0,0) CN state |
+| `--no_ampdel` | False | Disable the amp/del symmetry constraint |
+| `--num_cnstates` | -1 | Constrain the number of distinct CN states per clone (-1 = unconstrained) |
+| `-eD` / `--diploidcmax` | 8 | Max copy number for diploid mode (0 = inferred from scaled FCN) |
+| `-eT` / `--tetraploidcmax` | 12 | Max copy number for tetraploid mode (0 = inferred from scaled FCN) |
+| `--min_prop` | 0.01 | Minimum clone proportion |
+| `--purities` | None | Semicolon-separated `sample:purity` pairs; fixes normal-clone proportion to 1 − purity |
+| `--cd_niters` | 10 | CD: max outer iterations per seed |
+| `--cd_convergence_iters` | 2 | CD: consecutive convergence iterations required to stop |
+| `--cd_tol` | 0.001 | CD: stop when U-step objective changes less than this |
+| `--cd_nseeds` | 400 | CD: number of random restarts |
+| `--cd_njobs` | 8 | CD: number of parallel worker processes |
+| `--cd_seed` | 42 | CD: random seed for reproducibility |
+| `--u_init` | `dirichlet` | U initialization: `dirichlet` or `bubble` |
+| `--u_dir_alpha` | *(solver default)* | Dirichlet alpha for U initialization; lower = sparser |
+| `--solver_threads` | *(solver default)* | Max threads per solver call (Gurobi); set to 1 for parallel CD workers |
 
 ### Fractional copy-number scaling factor estimation
 
@@ -87,4 +134,67 @@ For cluster $m$ (weight $w_m$), tumor clones $n = 1,\dots,N$ (clone $0$ = normal
 
 ## Output
 
-Copy-number solutions written to `--result_dir`: the model-selected `best.bbc.ucn` / `best.seg.ucn`, per-(ploidy, n) solutions, `gammas.tsv`, `summary.tsv`, and plots under `plots/`. See [reference.md#output](../reference.md#output) for the full directory tree.
+Copy-number solutions written to `--result_dir`: the model-selected `best.bbc.ucn` / `best.seg.ucn`, per-(ploidy, n) solutions, `gammas.tsv`, `summary.tsv`, and plots under `plots/`.
+
+```
+<result_dir>/                             # compute-cn output (--result_dir)
+  best.bbc.ucn                            # model-selected CN solution (per-bin)
+  best.seg.ucn                            # model-selected CN solution (per-segment)
+  chosen.<ploidy>.bbc.ucn                 # best-n solution per ploidy (per-bin)
+  chosen.<ploidy>.seg.ucn                 # best-n solution per ploidy (per-segment)
+  results.<ploidy>.n*.bbc.ucn.tsv         # every (ploidy, n) solution (per-bin)
+  results.<ploidy>.n*.seg.ucn.tsv         # every (ploidy, n) solution (per-segment)
+  gammas.tsv                              # RDR scaling factors per sample and ploidy
+  summary.tsv                             # fit/regularization metrics per solution
+  sols/                                   # solver inputs + full pool of candidate solutions
+    solver_input.<ploidy>.tsv             # per-(cluster, sample) FCN + CI + weights fed to the solver
+    objectives.tsv                        # per-restart objectives: ploidy, n, sol_id, restart_id, imf_obj, reg_obj
+    <ploidy>_n*/                          # one dir per (ploidy, n)
+      <mode>_<sol_id>.tsv                 # one per candidate solution on the regularization path
+      u0_seeds.tsv                        # U-initialization seeds for coordinate descent
+  plots/
+    scaling_2d.pdf                        # RDR-vs-BAF scaling diagnostic
+    model_selection.pdf                   # Pareto front + elbow/BIC selection page
+    <ploidy>_n*/                          # per-(ploidy, n) plots
+      <patient_id>.<ploidy>_n*.1D.pdf        # 1D genome-wide CN profile (selected solution)
+      <patient_id>.<ploidy>_n*.1D.FCN_AB.pdf # allele-specific 1D profile
+      <patient_id>.<ploidy>_n*.2D.pdf        # RDR-vs-BAF 2D scatter
+      <patient_id>.pool_<ploidy>_n*.pdf      # pool panel of all Pareto (alternative) solutions
+  compute-cn.log                          # run log (ends with the runtime/peak-RSS table)
+```
+
+The `*.bbc.ucn` files (`best.bbc.ucn`, `chosen.<ploidy>.bbc.ucn`,
+`results.<ploidy>.n*.bbc.ucn.tsv`) contain every `bulk.bbc` column with additional clone proportions `u_<clone>` and A/B-allele copy numbers `cn_<clone>`. The `*.seg.ucn` files are segment-level tables that interpolates from `*.bbc.ucn` files with respect to `region.bed` boundaries.
+
+| Added column | Description |
+|---|---|
+| `cn_normal` | Normal-clone allele-specific copy-number state `a\|b` (always `1\|1`) |
+| `u_normal` | Normal-clone proportion in `SAMPLE` (1 - purity) |
+| `cn_clone<i>` | Tumor clone i allele-specific integer CN state `a\|b` (major\|minor) for the bin's cluster |
+| `u_clone<i>` | Proportion of tumor clone i in `SAMPLE` |
+
+With `--wide_format`, the `.ucn` files use the same VCF-like layout with additional sample-independent `cn_<clone>` columns and sample-specific fields `u_<clone>` inside `FORMAT` field.
+
+### Alternative solutions
+
+For each `(ploidy, n)`, `compute-cn` explores a regularization path and keeps the **full pool** of
+candidate solutions, not only the model-selected one. Each candidate is written under
+`sols/<ploidy>_n<n>/` as `<mode>_<sol_id>.tsv` (`<mode>` is `cd`/`ilp`; `<sol_id>` encodes the
+regularization weight, e.g. `cd_p0.0500_s0.tsv`). The pool is visualized as a single panel
+`plots/<ploidy>_n<n>/<patient_id>.pool_<ploidy>_n<n>.pdf` (one row per Pareto solution, the selected
+one marked `*`); `sols/objectives.tsv` records each solution's fit/regularization objectives and
+`plots/model_selection.pdf` shows the Pareto front with the elbow/BIC pick.
+
+Each candidate solution TSV has one row per `(cluster, sample)`:
+
+| Column | Description |
+|---|---|
+| `CLUSTER`, `SAMPLE`, `#BINS` | Cluster ID, tumor sample, and number of bins in the cluster |
+| `f_a`, `f_b` | Observed fractional copy number of the A / B allele (`RD * gamma`, split by BAF) |
+| `exp_f_a`, `exp_f_b` | Expected fractional CN of the A / B allele under this solution (`sum_clone u * cn`) |
+| `fa_lo`, `fa_hi`, `fb_lo`, `fb_hi` | Confidence-interval bounds on `f_a` / `f_b` |
+| `cn_normal`, `u_normal`, `cn_clone<i>`, `u_clone<i>` | Per-clone CN state `a\|b` and proportion (interleaved) |
+| `ci_accepted` | Whether `exp_f_a` / `exp_f_b` fall within the CI bounds |
+
+To re-render or customize any single solution, pass its `results.<ploidy>.n*.bbc.ucn.tsv` (or a
+`--solfile`) to the standalone `hatchet plot-cn`.

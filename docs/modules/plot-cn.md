@@ -3,7 +3,22 @@
 
 ## Input
 
-A per-bin BBC UCN table (`--bbc`) and per-cluster SEG UCN table (`--seg`) from `compute-cn`, the `--gamma_file` (`gammas.tsv`), and the reference `--genome_size` / `--region_bed`; `--ploidy` selects the gamma column. See [reference.md#output](../reference.md#output) for the `results/` UCN file layout.
+A per-bin BBC UCN table (`--bbc`) and per-segment SEG UCN table (`--seg`) from `compute-cn`, the `--gamma_file` (`gammas.tsv`), and the reference `--genome_size` / `--region_bed`; `--ploidy` selects the gamma column. See [compute-cn Output](compute-cn.md#output) for the `results/` UCN file layout.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--bbc` | *(required)* | BBC UCN table (e.g., `results/best.bbc.ucn`) |
+| `--seg` | *(required)* | SEG UCN table (e.g., `results/best.seg.ucn`) |
+| `--genome_size` | *(required)* | Reference chromosome sizes file |
+| `--region_bed` | *(required)* | Reference chromosome BED file |
+| `-g` / `--gamma_file` | *(required)* | Gamma scaling-factor file from `compute-cn` |
+| `--ploidy` | *(required)* | `diploid` or `tetraploid` (selects the gamma column) |
+| `-O` / `--plot_dir` | *(required)* | Output directory for figures |
+| `-s` / `--solfile` | None | Optional solution file to override CN states in the BBC table |
+| `--img_type` | `png` | File format: `pdf`, `png`, or `svg` |
+| `--dpi` | 500 | Image resolution |
+| `--transparent` | False | Transparent background |
+| `--patient_id` | *(none)* | Output filename prefix for combined plots |
 
 ## Usage
 
@@ -36,7 +51,15 @@ usage: hatchet plot-cn [-h] --bbc BBC --seg SEG --genome_size GENOME_SIZE
 
 `--tail_alpha`, `--center_alpha`, and `--onetail_area` control the transparency gradient that conveys per-CN-state confidence in the profile; a larger `--onetail_area` widens the low-confidence tails.
 
-See [reference.md#plot-cn](../reference.md#plot-cn) for the full parameter table.
+Rendering parameters:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--keep_gap` | False | Keep gap regions in the plot |
+| `--tail_alpha` | 0.8 | Transparency of the tail region per CN state |
+| `--center_alpha` | 1.0 | Transparency of the center region per CN state |
+| `--onetail_area` | 0.025 | Per-tail area per CN state used to set transparency |
+| `--maxlim_fcn` | 30 | Figure axis limit for FCN |
 
 ## Output
 

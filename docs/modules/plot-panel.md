@@ -3,7 +3,17 @@
 
 ## Input
 
-A panel TSV (`--panel_file`) listing the per-sample BBC UCN solution paths, plus the reference `--genome_size` / `--region_bed`. See [reference.md#output](../reference.md#output) for the `results/` UCN file layout.
+A panel TSV (`--panel_file`) listing the per-sample BBC UCN solution paths, plus the reference `--genome_size` / `--region_bed`. See [compute-cn Output](compute-cn.md#output) for the `results/` UCN file layout.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--panel_file` | *(required)* | Panel TSV listing per-sample BBC UCN paths |
+| `--genome_size` | *(required)* | Reference chromosome sizes file |
+| `--region_bed` | *(required)* | Reference chromosome BED file |
+| `-o` / `--out_file` | *(required)* | Output figure path (e.g., `panel.svg`) |
+| `--dpi` | 300 | Image resolution |
+| `--transparent` | False | Transparent background |
+| `--title` | `panel` | Plot title |
 
 ## Usage
 
@@ -36,7 +46,18 @@ usage: hatchet plot-panel [-h] --panel_file PANEL_FILE
 
 `--plot_1d2d` also runs `plot-cn` per panel row (needs a `PATH_TO_BBC` column in the panel file); `--plot_summary` emits per-sample purity and ploidy barplots.
 
-See [reference.md#plot-panel](../reference.md#plot-panel) for the full parameter table.
+Panel display parameters:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--width` | 20 | Panel image width |
+| `--height` | 1 | Panel image height per row |
+| `--show_clone_name` | False | Draw clone names on the CN profile |
+| `--show_prop` | False | Draw clone proportions on the CN profile |
+| `--show_ploidy` | False | Draw per-clone ploidy on the CN profile |
+| `--min_prop` | 0.01 | Hide tumor clones below this proportion from the panel |
+| `--plot_1d2d` | False | Also run `plot-cn` per panel row (requires a `PATH_TO_BBC` column) |
+| `--plot_summary` | False | Emit per-sample purity + ploidy barplots (one page per metric per `cancer_type`) |
 
 ## Output
 

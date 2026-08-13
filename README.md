@@ -76,7 +76,7 @@ export GRB_LICENSE_FILE="/path/to/gurobi.lic"
 
 
 ## Usage
-HATCHet (v3) inputs genomic bin by sample read-depth ratio (RDR), phased B-allele counts, and total-allele count matrices preprocessed by [Universal-Genotyping-Pipeline](https://github.com/raphael-group/Universal-Genotyping-Pipeline), see [tutorial](https://github.com/raphael-group/Universal-Genotyping-Pipeline/docs/bulk_genotyping.md) for preprocessing details and [Input](./docs/reference.md#input) for input data formats.
+HATCHet (v3) inputs genomic bin by sample read-depth ratio (RDR), phased B-allele counts, and total-allele count matrices preprocessed by [Universal-Genotyping-Pipeline](https://github.com/raphael-group/Universal-Genotyping-Pipeline), see [tutorial](https://github.com/raphael-group/Universal-Genotyping-Pipeline/docs/bulk_genotyping.md) for preprocessing details and [Input](./docs/modules/cluster-bins.md#input) for input data formats.
 
 ### Running Snakemake Pipeline
 We include a [Snakemake](https://snakemake.readthedocs.io/) pipeline (version 9 or newer) that runs the full HATCHet (v3) pipeline for a single patient. First, copy and modify the Snakemake configuration file from [config/snakemake-hatchet.yaml](config/snakemake-hatchet.yaml):
@@ -118,5 +118,4 @@ snakemake -p --cores <ncores> -s ./Snakefile \
 
 | Document | Description |
 |----------|-------------|
-| [docs/reference.md](docs/reference.md) | Reference manual |
 | [CHANGELOG.md](CHANGELOG.md) | Change logs |
