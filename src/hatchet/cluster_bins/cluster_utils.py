@@ -175,6 +175,7 @@ def estimate_rdr_vars(
     global_var = np.maximum(raw_global_var, min_var)  # (M,)
     return global_var[None, :]  # (1, M)
 
+
 def estimate_ig_beta(ig_alpha, vars):
     return vars * (ig_alpha + 1)
 

@@ -368,7 +368,7 @@ def evaluate_pool_solutions(result_dir, snv_df, gamma=0.05):
     Returns a DataFrame with one row per pool solution: ploidy, n_clones, tag,
     IMF/REG objectives (from summary.tsv), and VAF evaluation metrics.
     """
-    summary_path = os.path.join(result_dir, fn.SUMMARY_TSV)
+    summary_path = fn.SUMMARY_TSV(result_dir)
     bbc_path = os.path.join(result_dir, "bulk.good.bbc")  # legacy: no current producer
     sols_dir = os.path.join(result_dir, fn.SOLS_DIR)
 

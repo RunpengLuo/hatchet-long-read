@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.special import betaln, gammaln
 
 from hatchet import filenames as fn
+from hatchet.io_utils import read_bbc_ucn
 
 
 def _ll_gauss(obs_rdrs, exp_rdr, rdr_var, floor_var=1e-12):
@@ -43,7 +44,9 @@ def _ll_betabinom(b_counts, total_counts, p, tau, eps=1e-9):
     return float(np.sum(ll))
 
 
-def _compute_loglik_from_ucn(ucn_file: str, n: int, gammas: dict, segs: pd.DataFrame):
+def _compute_loglik_from_ucn(
+    ucn_file: str, n: int, gammas: dict, clusters, samples, rdr_var_df, baf_tau_df
+):
     """Compute conditioned log-likelihood for a single (ploidy, n) solution.
 
     Uses fixed RDR variance and BAF dispersion from the HMM (seg file) rather
@@ -56,21 +59,26 @@ def _compute_loglik_from_ucn(ucn_file: str, n: int, gammas: dict, segs: pd.DataF
         ucn_file: path to the results.{ploidy}.n{n}.bbc.ucn.tsv file.
         n:        total number of clones (including normal).
         gammas:   dict {sample_id: gamma} for RDR-to-FCN scaling.
-        segs:     DataFrame with columns CLUSTER, SAMPLE, RD-var, BAF-tau.
+        clusters: cluster ids indexing rdr_var_df / baf_tau_df rows.
+        samples:  sample names indexing rdr_var_df / baf_tau_df columns.
+        rdr_var_df: (K, M) per-(cluster, sample) HMM RDR variance DataFrame.
+        baf_tau_df: (K, M) per-(cluster, sample) HMM BAF dispersion tau DataFrame.
 
     Returns:
         (ll, n_obs, n_clusters, n_samples): log-likelihood, observation count,
         number of clusters, and number of samples.
     """
-    bbcs = pd.read_table(ucn_file, sep="\t")
+    bbcs = read_bbc_ucn(ucn_file)
 
     # Build lookup for HMM-estimated variance/dispersion
-    seg_lookup = {}
-    for _, row in segs.iterrows():
-        seg_lookup[(row["CLUSTER"], row["SAMPLE"])] = (
-            float(row["RD-var"]),
-            float(row["BAF-tau"]),
+    seg_lookup = {
+        (cluster, sample): (
+            float(rdr_var_df.loc[cluster, sample]),
+            float(baf_tau_df.loc[cluster, sample]),
         )
+        for cluster in clusters
+        for sample in samples
+    }
 
     ll = 0.0
     n_obs = 0
@@ -130,7 +138,10 @@ def model_selection_ploidy(
     chosen_sols: dict,
     out_dir: str,
     scaling: dict,
-    segs: pd.DataFrame,
+    clusters,
+    samples,
+    rdr_var_df,
+    baf_tau_df,
     method="elbow",
 ):
     """Select best n and ploidy across ploidies.
@@ -139,7 +150,10 @@ def model_selection_ploidy(
         chosen_sols: {ploidy: {n: best_sol_dict}} from the solve loop.
         out_dir: output directory (for reading UCN files).
         scaling: dict from get_scaling_factor with per-ploidy gammas.
-        segs: cluster-level SEG DataFrame.
+        clusters: cluster ids indexing rdr_var_df / baf_tau_df rows.
+        samples: sample names indexing rdr_var_df / baf_tau_df columns.
+        rdr_var_df: (K, M) per-(cluster, sample) HMM RDR variance DataFrame.
+        baf_tau_df: (K, M) per-(cluster, sample) HMM BAF dispersion tau DataFrame.
         method: "elbow" or "bic".
 
     Returns:
@@ -151,7 +165,7 @@ def model_selection_ploidy(
         ns_sorted = sorted(chosen_sols[ploidy].keys())
         first_ucn = fn.RESULTS_BBC_UCN(out_dir, ploidy, ns_sorted[0])
         ll_n1, nobs_n1, n_clusters, n_samples = _compute_loglik_from_ucn(
-            first_ucn, 1, gammas, segs
+            first_ucn, 1, gammas, clusters, samples, rdr_var_df, baf_tau_df
         )
         logging.info(f"{ploidy}: n=1 (baseline), loglik={ll_n1:.4f}")
 
@@ -160,7 +174,7 @@ def model_selection_ploidy(
         for clone_n in ns_sorted:
             ucn_file = fn.RESULTS_BBC_UCN(out_dir, ploidy, clone_n)
             ll, nobs, n_clusters, n_samples = _compute_loglik_from_ucn(
-                ucn_file, clone_n, gammas, segs
+                ucn_file, clone_n, gammas, clusters, samples, rdr_var_df, baf_tau_df
             )
             lls.append(ll)
             logging.info(f"{ploidy}: n={clone_n}, loglik={ll:.4f}")

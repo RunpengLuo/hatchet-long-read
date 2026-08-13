@@ -2,6 +2,7 @@ import os
 import logging
 import shutil
 
+import numpy as np
 import pandas as pd
 
 from hatchet.utils import (
@@ -18,7 +19,6 @@ from hatchet.compute_cn.compute_cn_utils import (
     store_solve_input,
     store_instance_tofile,
     update_objectives_tsv,
-    build_data,
     compute_fractional_cn,
     load_pool_from_disk,
     segmentation,
@@ -59,36 +59,104 @@ def run(args=None):
     os.makedirs(plot_dir, exist_ok=True)
     os.makedirs(sols_dir, exist_ok=True)
 
-    bbcs = read_bbc_file(bbc_file, is_wide_format=args["wide_format"])
-    segs = read_seg_file(seg_file)
-
-    samples = sorted(bbcs["SAMPLE"].unique().tolist())
+    bins, samples, rd_mat, cov_mat, baf_mat, alpha_mat, beta_mat = read_bbc_file(
+        bbc_file, is_wide_format=args["wide_format"]
+    )
+    (
+        clusters,
+        seg_samples,
+        seg_rdr,
+        seg_baf,
+        seg_rdr_se,
+        seg_baf_se,
+        seg_rdr_var,
+        seg_baf_tau,
+        seg_nbins,
+        weights,
+        is_balanced,
+        is_filtered,
+    ) = read_seg_file(seg_file)
+    assert seg_samples == samples, "BBC and SEG sample order mismatch"
 
     # Remove clusters marked as filtered by cluster-bins
-    filtered_ids = segs.loc[segs["is_filtered"], "CLUSTER"].unique().tolist()
-    if filtered_ids:
+    if is_filtered.any():
+        filtered_ids = [c for c, f in zip(clusters, is_filtered) if f]
         logging.info(f"Excluding filtered clusters from seg: {filtered_ids}")
-        segs = segs[~segs["is_filtered"]].reset_index(drop=True)
-        bbcs = bbcs[~bbcs["CLUSTER"].isin(filtered_ids)].reset_index(drop=True)
+        keep_seg = ~is_filtered
+        clusters = [c for c, k in zip(clusters, keep_seg) if k]
+        (
+            seg_rdr,
+            seg_baf,
+            seg_rdr_se,
+            seg_baf_se,
+            seg_rdr_var,
+            seg_baf_tau,
+            seg_nbins,
+        ) = (
+            seg_rdr[keep_seg],
+            seg_baf[keep_seg],
+            seg_rdr_se[keep_seg],
+            seg_baf_se[keep_seg],
+            seg_rdr_var[keep_seg],
+            seg_baf_tau[keep_seg],
+            seg_nbins[keep_seg],
+        )
+        is_balanced = is_balanced[keep_seg]
+        # Renormalize length weights over the retained clusters.
+        w = weights[keep_seg]
+        weights = 100.0 * w / w.sum()
+        keep_bin = ~np.isin(bins["CLUSTER"].to_numpy(), filtered_ids)
+        bins = bins[keep_bin].reset_index(drop=True)
+        rd_mat, cov_mat, baf_mat, alpha_mat, beta_mat = (
+            rd_mat[keep_bin],
+            cov_mat[keep_bin],
+            baf_mat[keep_bin],
+            alpha_mat[keep_bin],
+            beta_mat[keep_bin],
+        )
 
     scaling, _balanced_clusters = get_scaling_factor(
         samples,
-        segs,
-        bbcs,
+        clusters,
+        bins,
+        rd_mat,
+        seg_rdr,
+        seg_baf,
+        seg_baf_se,
+        seg_rdr_var,
+        seg_nbins,
+        is_balanced,
         fix_cn_dip=args["fix_cn_dip"],
         fix_cn_tet=args["fix_cn_tet"],
         maxcn=args["diploidcmax"],
         maxcn_wgd=args["tetraploidcmax"],
     )
-    gamma_outfile = os.path.join(out_dir, fn.GAMMAS)
+    gamma_outfile = fn.GAMMA_FILE(out_dir)
     store_gammas(gamma_outfile, scaling, samples)
 
     plot_scaling_2d(
-        samples, bbcs, segs, scaling, os.path.join(plot_dir, fn.SCALING_2D_PDF)
+        samples,
+        clusters,
+        bins,
+        rd_mat,
+        baf_mat,
+        seg_rdr,
+        seg_baf,
+        scaling,
+        fn.SCALING_2D_PDF(plot_dir),
     )
 
     solve_mode = args["mode"]
-    input_data = build_data(bbcs, segs, segment=(solve_mode == "cnt_cd"))
+    input_data = {
+        "rdr": seg_rdr,
+        "baf": seg_baf,
+        "rdr_se": seg_rdr_se,
+        "baf_se": seg_baf_se,
+        "nbins": seg_nbins,
+        "weights": pd.Series(weights, index=clusters),
+        "cluster_ids": clusters,
+        "sample_ids": samples,
+    }
     minClone = args["minClone"]
     maxClone = args["maxClone"] + 1
 
@@ -149,7 +217,6 @@ def run(args=None):
                     clonals,
                     args,
                     ploidy,
-                    bbcs,
                     fcn_data,
                     purities,
                     sol_dir,
@@ -178,10 +245,17 @@ def run(args=None):
                     sol["cB"],
                     sol["u"],
                     fcn_data,
-                    bbcs=bbcs,
+                    bins=bins,
+                    samples=samples,
+                    rd_mat=rd_mat,
+                    cov_mat=cov_mat,
+                    baf_mat=baf_mat,
+                    alpha_mat=alpha_mat,
+                    beta_mat=beta_mat,
                     region_file=args["region_bed"],
                     bbc_out_file=bbc_out,
                     seg_out_file=seg_out,
+                    is_wide_format=args["wide_format"],
                 )
 
             pid = args["patient_id"] or "panel"
@@ -204,8 +278,6 @@ def run(args=None):
                 sel_df=sel_df,
                 segs=cn_segs,
                 title=f"{ploidy} n={n}",
-                solve_mode=solve_mode,
-                sample_names=fcn_data["sample_ids"],
                 out_name=fn.POOL_CNP_PDF(pid, ploidy, n),
             )
 
@@ -217,7 +289,7 @@ def run(args=None):
         if model_selection_df
         else pd.DataFrame()
     )
-    summary_path = os.path.join(out_dir, fn.SUMMARY_TSV)
+    summary_path = fn.SUMMARY_TSV(out_dir)
     summary_df.to_csv(summary_path, sep="\t", index=False)
     logging.info(f"wrote {summary_path} ({len(summary_df)} solutions)")
 
@@ -225,7 +297,10 @@ def run(args=None):
         chosen_sols,
         out_dir,
         scaling,
-        segs,
+        clusters,
+        samples,
+        seg_rdr_var,
+        seg_baf_tau,
         method=args["model_select"],
     )
     plot_pareto_curve(summary_df, plot_dir, args["reg_term"], elbow_fig)
@@ -245,11 +320,11 @@ def run(args=None):
     # Write best (across ploidies)
     shutil.copy2(
         fn.CHOSEN_BBC_UCN(out_dir, best_ploidy),
-        os.path.join(out_dir, fn.BEST_BBC_UCN),
+        fn.BEST_BBC_UCN(out_dir),
     )
     shutil.copy2(
         fn.CHOSEN_SEG_UCN(out_dir, best_ploidy),
-        os.path.join(out_dir, fn.BEST_SEG_UCN),
+        fn.BEST_SEG_UCN(out_dir),
     )
     logging.info(f"model-selected: {best_ploidy} n={best_n}")
     _log_done("compute-cn")
@@ -260,7 +335,6 @@ def solve(
     clonal: dict,
     args: dict,
     ploidy: str,
-    bbcs: pd.DataFrame,
     input_data: dict,
     purities: dict,
     sol_dir: str,
@@ -298,9 +372,7 @@ def solve(
 
     cd_instances = None
     pool_instances = {}
-    u0_tsv_path = (
-        os.path.join(sol_dir, fn.U0_SEEDS_TSV) if sol_dir is not None else None
-    )
+    u0_tsv_path = fn.U0_SEEDS_TSV(sol_dir) if sol_dir is not None else None
     cd_run_kwargs = dict(
         solver_type=solver_type,
         max_iters=args["cd_niters"],
@@ -339,7 +411,6 @@ def solve(
         fb_lo=input_data["fb_lo"],
         fb_hi=input_data["fb_hi"],
         nbins=nbins,
-        chr_boundaries=input_data.get("chr_boundaries"),
     )
     params = SolverParams(
         n=n,
@@ -352,29 +423,9 @@ def solve(
         zero_cn_thres=args["zero_cn_thres"],
         reg_name=reg_term if reg_term is not None else "RAW",
         obj_type=args["obj_type"],
-        eps_fit=args["eps_fit"],
     )
 
-    if solve_mode == "cnt_cd":
-        pool_instances, obj_df = run_coordinate_descent(
-            params=params,
-            inputs=inputs,
-            mode="cnt_cd",
-            solver_type=solver_type,
-            max_iters=args["cd_niters"],
-            max_convergence_iters=args["cd_convergence_iters"],
-            n_seed=args["cd_nseeds"],
-            j=args["cd_njobs"],
-            cd_tol=args["cd_tol"],
-            random_seed=args["cd_seed"],
-            timelimit=timelimit,
-            tree_file=args["tree_file"],
-            u_dir_alpha=args["u_dir_alpha"],
-            solver_threads=args["solver_threads"],
-            u0_tsv_path=u0_tsv_path,
-        )
-
-    elif solve_mode in ("cd", "both"):
+    if solve_mode in ("cd", "both"):
         cd_instances, obj_df = run_coordinate_descent(
             params=params,
             inputs=inputs,

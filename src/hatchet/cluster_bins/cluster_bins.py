@@ -12,7 +12,12 @@ from hatchet.utils import (
     normalize_args,
     setup_logging,
 )
-from hatchet.io_utils import read_genome_sizes, read_sample_file, write_bbc_file
+from hatchet.io_utils import (
+    read_genome_sizes,
+    read_sample_file,
+    write_bbc_file,
+    write_seg_file,
+)
 from hatchet import filenames as fn
 from hatchet.cluster_bins.cluster_utils import (
     compute_baf_se,
@@ -73,7 +78,7 @@ def run(args=None):
     DEBUG = logging.getLogger().isEnabledFor(logging.DEBUG)
     logging.info("cluster bins")
     _log_done = log_step_start()
-    
+
     # inputs
     bb_dir = args["bb_dir"]
     bb_file = os.path.join(bb_dir, fn.BB_TSV_GZ)
@@ -542,11 +547,11 @@ def run(args=None):
             tumor_samples,
             is_wide_format=wide_format,
         )
-        k_segs.to_csv(
+        write_seg_file(
             fn.BULK_SEG_k(out_dir, wide_format, K),
-            sep="\t",
-            header=True,
-            index=False,
+            k_segs,
+            tumor_samples,
+            is_wide_format=wide_format,
         )
 
     plot_elbo_traces(elbo_data, os.path.join(plot_dir, fn.ELBO_TRACES_PDF))

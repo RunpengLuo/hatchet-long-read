@@ -282,7 +282,7 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         "--skip_mhbafs",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Clusters with averaged BAF > 0.5 are folded to minor-haplotype convection. set to skip."
+        help="Clusters with averaged BAF > 0.5 are folded to minor-haplotype convection. set to skip.",
     )
     parser.add_argument(
         "--wide_format",
@@ -598,23 +598,6 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         help="Max threads per solver call (Gurobi). Set to 1 for parallel CD workers (default: solver default)",
     )
 
-    ##################################################
-    # CNT-CD parameters (Experimental)
-    parser.add_argument(
-        "--tree_file",
-        required=False,
-        default=None,
-        type=str,
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--eps_fit",
-        required=False,
-        default=argparse.SUPPRESS,
-        type=float,
-        help=argparse.SUPPRESS,  # cnt_cd only; not user-selectable pre-release
-    )
-
     parser.add_argument(
         "--verbosity",
         required=False,
@@ -641,6 +624,8 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         type=str,
         help="Output filename prefix for per-(ploidy,n) plots (default: 'panel')",
     )
+    # compute-cn renders per-(ploidy,n) plots internally; share the plot styling knobs.
+    add_arguments_plot_style(parser)
     return parser
 
 

@@ -6,137 +6,8 @@ import pandas as pd
 import numpy as np
 
 from hatchet.utils import build_seg_from_bbc
-from hatchet.io_utils import read_region_bed
+from hatchet.io_utils import read_region_bed, write_ucn_wide
 from hatchet import filenames as fn
-
-
-# === Data preparation ===
-
-
-def build_data(bbcs, segs, segment=False):
-    """Build (cluster or segment) x sample DataFrames for the solver.
-
-    Args:
-        bbcs: bin-level BBC DataFrame (needed only when segment=True).
-        segs: cluster-level SEG DataFrame.
-        segment: if True, expand clusters into genomic segments (maximal
-            contiguous runs of same cluster on same chromosome).
-
-    Returns dict with keys: rdr, baf, rdr_se, baf_se, nbins, weights,
-    cluster_ids, sample_ids.  When segment=True, also includes
-    seg_to_cluster and chr_boundaries.
-    """
-    if not segment:
-        segs_sorted = segs.sort_values(["CLUSTER", "SAMPLE"])
-        rdr = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="RD")
-        baf = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="BAF")
-        rdr_se = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="RD-se")
-        baf_se = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="BAF-se")
-        nbins = segs_sorted.pivot(index="CLUSTER", columns="SAMPLE", values="#BINS")
-        first_sample = sorted(segs["SAMPLE"].unique())[0]
-        lengths = (
-            segs.loc[segs["SAMPLE"] == first_sample]
-            .set_index("CLUSTER")["LENGTH"]
-            .sort_index()
-        )
-        weights = 100 * lengths / lengths.sum()
-        return {
-            "rdr": rdr,
-            "baf": baf,
-            "rdr_se": rdr_se,
-            "baf_se": baf_se,
-            "nbins": nbins,
-            "weights": weights,
-            "cluster_ids": rdr.index.tolist(),
-            "sample_ids": rdr.columns.tolist(),
-        }
-
-    # Segment mode
-    bbcs = bbcs.sort_values(["SAMPLE", "#CHR", "START", "END"]).reset_index(drop=True)
-    samples_sorted = sorted(bbcs["SAMPLE"].unique())
-    first_sample = samples_sorted[0]
-
-    mask = bbcs["SAMPLE"] == first_sample
-    first_df = bbcs.loc[mask].reset_index(drop=True)
-    seg_boundary = (first_df["CLUSTER"] != first_df["CLUSTER"].shift()) | (
-        first_df["#CHR"] != first_df["#CHR"].shift()
-    )
-    seg_ids_first = seg_boundary.cumsum() - 1
-
-    bbcs["_seg_int"] = np.tile(seg_ids_first.values, len(samples_sorted))
-    agg = (
-        bbcs.groupby(["_seg_int", "SAMPLE"])
-        .agg(
-            CHR=("#CHR", "first"),
-            START=("START", "min"),
-            END=("END", "max"),
-            CLUSTER=("CLUSTER", "first"),
-            NBINS=("CLUSTER", "count"),
-        )
-        .reset_index()
-    )
-    agg["LENGTH"] = agg["END"] - agg["START"]
-
-    # String seg IDs: "<cluster>:chr<chrom>:<global_idx_within_cluster>"
-    first_rows = agg.loc[agg["SAMPLE"] == first_sample].sort_values("_seg_int")
-    cluster_counters = {}
-    sid_map = {}
-    for _, row in first_rows.iterrows():
-        cid, chrom = row["CLUSTER"], row["CHR"]
-        idx = cluster_counters.get(cid, 0)
-        cluster_counters[cid] = idx + 1
-        sid_map[row["_seg_int"]] = f"{cid}:{chrom}:{idx}"
-    agg["_seg_id"] = agg["_seg_int"].map(sid_map)
-
-    seg_cols = ["CLUSTER", "SAMPLE", "RD", "BAF", "RD-se", "BAF-se"]
-    agg = agg.merge(
-        segs[seg_cols],
-        on=["CLUSTER", "SAMPLE"],
-        how="left",
-    )
-
-    rdr = agg.pivot(index="_seg_id", columns="SAMPLE", values="RD")
-    baf = agg.pivot(index="_seg_id", columns="SAMPLE", values="BAF")
-    rdr_se = agg.pivot(index="_seg_id", columns="SAMPLE", values="RD-se")
-    baf_se = agg.pivot(index="_seg_id", columns="SAMPLE", values="BAF-se")
-    nbins = agg.pivot(index="_seg_id", columns="SAMPLE", values="NBINS")
-
-    # Sort by original segment order (not lexicographic string order)
-    seg_order = [sid_map[i] for i in sorted(sid_map)]
-    rdr = rdr.loc[seg_order]
-    baf = baf.loc[seg_order]
-    rdr_se = rdr_se.loc[seg_order]
-    baf_se = baf_se.loc[seg_order]
-    nbins = nbins.loc[seg_order]
-
-    first_agg = (
-        agg.loc[agg["SAMPLE"] == first_sample].set_index("_seg_id").loc[seg_order]
-    )
-    seg_lengths = first_agg["LENGTH"]
-    weights = 100 * seg_lengths / seg_lengths.sum()
-    seg_to_cluster = first_agg["CLUSTER"]
-    chr_boundaries = (first_agg["CHR"] != first_agg["CHR"].shift()).values
-
-    bbcs.drop(columns=["_seg_int"], inplace=True)
-
-    n_segs, n_samples = rdr.shape
-    logging.info(
-        f"segment mode: {n_segs} genomic segments x {n_samples} samples "
-        f"(from {len(segs['CLUSTER'].unique())} clusters)"
-    )
-
-    return {
-        "rdr": rdr,
-        "baf": baf,
-        "rdr_se": rdr_se,
-        "baf_se": baf_se,
-        "nbins": nbins,
-        "weights": weights,
-        "cluster_ids": rdr.index.tolist(),
-        "sample_ids": rdr.columns.tolist(),
-        "seg_to_cluster": seg_to_cluster,
-        "chr_boundaries": chr_boundaries,
-    }
 
 
 def compute_fractional_cn(input_data, gammas, alpha=0.05, min_ci_margin=0.1):
@@ -146,7 +17,7 @@ def compute_fractional_cn(input_data, gammas, alpha=0.05, min_ci_margin=0.1):
     fcn, fa, fb, fa_lo, fa_hi, fb_lo, fb_hi. input_data is not modified.
 
     Args:
-        input_data: dict from build_data with rdr, baf, rdr_se.
+        input_data: solver input dict with rdr, baf, rdr_se.
         gammas: dict or Series of per-sample gamma values.
         alpha: significance level (default 0.05 → 95% CI).
         min_ci_margin: hard minimum CI half-width in FCN space.
@@ -176,9 +47,6 @@ def compute_fractional_cn(input_data, gammas, alpha=0.05, min_ci_margin=0.1):
         "fb_lo": fb - margin_fb,
         "fb_hi": fb + margin_fb,
     }
-
-
-# === Solver input ===
 
 
 def store_gammas(out_file, scaling, samples):
@@ -259,9 +127,7 @@ def _write_solution_tsv(fd, input_data, cA, cB, u, n, cluster_ids, sample_ids, h
 
 
 def store_instance_tofile(pool_instances, input_data, sol_dir, solve_mode):
-    """Store all solution detail TSVs (and Newick/JSON for cnt_cd)."""
-    import json as _json
-
+    """Store all solution detail TSVs."""
     n = len(pool_instances[next(iter(pool_instances))]["cA"][0])
     cluster_ids = input_data["cluster_ids"]
     sample_ids = input_data["sample_ids"]
@@ -302,20 +168,6 @@ def store_instance_tofile(pool_instances, input_data, sol_dir, solve_mode):
                 header,
             )
 
-        if solve_mode == "cnt_cd":
-            from hatchet.compute_cn.solve.cnt_tree import LabeledCloneTree
-
-            tree = sol.get("tree")
-            if tree is not None and isinstance(tree, LabeledCloneTree):
-                with open(fn.SOLUTION_NWK(sol_dir, solve_mode, sol_id), "w") as f:
-                    f.write(tree.to_newick() + "\n")
-                d = tree.to_dict()
-                d["imf_obj"] = sol.get("imf_obj")
-                d["tree_obj"] = sol.get("tree_obj")
-                d["u"] = sol.get("u")
-                with open(fn.SOLUTION_JSON(sol_dir, solve_mode, sol_id), "w") as f:
-                    _json.dump(d, f, indent=2)
-
 
 def update_objectives_tsv(sols_dir, new_df):
     """Merge per-restart objectives into a single sols/objectives.tsv.
@@ -327,7 +179,7 @@ def update_objectives_tsv(sols_dir, new_df):
     """
     cols = ["ploidy", "n", "sol_id", "restart_id", "imf_obj", "reg_obj"]
     new_df = new_df[cols]
-    path = os.path.join(sols_dir, fn.OBJECTIVES_TSV)
+    path = fn.OBJECTIVES_TSV(sols_dir)
     if os.path.exists(path):
         old = pd.read_csv(path, sep="\t")
         keys = set(map(tuple, new_df[["ploidy", "n"]].itertuples(index=False)))
@@ -344,7 +196,7 @@ def load_pool_from_disk(sol_dir, cluster_ids, sample_ids):
     sol_id is taken, matching how the pool selects its representative at solve time.
     """
     ploidy, _, n = os.path.basename(sol_dir.rstrip("/")).rpartition("_n")
-    obj_path = os.path.join(os.path.dirname(sol_dir.rstrip("/")), fn.OBJECTIVES_TSV)
+    obj_path = fn.OBJECTIVES_TSV(os.path.dirname(sol_dir.rstrip("/")))
     obj_map = {}
     if os.path.exists(obj_path) and ploidy:
         odf = pd.read_csv(obj_path, sep="\t")
@@ -363,7 +215,7 @@ def load_pool_from_disk(sol_dir, cluster_ids, sample_ids):
         if m:
             sol_id = f"p{m.group(1)}_s{m.group(2)}"
         else:
-            m2 = re.match(r"(?:cd|ilp|cnt_cd)_(.+)\.tsv", basename)
+            m2 = re.match(r"(?:cd|ilp)_(.+)\.tsv", basename)
             if m2:
                 sol_id = m2.group(1)
             else:
@@ -421,10 +273,17 @@ def segmentation(
     cB,
     u,
     input_data: dict,
-    bbcs: pd.DataFrame,
+    bins: pd.DataFrame,
+    samples: list,
+    rd_mat,
+    cov_mat,
+    baf_mat,
+    alpha_mat,
+    beta_mat,
     region_file: str,
     bbc_out_file=None,
     seg_out_file=None,
+    is_wide_format: bool = False,
 ):
     """Annotate bins with inferred CN states and build a segment-level DataFrame.
 
@@ -432,8 +291,10 @@ def segmentation(
         cA: (num_clusters, num_clones) allele-A CN.
         cB: (num_clusters, num_clones) allele-B CN.
         u: (num_clones, num_samples) clone proportions.
-        input_data: dict from build_data with cluster_ids, sample_ids.
-        bbcs: Bin-level DataFrame.
+        input_data: solver input dict with cluster_ids, sample_ids.
+        bins: per-bin frame (#CHR, START, END, #SNPS, CLUSTER).
+        samples: ordered tumor sample names (column order of the *_mat arrays).
+        rd_mat, cov_mat, baf_mat, alpha_mat, beta_mat: (N, M) per-(bin, sample) fields.
         region_file: Path to region BED file.
         bbc_out_file: If provided, write annotated bin-level TSV.
         seg_out_file: If provided, write segment-level TSV.
@@ -443,8 +304,22 @@ def segmentation(
     """
     cluster_ids = input_data["cluster_ids"]
     sample_ids = input_data["sample_ids"]
-    seg_to_cluster = input_data.get("seg_to_cluster")
-    df = bbcs.copy()
+    m = len(samples)
+    df = pd.DataFrame(
+        {
+            "#CHR": np.repeat(bins["#CHR"].to_numpy(), m),
+            "START": np.repeat(bins["START"].to_numpy(), m),
+            "END": np.repeat(bins["END"].to_numpy(), m),
+            "SAMPLE": np.tile(samples, len(bins)),
+            "#SNPS": np.repeat(bins["#SNPS"].to_numpy(), m),
+            "CLUSTER": np.repeat(bins["CLUSTER"].to_numpy(), m),
+            "RD": rd_mat.ravel(),
+            "COV": cov_mat.ravel(),
+            "BAF": baf_mat.ravel(),
+            "ALPHA": alpha_mat.ravel(),
+            "BETA": beta_mat.ravel(),
+        }
+    )
 
     n_clone = len(cA[0])
     cN = pd.DataFrame(
@@ -456,36 +331,38 @@ def segmentation(
     u_df.columns = ["u_normal"] + [f"u_clone{i}" for i in range(1, n_clone)]
     extra_columns = [col for pair in zip(cN.columns, u_df.columns) for col in pair]
 
-    if seg_to_cluster is not None:
-        # Segment mode: assign each bin its segment ID, merge CN by segment.
-        df = df.sort_values(["SAMPLE", "#CHR", "START", "END"]).reset_index(drop=True)
-        samples_sorted = sorted(df["SAMPLE"].unique())
-        first_mask = df["SAMPLE"] == samples_sorted[0]
-        first_df = df.loc[first_mask].reset_index(drop=True)
-        seg_boundary = (first_df["CLUSTER"] != first_df["CLUSTER"].shift()) | (
-            first_df["#CHR"] != first_df["#CHR"].shift()
-        )
-        seg_int = (seg_boundary.cumsum() - 1).values
-        df["_seg_int"] = np.tile(seg_int, len(samples_sorted))
-        # Map integer seg index to string seg ID (same logic as build_data)
-        seg_id_list = cluster_ids  # already in segment order
-        int_to_seg = {i: seg_id_list[i] for i in range(len(seg_id_list))}
-        df["_seg_id"] = df["_seg_int"].map(int_to_seg)
-        df = df.merge(cN, left_on="_seg_id", right_index=True)
-        df = df.drop(columns=["_seg_int", "_seg_id"])
-    else:
-        df = df.merge(cN, left_on="CLUSTER", right_index=True)
-
+    df = df.merge(cN, left_on="CLUSTER", right_index=True)
     df = df.merge(u_df, left_on="SAMPLE", right_index=True)
     df = df.sort_values(["#CHR", "START", "END", "SAMPLE"]).reset_index(drop=True)
 
+    cn_cols = list(cN.columns)
+    u_cols = list(u_df.columns)
     if bbc_out_file is not None:
         orig_cols = df.columns[: -2 * n_clone].tolist()
-        df[orig_cols + extra_columns].to_csv(bbc_out_file, sep="\t", index=False)
+        bbc_df = df[orig_cols + extra_columns]
+        if is_wide_format:
+            write_ucn_wide(
+                bbc_out_file,
+                bbc_df,
+                sample_ids,
+                fixed_cols=["#CHR", "START", "END", "#SNPS", "CLUSTER"] + cn_cols,
+                fmt_fields=["RD", "COV", "BAF", "ALPHA", "BETA"] + u_cols,
+            )
+        else:
+            bbc_df.to_csv(bbc_out_file, sep="\t", index=False)
 
     regions = read_region_bed(region_file)
     seg_df = build_seg_from_bbc(df, regions)
     if seg_out_file is not None:
-        seg_df.to_csv(seg_out_file, sep="\t", index=False)
+        if is_wide_format:
+            write_ucn_wide(
+                seg_out_file,
+                seg_df,
+                sample_ids,
+                fixed_cols=["#CHR", "START", "END", "CLUSTER"] + cn_cols,
+                fmt_fields=u_cols,
+            )
+        else:
+            seg_df.to_csv(seg_out_file, sep="\t", index=False)
 
     return seg_df

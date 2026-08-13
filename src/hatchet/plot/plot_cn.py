@@ -24,6 +24,7 @@ from hatchet.utils import (
 )
 from hatchet.io_utils import (
     override_solution,
+    read_bbc_ucn,
     read_gamma_file,
     read_region_bed,
     read_seg_ucn_file,
@@ -86,7 +87,7 @@ def run(args=None):
     segs, clones = read_seg_ucn_file(seg_ucn)
     n_clones = len(clones)
     n_tumors = n_clones - 1
-    bbcs = read_seg_ucn_file(bbc_ucn)[0]
+    bbcs = read_bbc_ucn(bbc_ucn)
 
     ##################################################
     chrs = segs["#CHR"].unique().tolist()

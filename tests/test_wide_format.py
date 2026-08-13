@@ -13,7 +13,13 @@ import pandas as pd
 import pytest
 
 from hatchet import filenames as fn
-from hatchet.io_utils import read_bbc_file, read_wide_bbc
+from hatchet.io_utils import (
+    read_bbc_file,
+    read_bbc_ucn,
+    read_seg_file,
+    read_seg_ucn,
+    read_wide_bbc,
+)
 from tests.conftest import CBC_AVAILABLE
 
 MAXK = 5
@@ -65,10 +71,9 @@ def _sorted(df):
 
 def test_wide_roundtrip_matches_long(long_and_wide_dirs):
     long_dir, wide_dir = long_and_wide_dirs
-    df_long = _sorted(read_bbc_file(fn.BULK_BBC(long_dir, False)))
+    df_long = _sorted(pd.read_table(fn.BULK_BBC(long_dir, False), sep="\t"))
     df_wide = _sorted(read_wide_bbc(fn.BULK_BBC(wide_dir, True)))
 
-    assert list(df_long.columns) == list(df_wide.columns)
     assert len(df_long) == len(df_wide)
     assert "COV-N" not in df_wide.columns
     for col in EXACT_COLS:
@@ -77,6 +82,23 @@ def test_wide_roundtrip_matches_long(long_and_wide_dirs):
         assert np.allclose(
             df_long[col].to_numpy(dtype=float), df_wide[col].to_numpy(dtype=float)
         ), col
+
+
+def test_read_bbc_file_mats_parity(long_and_wide_dirs):
+    """read_bbc_file returns identical (bins, samples, *_mat) from either layout."""
+    long_dir, wide_dir = long_and_wide_dirs
+    bl, sl, rd_l, cov_l, baf_l, al_l, be_l = read_bbc_file(
+        fn.BULK_BBC(long_dir, False), is_wide_format=False
+    )
+    bw, sw, rd_w, cov_w, baf_w, al_w, be_w = read_bbc_file(
+        fn.BULK_BBC(wide_dir, True), is_wide_format=True
+    )
+    assert sl == sw
+    for col in ("#CHR", "START", "END", "#SNPS", "CLUSTER"):
+        assert (bl[col].to_numpy() == bw[col].to_numpy()).all(), col
+    assert np.array_equal(al_l, al_w) and np.array_equal(be_l, be_w)
+    assert np.allclose(rd_l, rd_w) and np.allclose(cov_l, cov_w)
+    assert np.allclose(baf_l, baf_w)
 
 
 def test_wide_header_and_files(long_and_wide_dirs):
@@ -117,10 +139,29 @@ def test_wide_header_and_files(long_and_wide_dirs):
 
 
 def test_wide_seg_matches_long(long_and_wide_dirs):
+    """long_dir writes a long seg, wide_dir a wide seg; read_seg_file returns
+    identical flat mats from either layout."""
     long_dir, wide_dir = long_and_wide_dirs
-    seg_long = pd.read_table(fn.BULK_SEG(long_dir, False), sep="\t")
-    seg_wide = pd.read_table(fn.BULK_SEG(wide_dir, True), sep="\t")
-    pd.testing.assert_frame_equal(seg_long, seg_wide)
+    ml = read_seg_file(fn.BULK_SEG(long_dir, False))
+    mw = read_seg_file(fn.BULK_SEG(wide_dir, True))
+    assert ml[0] == mw[0]  # clusters
+    assert ml[1] == mw[1]  # samples
+    for a, b in zip(ml[2:], mw[2:]):
+        assert np.allclose(np.asarray(a, dtype=float), np.asarray(b, dtype=float))
+
+    # wide seg carries a FORMAT header + cluster-level fixed cols; long seg does not.
+    with open(fn.BULK_SEG(wide_dir, True)) as fh:
+        header = fh.readline().rstrip("\n").split("\t")
+    assert header[:6] == [
+        "CLUSTER",
+        "#BINS",
+        "#SNPS",
+        "LENGTH",
+        "is_balanced",
+        "is_filtered",
+    ]
+    assert "FORMAT" in header
+    assert "FORMAT" not in pd.read_table(fn.BULK_SEG(long_dir, False), sep="\t").columns
 
 
 @pytest.mark.skipif(not CBC_AVAILABLE, reason="CBC solver not available")
@@ -159,8 +200,12 @@ def test_compute_cn_parity(long_and_wide_dirs, synthetic_data, tmp_path_factory)
         {"wide_format": True},
     )
 
-    ucn_long = pd.read_table(os.path.join(long_res, fn.BEST_BBC_UCN), sep="\t")
-    ucn_wide = pd.read_table(os.path.join(wide_res, fn.BEST_BBC_UCN), sep="\t")
+    # wide compute-cn writes wide .ucn; read_bbc_ucn/read_seg_ucn expand both layouts
+    ucn_long = read_bbc_ucn(fn.BEST_BBC_UCN(long_res))
+    ucn_wide = read_bbc_ucn(fn.BEST_BBC_UCN(wide_res))
+    assert "FORMAT" not in pd.read_table(fn.BEST_BBC_UCN(long_res), sep="\t").columns
+    with open(fn.BEST_BBC_UCN(wide_res)) as fh:
+        assert "FORMAT" in fh.readline()
     cn_cols = [c for c in ucn_long.columns if c.startswith("cn_")]
     assert cn_cols
     left = ucn_long.sort_values(["#CHR", "START", "SAMPLE"]).reset_index(drop=True)
@@ -168,6 +213,13 @@ def test_compute_cn_parity(long_and_wide_dirs, synthetic_data, tmp_path_factory)
     for col in cn_cols:
         assert (left[col].to_numpy() == right[col].to_numpy()).all(), col
 
-    gam_long = pd.read_table(os.path.join(long_res, fn.GAMMAS), sep="\t", header=None)
-    gam_wide = pd.read_table(os.path.join(wide_res, fn.GAMMAS), sep="\t", header=None)
+    seg_long, _ = read_seg_ucn(fn.BEST_SEG_UCN(long_res))
+    seg_wide, _ = read_seg_ucn(fn.BEST_SEG_UCN(wide_res))
+    seg_l = seg_long.sort_values(["#CHR", "START", "SAMPLE"]).reset_index(drop=True)
+    seg_w = seg_wide.sort_values(["#CHR", "START", "SAMPLE"]).reset_index(drop=True)
+    for col in [c for c in seg_long.columns if c.startswith("cn_")]:
+        assert (seg_l[col].to_numpy() == seg_w[col].to_numpy()).all(), col
+
+    gam_long = pd.read_table(fn.GAMMA_FILE(long_res), sep="\t", header=None)
+    gam_wide = pd.read_table(fn.GAMMA_FILE(wide_res), sep="\t", header=None)
     pd.testing.assert_frame_equal(gam_long, gam_wide)

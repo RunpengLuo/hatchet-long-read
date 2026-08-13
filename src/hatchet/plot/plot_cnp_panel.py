@@ -15,7 +15,12 @@ from hatchet.utils import (
     normalize_args,
     setup_logging,
 )
-from hatchet.io_utils import override_solution, read_region_bed, read_seg_ucn_file
+from hatchet.io_utils import (
+    override_solution,
+    read_bbc_ucn,
+    read_region_bed,
+    read_seg_ucn_file,
+)
 from hatchet import filenames as fn
 from cnplot import plot_cnv_profile
 from hatchet.plot.plot_utils import build_genome_axis, use_editable_fonts
@@ -78,7 +83,7 @@ def run(args=None):
         solfile = row.get("PATH_TO_SOLFILE", "")
         bbc_path = row.get("PATH_TO_BBC", "")
         if solfile and bbc_path:
-            bbcs = read_seg_ucn_file(bbc_path)[0]
+            bbcs = read_bbc_ucn(bbc_path)
             samples_all = sorted(bbcs["SAMPLE"].unique().tolist())
             clusters = sorted(bbcs["CLUSTER"].unique().tolist())
             _, seg_info_all, n_clones, _, _ = override_solution(
@@ -142,7 +147,7 @@ def run(args=None):
             bbc_path = row["PATH_TO_BBC"]
             seg_path = row["PATH_TO_SEG"]
             solfile = row.get("PATH_TO_SOLFILE", "") or None
-            gamma_file = os.path.join(os.path.dirname(bbc_path), fn.GAMMAS)
+            gamma_file = fn.GAMMA_FILE(os.path.dirname(bbc_path))
             bn = os.path.basename(bbc_path)
             if "tetraploid" in bn:
                 ploidy = "tetraploid"

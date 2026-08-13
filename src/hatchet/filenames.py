@@ -1,9 +1,9 @@
 """HATCHet input/output constant filenames and subdirectories.
 
 Producers and consumers of a file must import the SAME name from here, so a
-rename cannot silently break a cross-stage contract. Fixed names are module
-constants; names that embed run parameters (ploidy, clone count, K, sample) are
-helper functions.
+rename cannot silently break a cross-stage contract. Bare leaf names used as
+``out_name`` are module constants; fully-resolved paths and names that embed run
+parameters (output dir, ploidy, clone count, K, sample) are helper functions.
 
 Notes:
     Purely user-named outputs (e.g. plot out_prefix) are not centralized here.
@@ -85,16 +85,17 @@ INIT_PDF = lambda plot_dir, name: os.path.join(plot_dir, f"{name}_init.pdf")
 # =============================================================================
 # compute-cn outputs (result_dir)
 # =============================================================================
-GAMMAS = "gammas.tsv"
-SCALING_2D_PDF = "scaling_2d.pdf"
-SUMMARY_TSV = "summary.tsv"
-BEST_BBC_UCN = "best.bbc.ucn"
-BEST_SEG_UCN = "best.seg.ucn"
-MODEL_SELECTION_PDF = "model_selection.pdf"
-POOL_PDF = "pool.pdf"
+# Fully-resolved paths under the compute-cn result dir (or its plots/ or sols/).
+GAMMA_FILE = lambda out_dir: os.path.join(out_dir, "gammas.tsv")
+SCALING_2D_PDF = lambda plot_dir: os.path.join(plot_dir, "scaling_2d.pdf")
+SUMMARY_TSV = lambda out_dir: os.path.join(out_dir, "summary.tsv")
+BEST_BBC_UCN = lambda out_dir: os.path.join(out_dir, "best.bbc.ucn")
+BEST_SEG_UCN = lambda out_dir: os.path.join(out_dir, "best.seg.ucn")
+MODEL_SELECTION_PDF = lambda plot_dir: os.path.join(plot_dir, "model_selection.pdf")
+POOL_PDF = "pool.pdf"  # out_name (joined with its plot dir by the caller)
 # sols/
-OBJECTIVES_TSV = "objectives.tsv"
-U0_SEEDS_TSV = "u0_seeds.tsv"
+OBJECTIVES_TSV = lambda sols_dir: os.path.join(sols_dir, "objectives.tsv")
+U0_SEEDS_TSV = lambda sol_dir: os.path.join(sol_dir, "u0_seeds.tsv")
 
 
 SOLVER_INPUT = lambda out_dir, ploidy: os.path.join(
@@ -118,12 +119,6 @@ PLOIDY_N_SUBDIR = lambda parent_dir, ploidy, n: os.path.join(
 )
 SOLUTION_TSV = lambda sol_dir, solve_mode, sol_id: os.path.join(
     sol_dir, f"{solve_mode}_{sol_id}.tsv"
-)
-SOLUTION_NWK = lambda sol_dir, solve_mode, sol_id: os.path.join(
-    sol_dir, f"{solve_mode}_{sol_id}.nwk"
-)
-SOLUTION_JSON = lambda sol_dir, solve_mode, sol_id: os.path.join(
-    sol_dir, f"{solve_mode}_{sol_id}.json"
 )
 # Per-(ploidy, n) pool CNP panel; out_name only (joined with its plot dir by the caller).
 POOL_CNP_PDF = lambda pid, ploidy, n: f"{pid}.pool_{ploidy}_n{n}.pdf"

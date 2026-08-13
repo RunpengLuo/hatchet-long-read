@@ -86,7 +86,6 @@ cd_seed: 42
 u_init: dirichlet
 u_dir_alpha: 0.3
 solver_threads: null
-eps_fit: 0.01
 
 ##################################################
 # plotting (shared: cluster-bins plot-rdr-baf + plot-cn + plot-panel)

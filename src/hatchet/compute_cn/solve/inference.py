@@ -21,10 +21,7 @@ from hatchet.compute_cn.solve.model import (
     update_fixed_u,
     update_fixed_cn,
 )
-from hatchet.compute_cn.solve.utils import (
-    dedup_pool_instances,
-    split_by_chromosome,
-)
+from hatchet.compute_cn.solve.utils import dedup_pool_instances
 
 _random_states = []
 
@@ -264,112 +261,9 @@ def _cd_work(
     }
 
 
-def _cnt_cd_work(
-    work_id, u_init, tree_idx, solver_type, max_iters, max_convergence_iters, timelimit
-):
-    from hatchet.compute_cn.solve.cnt_model import (
-        build_c_step_model,
-        solve_c_step,
-        extract_c_step,
-        build_u_step_model,
-        extract_u_step,
-    )
-
-    cfg = _cd_global
-    params = cfg["params"]
-    inputs = cfg["inputs"]
-    tree = cfg["trees"][tree_idx]
-    chrom_groups = cfg["chrom_groups"]
-    solver = _get_solver(solver_type)
-
-    n = tree.n
-    u = u_init.copy()
-    prev_tuple = None
-    conv_iters = 0
-
-    for iteration in range(max_iters):
-        all_ab = {}
-        F_stage1 = F_actual = T_tree = 0.0
-        failed = False
-
-        for cg in chrom_groups:
-            model, aux = build_c_step_model(tree, params, inputs, u, cg)
-            result = solve_c_step(
-                model, aux, solver, params.eps_fit, timelimit=timelimit
-            )
-            if result is None:
-                failed = True
-                break
-            F_stage1 += result["F_star"]
-            F_actual += result["F_actual"]
-            T_tree += result["T_star"]
-            all_ab[id(cg)] = (cg, extract_c_step(model, tree, aux))
-
-        if failed:
-            return None
-
-        S, V = inputs.m, tree.n_nodes
-        n_te = len(tree.tumor_edges)
-        a_full = np.zeros((S, V + 1))
-        b_full = np.zeros((S, V + 1))
-        event_keys = [
-            "alpha_a",
-            "alpha_b",
-            "delta_a",
-            "delta_b",
-            "abar_a",
-            "abar_b",
-            "dbar_a",
-            "dbar_b",
-        ]
-        events_full = {k: np.zeros((S, n_te)) for k in event_keys}
-
-        for cg, ab_data in all_ab.values():
-            for local_s, global_s in enumerate(cg):
-                a_full[global_s] = ab_data["a"][local_s]
-                b_full[global_s] = ab_data["b"][local_s]
-                for k in event_keys:
-                    events_full[k][global_s] = ab_data[k][local_s]
-
-        a_leaves = a_full[:, 1 : n + 1]
-        b_leaves = b_full[:, 1 : n + 1]
-
-        u_model, _ = build_u_step_model(params, inputs, a_leaves, b_leaves)
-        u_result = solver.solve(u_model, tee=False)
-        if u_result.solver.termination_condition != pe.TerminationCondition.optimal:
-            return None
-        u = extract_u_step(u_model, params, inputs)
-
-        obj_tuple = (F_stage1, F_actual, T_tree)
-        if prev_tuple is not None:
-            if all(abs(a - b) < cfg["cd_tol"] for a, b in zip(obj_tuple, prev_tuple)):
-                conv_iters += 1
-            else:
-                conv_iters = 0
-        prev_tuple = obj_tuple
-
-        if conv_iters >= max_convergence_iters:
-            break
-
-    return {
-        "restart_id": work_id,
-        "imf_obj": F_actual,
-        "reg_obj": 0.0,
-        "imf_obj_stage1": F_stage1,
-        "tree_obj": T_tree,
-        "cA": np.round(a_leaves).astype(int).tolist(),
-        "cB": np.round(b_leaves).astype(int).tolist(),
-        "u": u.tolist(),
-        "a_all": a_full,
-        "b_all": b_full,
-        "events": events_full,
-    }
-
-
 def run_coordinate_descent(
     params,
     inputs,
-    mode="cd",
     reg_steps=0,
     reg_bound=0.3,
     u_init_method="dirichlet",
@@ -384,12 +278,8 @@ def run_coordinate_descent(
     random_seed=None,
     timelimit=None,
     u0_tsv_path=None,
-    tree_file=None,
 ):
-    """Run coordinate descent with parallel restarts.
-
-    mode="cd": ILP-based CD over a regularization path.
-    mode="cnt_cd": tree-based CNT-CD over enumerated tree shapes.
+    """Run ILP-based coordinate descent with parallel restarts over a regularization path.
 
     Returns (pool_instances dict, per-restart objective DataFrame).
     """
@@ -417,43 +307,19 @@ def run_coordinate_descent(
         "timelimit": timelimit,
     }
 
-    if mode == "cnt_cd":
-        from hatchet.compute_cn.solve.cnt_tree import (
-            enumerate_binary_trees,
-            parse_newick,
-        )
+    hcA, hcB = first_hot_start(params, inputs)
+    cd_config["hcA"] = hcA
+    cd_config["hcB"] = hcB
 
-        if tree_file is not None:
-            with open(tree_file) as f:
-                trees = [parse_newick(f.read())]
-        else:
-            trees = enumerate_binary_trees(params.n)
-
-        chrom_groups = split_by_chromosome(inputs)
-        cd_config["trees"] = trees
-        cd_config["chrom_groups"] = chrom_groups
-
-        work_groups = [(f"t{ti}", ti) for ti in range(len(trees))]
-        worker_fn = _cnt_cd_work
-
-        logging.info(
-            f"CNT-CD: {len(trees)} tree shape(s), {n_seed} seed(s), "
-            f"{len(chrom_groups)} chromosome(s), n={params.n}"
-        )
+    no_effect = params.reg_name in ("DBOX_L1", "DBOX_L0") and params.n <= 2
+    if params.reg_name == "RAW" or no_effect:
+        pparams = [0]
     else:
-        hcA, hcB = first_hot_start(params, inputs)
-        cd_config["hcA"] = hcA
-        cd_config["hcB"] = hcB
+        step = reg_bound / max(reg_steps, 1)
+        pparams = [round(step * i, 4) for i in range(reg_steps + 1)]
 
-        no_effect = params.reg_name in ("DBOX_L1", "DBOX_L0") and params.n <= 2
-        if params.reg_name == "RAW" or no_effect:
-            pparams = [0]
-        else:
-            step = reg_bound / max(reg_steps, 1)
-            pparams = [round(step * i, 4) for i in range(reg_steps + 1)]
-
-        work_groups = [(f"p{pp:.4f}_s0", pp) for pp in pparams]
-        worker_fn = _cd_work
+    work_groups = [(f"p{pp:.4f}_s0", pp) for pp in pparams]
+    worker_fn = _cd_work
 
     n_workers = min(j, len(seeds))
     pool_instances = {}
@@ -468,7 +334,7 @@ def run_coordinate_descent(
     try:
         for sol_id, group_key in work_groups:
             logging.info(
-                f"{mode.upper()}: group={sol_id}, launching {len(seeds)} seed(s) "
+                f"CD: group={sol_id}, launching {len(seeds)} seed(s) "
                 f"across {n_workers} worker(s)"
             )
             futures = [
@@ -490,9 +356,9 @@ def run_coordinate_descent(
                 try:
                     result = future.result()
                 except Exception as e:
-                    logging.error(f"{mode.upper()} worker failed: {e}")
+                    logging.error(f"CD worker failed: {e}")
                     executor.shutdown(wait=False, cancel_futures=True)
-                    raise RuntimeError(f"{mode.upper()} worker failed: {e}") from e
+                    raise RuntimeError(f"CD worker failed: {e}") from e
                 n_done += 1
                 if result is not None:
                     instances.append(result)
@@ -500,7 +366,7 @@ def run_coordinate_descent(
                     logging.info(f"  {n_done}/{len(futures)} seeds completed")
 
             if not instances:
-                logging.warning(f"{mode.upper()}: no feasible solution for {sol_id}")
+                logging.warning(f"CD: no feasible solution for {sol_id}")
                 continue
 
             for inst in instances:
@@ -522,16 +388,6 @@ def run_coordinate_descent(
                 "u": best["u"],
             }
 
-            if mode == "cnt_cd":
-                tree = trees[group_key]
-                sol_dict.update(
-                    imf_obj_stage1=best["imf_obj_stage1"],
-                    tree_obj=best["tree_obj"],
-                    tree=tree.label(
-                        best["a_all"], best["b_all"], best["events"], best["u"]
-                    ),
-                )
-
             logging.info(
                 f"  {sol_id}: imf={sol_dict['imf_obj']:.4f} reg={sol_dict['reg_obj']:.1f} "
                 f"from {len(instances)} feasible"
@@ -541,10 +397,9 @@ def run_coordinate_descent(
         executor.shutdown(wait=True)
 
     if not pool_instances:
-        raise RuntimeError(f"{mode.upper()}: no feasible solution found")
+        raise RuntimeError("CD: no feasible solution found")
 
-    if mode != "cnt_cd":
-        pool_instances = dedup_pool_instances(pool_instances)
+    pool_instances = dedup_pool_instances(pool_instances)
     obj_df = pd.DataFrame(
         obj_rows, columns=["sol_id", "restart_id", "imf_obj", "reg_obj"]
     )

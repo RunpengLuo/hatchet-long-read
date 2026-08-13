@@ -7,8 +7,15 @@ from scipy.stats import norm
 
 def get_scaling_factor(
     samples: list,
-    segs: pd.DataFrame,
-    bbcs: pd.DataFrame,
+    clusters: list,
+    bins: pd.DataFrame,
+    rd_mat: np.ndarray,
+    seg_rdr: pd.DataFrame,
+    seg_baf: pd.DataFrame,
+    seg_baf_se: pd.DataFrame,
+    seg_rdr_var: pd.DataFrame,
+    seg_nbins: pd.DataFrame,
+    is_balanced: np.ndarray,
     fix_cn_dip: dict,
     fix_cn_tet: dict,
     maxcn: int,
@@ -31,24 +38,27 @@ def get_scaling_factor(
     """
     logging.info("Infer scaling factors & tumor purity")
 
-    def _pivot(col):
-        return segs.pivot(index="CLUSTER", columns="SAMPLE", values=col)[samples]
-
-    rdr, baf = _pivot("RD"), _pivot("BAF")
-    baf_se, rd_var = _pivot("BAF-se"), _pivot("RD-var")
-    nbins = _pivot("#BINS")
-    clusters = baf.index.tolist()
+    # Per-(cluster, sample) frames indexed by cluster label, from read_seg_file.
+    rdr, baf, baf_se, rd_var, nbins = (
+        seg_rdr,
+        seg_baf,
+        seg_baf_se,
+        seg_rdr_var,
+        seg_nbins,
+    )
     baf_mat, rdr_mat = baf.values, rdr.values
 
-    bin_rdrs = {
-        key: g["RD"].values.astype(np.float64)
-        for key, g in bbcs.groupby(["CLUSTER", "SAMPLE"])
-    }
+    cluster_arr = bins["CLUSTER"].to_numpy()
+    bin_rdrs = {}
+    for z in clusters:
+        rz = rd_mat[cluster_arr == z]
+        for si, s in enumerate(samples):
+            bin_rdrs[(z, s)] = rz[:, si].astype(np.float64)
 
     user_balanced = {c for c, cn in fix_cn_dip.items() if cn == (1, 1)} | {
         c for c, cn in fix_cn_tet.items() if cn == (2, 2)
     }
-    seg_balanced = segs.drop_duplicates("CLUSTER").set_index("CLUSTER")["is_balanced"]
+    seg_balanced = pd.Series(is_balanced, index=clusters)
     balanced_s = [c for c in clusters if c in user_balanced or seg_balanced.loc[c]]
     imbalanced_z = [c for c in clusters if c not in balanced_s]
     if not balanced_s:

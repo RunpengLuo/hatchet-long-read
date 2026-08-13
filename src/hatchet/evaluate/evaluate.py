@@ -66,7 +66,7 @@ def run(args=None):
     if seg_file is None:
         if result_dir is None:
             raise ValueError("Either --seg or --result_dir must be provided")
-        seg_file = os.path.join(result_dir, fn.BEST_SEG_UCN)
+        seg_file = fn.BEST_SEG_UCN(result_dir)
     segs, clones = read_seg_ucn_file(seg_file)
     clone_props = segs[[f"u_{c}" for c in clones]].iloc[0].tolist()
 
