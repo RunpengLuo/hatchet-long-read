@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.0.0b2] - 2026-08-13
+
+**Added**
+
+- Memory-efficient VCF-like wide BBC/SEG layout gated by `--wide_format` ([io_utils.py:407](src/hatchet/io_utils.py#L407)).
+- `read_seg_file` returns per-(cluster, sample) DataFrames, replacing in-solver `build_data` ([io_utils.py:238](src/hatchet/io_utils.py#L238)).
+- 2D-diagnostic plot styling parameters (`plot_diag_*`) for compute-cn ([hatchet_parser.py:673](src/hatchet/hatchet_parser.py#L673)).
+
+**Changed**
+
+- Matched-normal BB dispersion `tau` pools all normals, not just the first ([cluster_utils.py:48](src/hatchet/cluster_bins/cluster_utils.py#L48)).
+- SEG cluster column renamed `#ID` -> `CLUSTER` to match the BBC key ([cluster_utils.py:231](src/hatchet/cluster_bins/cluster_utils.py#L231)).
+- cluster-bins keeps per-K `(N, M)` arrays instead of an upfront long frame ([cluster_bins.py](src/hatchet/cluster_bins/cluster_bins.py)).
+- Plot parameters namespaced under `plot_*` (e.g. `--img_type` -> `--plot_img_type`) ([hatchet_parser.py:673](src/hatchet/hatchet_parser.py#L673)).
+- compute-cn per-(ploidy, n) plots default to `pdf` ([config/snakemake-hatchet.yaml](config/snakemake-hatchet.yaml)).
+- cluster-bins 1D mhBAF panel colored by cluster, matching the RDR panel ([plot_cluster_bins.py:302](src/hatchet/plot/plot_cluster_bins.py#L302)).
+- `docs/reference.md` folded into each `docs/modules/<command>.md`.
+
+**Fixed**
+
+- Confine `plot_scaling_2d` whitegrid style to `rc_context`, restoring 1D axes borders ([plot_compute_cn.py:160](src/hatchet/plot/plot_compute_cn.py#L160)).
+- Fix mhBAF folding for k-means pre-initialization ([hmm_utils.py:77](src/hatchet/cluster_bins/hmm/hmm_utils.py#L77)).
+
+**Removed**
+
+- Experimental `cnt_cd` solver mode; recoverable from commit `3f97f73e` ([inference.py](src/hatchet/compute_cn/solve/inference.py)).
+- CLI flags `--u_bin_p` and `--show_prop` ([hatchet_parser.py](src/hatchet/hatchet_parser.py)).
+- Separate `runtime.log`; profiling now appended to the per-command log ([utils.py](src/hatchet/utils.py)).
+
 ## [3.0.0b1] - 2026-07-28
 
 **Changed**
