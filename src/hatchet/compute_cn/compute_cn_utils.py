@@ -7,7 +7,7 @@ import numpy as np
 
 from hatchet.utils import build_seg_from_bbc
 from hatchet.io_utils import read_region_bed, write_ucn_wide
-from hatchet import filenames as fn
+from hatchet import const
 
 
 def compute_fractional_cn(input_data, gammas, alpha=0.05, min_ci_margin=0.1):
@@ -154,7 +154,7 @@ def store_instance_tofile(pool_instances, input_data, sol_dir, solve_mode):
     header = "\t".join(cols)
 
     for sol_id, sol in pool_instances.items():
-        path = fn.SOLUTION_TSV(sol_dir, solve_mode, sol_id)
+        path = const.SOLUTION_TSV(sol_dir, solve_mode, sol_id)
         with open(path, "w") as fd:
             _write_solution_tsv(
                 fd,
@@ -179,7 +179,7 @@ def update_objectives_tsv(sols_dir, new_df):
     """
     cols = ["ploidy", "n", "sol_id", "restart_id", "imf_obj", "reg_obj"]
     new_df = new_df[cols]
-    path = fn.OBJECTIVES_TSV(sols_dir)
+    path = const.OBJECTIVES_TSV(sols_dir)
     if os.path.exists(path):
         old = pd.read_csv(path, sep="\t")
         keys = set(map(tuple, new_df[["ploidy", "n"]].itertuples(index=False)))
@@ -196,7 +196,7 @@ def load_pool_from_disk(sol_dir, cluster_ids, sample_ids):
     sol_id is taken, matching how the pool selects its representative at solve time.
     """
     ploidy, _, n = os.path.basename(sol_dir.rstrip("/")).rpartition("_n")
-    obj_path = fn.OBJECTIVES_TSV(os.path.dirname(sol_dir.rstrip("/")))
+    obj_path = const.OBJECTIVES_TSV(os.path.dirname(sol_dir.rstrip("/")))
     obj_map = {}
     if os.path.exists(obj_path) and ploidy:
         odf = pd.read_csv(obj_path, sep="\t")

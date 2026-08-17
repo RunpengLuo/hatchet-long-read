@@ -17,7 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from cnplot import annotate_landmarks, plot_cnv_profile, plot_scatter_2d, set_palette
 from hatchet.utils import sort_df_chr
-from hatchet import filenames as fn
+from hatchet import const
 from hatchet.plot import plot_cn as _plot_cn
 from hatchet.plot.plot_utils import build_genome_axis, use_editable_fonts
 
@@ -53,7 +53,7 @@ def plot_pool_cnp(
     width=20,
     height=1,
     dpi=150,
-    out_name=fn.POOL_PDF,
+    out_name=const.POOL_PDF,
 ):
     """Plot a single multi-row CNV profile panel of Pareto solutions into out_dir.
 
@@ -262,7 +262,7 @@ def run_plot_cn(args, bbc, seg, gamma_file, plot_dir, ploidy, name=None):
 
 def plot_pareto_curve(summary_df, plot_dir, reg_term, elbow_fig=None):
     """Plot REG vs IMF Pareto curves + elbow/BIC page as a multi-page PDF."""
-    outfile = fn.MODEL_SELECTION_PDF(plot_dir)
+    outfile = const.MODEL_SELECTION_PDF(plot_dir)
     reg_col = reg_term if reg_term in summary_df.columns else "REG"
     ploidies = sorted(summary_df["ploidy"].unique())
     cmap = plt.get_cmap("tab10")

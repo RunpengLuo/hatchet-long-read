@@ -21,7 +21,7 @@ from hatchet.io_utils import (
     read_region_bed,
     read_seg_ucn_file,
 )
-from hatchet import filenames as fn
+from hatchet import const
 from cnplot import plot_cnv_profile
 from hatchet.plot.plot_utils import build_genome_axis, use_editable_fonts
 
@@ -147,7 +147,7 @@ def run(args=None):
             bbc_path = row["PATH_TO_BBC"]
             seg_path = row["PATH_TO_SEG"]
             solfile = row.get("PATH_TO_SOLFILE", "") or None
-            gamma_file = fn.GAMMA_FILE(os.path.dirname(bbc_path))
+            gamma_file = const.GAMMA_FILE(os.path.dirname(bbc_path))
             bn = os.path.basename(bbc_path)
             if "tetraploid" in bn:
                 ploidy = "tetraploid"

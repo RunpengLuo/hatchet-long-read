@@ -12,7 +12,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
-from hatchet import filenames as fn
+from hatchet import const
 from hatchet.utils import build_seg_from_bbc, sort_df_chr
 
 
@@ -77,7 +77,7 @@ def read_bbc_file(bbc_file: str, is_wide_format: bool = False):
         ``bins`` is a chromosome-sorted DataFrame with one row per bin
         (#CHR, START, END, #SNPS, CLUSTER); ``samples`` is the sorted tumor
         sample list; each ``*_mat`` is an ``(N, M)`` array aligned to ``bins``
-        rows and ``samples`` columns, dtype per ``fn.FORMAT_DTYPE``.
+        rows and ``samples`` columns, dtype per ``const.FORMAT_DTYPE``.
     """
     if is_wide_format:
         return _read_wide_bbc_mats(bbc_file)
@@ -105,7 +105,7 @@ def _long_bbc_to_mats(df: pd.DataFrame):
     def _mat(field):
         p = df.pivot(index="_bin", columns="SAMPLE", values=field)
         p = p.reindex(index=bin_order, columns=samples)
-        return p.to_numpy().astype(fn.FORMAT_DTYPE[field])
+        return const.cast_field(field, p.to_numpy())
 
     rd_mat, cov_mat, baf_mat, alpha_mat, beta_mat = (
         _mat(f) for f in ("RD", "COV", "BAF", "ALPHA", "BETA")
@@ -116,13 +116,14 @@ def _long_bbc_to_mats(df: pd.DataFrame):
 
 def _read_wide_bbc_mats(bbc_file: str):
     """Parse a wide-format BBC straight into ``(bins, samples, *_mat)`` (no melt)."""
-    fixed = ["#CHR", "START", "END", "#SNPS", "CLUSTER", "PHASE", "PHASE_POSTS"]
     wide = pd.read_table(bbc_file, sep="\t")
     fmt = wide["FORMAT"].iloc[0].split(":")
-    file_samples = [c for c in wide.columns if c not in fixed and c != "FORMAT"]
+    file_samples = [
+        c for c in wide.columns if c not in const.WIDE_BBC_FIXED and c != "FORMAT"
+    ]
     if not file_samples:
         raise ValueError(f"no sample columns found in wide BBC {bbc_file}")
-    required = set(fn.WIDE_BBC_FIELDS)
+    required = set(const.WIDE_BBC_FIELDS)
     if not required.issubset(fmt):
         raise ValueError(
             f"wide BBC {bbc_file} FORMAT {fmt} missing required fields "
@@ -147,7 +148,7 @@ def _read_wide_bbc_mats(bbc_file: str):
 
     def _mat(field):
         stacked = np.column_stack([parsed[s][field].to_numpy() for s in samples])
-        return stacked[order].astype(fn.FORMAT_DTYPE[field])
+        return const.cast_field(field, stacked[order])
 
     rd_mat, cov_mat, baf_mat, alpha_mat, beta_mat = (
         _mat(f) for f in ("RD", "COV", "BAF", "ALPHA", "BETA")
@@ -171,13 +172,14 @@ def read_wide_bbc(bbc_file: str):
         Chromosome-sorted long BBC DataFrame with columns #CHR, START, END,
         SAMPLE, #SNPS, CLUSTER, RD, COV, BAF, ALPHA, BETA.
     """
-    fixed = ["#CHR", "START", "END", "#SNPS", "CLUSTER", "PHASE", "PHASE_POSTS"]
     wide = pd.read_table(bbc_file, sep="\t")
     fmt = wide["FORMAT"].iloc[0].split(":")
-    samples = [c for c in wide.columns if c not in fixed and c != "FORMAT"]
+    samples = [
+        c for c in wide.columns if c not in const.WIDE_BBC_FIXED and c != "FORMAT"
+    ]
     if not samples:
         raise ValueError(f"no sample columns found in wide BBC {bbc_file}")
-    required = set(fn.WIDE_BBC_FIELDS)
+    required = set(const.WIDE_BBC_FIELDS)
     if not required.issubset(fmt):
         raise ValueError(
             f"wide BBC {bbc_file} FORMAT {fmt} missing required fields "
@@ -211,28 +213,10 @@ def read_wide_bbc(bbc_file: str):
     )
     # canonical long-frame field order (ALPHA before BETA), matching read_bbc_file
     for field in ("RD", "COV", "BAF", "ALPHA", "BETA"):
-        df[field] = _stack(field).astype(fn.FORMAT_DTYPE[field])
+        df[field] = const.cast_field(field, _stack(field))
 
     df = sort_df_chr(df, pos="START")
     return df
-
-
-# Per-(cluster, sample) SEG fields carried as wide FORMAT cells, in write order.
-WIDE_SEG_FIELDS = [
-    "ALPHA",
-    "BETA",
-    "COV",
-    "BAF",
-    "BAF-se",
-    "BAF-tau",
-    "RD",
-    "RD-se",
-    "RD-var",
-]
-# Cluster-level SEG columns (constant across samples).
-WIDE_SEG_FIXED = ["CLUSTER", "#BINS", "#SNPS", "LENGTH", "is_balanced", "is_filtered"]
-# Integer SEG fields; all others are float.
-_SEG_INT_FIELDS = {"ALPHA", "BETA", "#BINS", "#SNPS"}
 
 
 def read_seg_file(seg_file: str, is_wide_format: bool | None = None):
@@ -273,8 +257,7 @@ def _long_seg_to_dfs(df):
     def _field(field):
         p = df.pivot(index="CLUSTER", columns="SAMPLE", values=field)
         p = p.reindex(index=clusters, columns=samples)
-        dtype = np.int64 if field in _SEG_INT_FIELDS else np.float64
-        return p.astype(dtype)
+        return const.cast_field(field, p)
 
     rdr_df, baf_df, rdr_se_df, baf_se_df, rdr_var_df, baf_tau_df, nbins_df = (
         _field(f)
@@ -305,7 +288,9 @@ def _long_seg_to_dfs(df):
 def _read_wide_seg_dfs(df):
     """Expand a wide SEG frame to long, then reuse the long parser for parity."""
     fmt = df["FORMAT"].iloc[0].split(":")
-    file_samples = [c for c in df.columns if c not in WIDE_SEG_FIXED and c != "FORMAT"]
+    file_samples = [
+        c for c in df.columns if c not in const.WIDE_SEG_FIXED and c != "FORMAT"
+    ]
     if not file_samples:
         raise ValueError("no sample columns found in wide SEG")
     k, m = len(df), len(file_samples)
@@ -334,21 +319,13 @@ def _read_wide_seg_dfs(df):
         stacked = np.column_stack(
             [parsed[s][f].to_numpy() for s in file_samples]
         ).ravel()
-        dtype = np.int64 if f in _SEG_INT_FIELDS else np.float64
-        long[f] = stacked.astype(dtype)
+        long[f] = const.cast_field(f, stacked)
     return _long_seg_to_dfs(long)
 
 
 # =============================================================================
 # File writers
 # =============================================================================
-
-
-def _fmt_field(field, v):
-    """Format a per-sample field vector into VCF cell strings."""
-    if fn.FORMAT_DTYPE[field].startswith("int"):
-        return np.char.mod("%d", v.astype(np.int64))
-    return np.char.mod("%.6g", v.astype(np.float64))
 
 
 def write_bbc_file(
@@ -429,24 +406,17 @@ def write_wide_bbc(bbc_gz_path, bbs, k_labels, field_mats, tumor_samples):
         "PHASE": bbs["PHASE"].to_numpy(),
         "PHASE_POSTS": bbs["PHASE_POSTS"].to_numpy(),
     }
-    fields = [f for f in fn.WIDE_BBC_FIELDS if f in field_mats]
+    fields = [f for f in const.WIDE_BBC_FIELDS if f in field_mats]
     cols["FORMAT"] = ":".join(fields)
     for si, sample in enumerate(tumor_samples):
-        cell = _fmt_field(fields[0], field_mats[fields[0]][:, si])
+        cell = const.fmt_field(fields[0], field_mats[fields[0]][:, si])
         for f in fields[1:]:
             cell = np.char.add(
-                np.char.add(cell, ":"), _fmt_field(f, field_mats[f][:, si])
+                np.char.add(cell, ":"), const.fmt_field(f, field_mats[f][:, si])
             )
         cols[sample] = cell
     wide = pd.DataFrame(cols)
     wide.to_csv(bbc_gz_path, sep="\t", header=True, index=False, compression="gzip")
-
-
-def _fmt_seg_field(field, v):
-    """Format a per-(cluster, sample) SEG field vector into VCF cell strings."""
-    if field in _SEG_INT_FIELDS:
-        return np.char.mod("%d", v.astype(np.int64))
-    return np.char.mod("%.6g", v.astype(np.float64))
 
 
 def write_seg_file(seg_path, segs_long, tumor_samples, is_wide_format: bool = False):
@@ -473,23 +443,25 @@ def write_wide_seg(seg_path, segs_long, tumor_samples):
     column per tumor sample holding the per-(cluster, sample) fields colon-joined
     in FORMAT order.
     """
-    fixed = segs_long.drop_duplicates("CLUSTER")[WIDE_SEG_FIXED].reset_index(drop=True)
+    fixed = segs_long.drop_duplicates("CLUSTER")[const.WIDE_SEG_FIXED].reset_index(
+        drop=True
+    )
     clusters = fixed["CLUSTER"].tolist()
-    cols = {c: fixed[c].to_numpy() for c in WIDE_SEG_FIXED}
-    cols["FORMAT"] = ":".join(WIDE_SEG_FIELDS)
+    cols = {c: fixed[c].to_numpy() for c in const.WIDE_SEG_FIXED}
+    cols["FORMAT"] = ":".join(const.WIDE_SEG_FIELDS)
     piv = {
         f: segs_long.pivot(index="CLUSTER", columns="SAMPLE", values=f).reindex(
             index=clusters, columns=tumor_samples
         )
-        for f in WIDE_SEG_FIELDS
+        for f in const.WIDE_SEG_FIELDS
     }
     for sample in tumor_samples:
-        cell = _fmt_seg_field(
-            WIDE_SEG_FIELDS[0], piv[WIDE_SEG_FIELDS[0]][sample].to_numpy()
+        cell = const.fmt_field(
+            const.WIDE_SEG_FIELDS[0], piv[const.WIDE_SEG_FIELDS[0]][sample].to_numpy()
         )
-        for f in WIDE_SEG_FIELDS[1:]:
+        for f in const.WIDE_SEG_FIELDS[1:]:
             cell = np.char.add(
-                np.char.add(cell, ":"), _fmt_seg_field(f, piv[f][sample].to_numpy())
+                np.char.add(cell, ":"), const.fmt_field(f, piv[f][sample].to_numpy())
             )
         cols[sample] = cell
     pd.DataFrame(cols).to_csv(seg_path, sep="\t", header=True, index=False)
@@ -498,25 +470,6 @@ def write_wide_seg(seg_path, segs_long, tumor_samples):
 # =============================================================================
 # Wide .ucn output: cn_* as fixed bin columns, u_* + fields in per-sample cells
 # =============================================================================
-
-
-def _fmt_ucn_field(field, arr):
-    """Format a wide-.ucn FORMAT field's values into VCF cell strings."""
-    arr = np.asarray(arr)
-    if field in ("ALPHA", "BETA"):
-        return np.char.mod("%d", arr.astype(np.int64))
-    if field in ("RD", "COV", "BAF") or field.startswith("u_"):
-        return np.char.mod("%.6g", arr.astype(np.float64))
-    return arr.astype(str)
-
-
-def _cast_ucn_field(field, arr):
-    """Cast a parsed wide-.ucn FORMAT field back to its long-frame dtype."""
-    if field in ("ALPHA", "BETA"):
-        return arr.astype(np.int64)
-    if field in ("RD", "COV", "BAF") or field.startswith("u_"):
-        return arr.astype(np.float64)
-    return arr
 
 
 def write_ucn_wide(out_path, df, samples, fixed_cols, fmt_fields):
@@ -539,7 +492,7 @@ def write_ucn_wide(out_path, df, samples, fixed_cols, fmt_fields):
     cols = {c: base[c].to_numpy() for c in fixed_cols}
     cols["FORMAT"] = ":".join(fmt_fields)
     formatted = {
-        f: _fmt_ucn_field(
+        f: const.fmt_field(
             f,
             df.pivot(index="_key", columns="SAMPLE", values=f)
             .reindex(index=keys, columns=samples)
@@ -574,7 +527,7 @@ def _expand_wide_ucn(wide, geom):
         out[c] = np.repeat(wide[c].to_numpy(), m)
     for f in fmt:
         stacked = np.column_stack([parsed[s][f].to_numpy() for s in samples]).ravel()
-        out[f] = _cast_ucn_field(f, stacked)
+        out[f] = const.cast_field(f, stacked)
     return sort_df_chr(pd.DataFrame(out), pos="START")
 
 

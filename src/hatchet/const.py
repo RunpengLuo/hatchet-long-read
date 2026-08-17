@@ -1,9 +1,11 @@
-"""HATCHet input/output constant filenames and subdirectories.
+"""HATCHet input/output constants: filenames, subdirectories, and table formats.
 
 Producers and consumers of a file must import the SAME name from here, so a
 rename cannot silently break a cross-stage contract. Bare leaf names used as
 ``out_name`` are module constants; fully-resolved paths and names that embed run
 parameters (output dir, ploidy, clone count, K, sample) are helper functions.
+The BBC/SEG/.ucn column schema and per-field dtype/cell-formatting helpers also
+live here, so readers and writers share one definition.
 
 Notes:
     Purely user-named outputs (e.g. plot out_prefix) are not centralized here.
@@ -12,6 +14,66 @@ Notes:
 """
 
 import os
+
+import numpy as np
+
+
+# =============================================================================
+# Table column schema and per-field dtypes (BBC / SEG / .ucn)
+# =============================================================================
+# wide-format BBC per-sample FORMAT keys in on-disk order.
+WIDE_BBC_FIELDS = ["RD", "COV", "BAF", "ALPHA", "BETA"]
+# Fixed (non-sample, non-FORMAT) columns of a wide-format BBC file.
+WIDE_BBC_FIXED = ["#CHR", "START", "END", "#SNPS", "CLUSTER", "PHASE", "PHASE_POSTS"]
+# Per-(cluster, sample) SEG fields carried as wide FORMAT cells, in write order.
+WIDE_SEG_FIELDS = [
+    "ALPHA",
+    "BETA",
+    "COV",
+    "BAF",
+    "BAF-se",
+    "BAF-tau",
+    "RD",
+    "RD-se",
+    "RD-var",
+]
+# Cluster-level SEG columns (constant across samples).
+WIDE_SEG_FIXED = ["CLUSTER", "#BINS", "#SNPS", "LENGTH", "is_balanced", "is_filtered"]
+# Column -> dtype for every BBC and SEG field (FORMAT cells and numeric fixed
+# columns), consulted on read and to pick int vs float cell formatting on write.
+FORMAT_DTYPE = {
+    "RD": "float64",
+    "COV": "float64",
+    "BAF": "float64",
+    "ALPHA": "int64",
+    "BETA": "int64",
+    "RD-se": "float64",
+    "RD-var": "float64",
+    "BAF-se": "float64",
+    "BAF-tau": "float64",
+    "#BINS": "int64",
+    "#SNPS": "int64",
+    "LENGTH": "float64",
+}
+
+
+def _field_dtype(field):
+    """Storage dtype for a BBC/SEG/.ucn field; ``u_<clone>`` proportions are float."""
+    return "float64" if field.startswith("u_") else FORMAT_DTYPE[field]
+
+
+def cast_field(field, arr):
+    """Cast a parsed field (numpy array or pandas frame) to its storage dtype."""
+    return arr.astype(_field_dtype(field))
+
+
+def fmt_field(field, v):
+    """Format a field vector into VCF cell strings (``%d`` int, ``%.6g`` float)."""
+    v = np.asarray(v)
+    if _field_dtype(field).startswith("int"):
+        return np.char.mod("%d", v.astype(np.int64))
+    return np.char.mod("%.6g", v.astype(np.float64))
+
 
 # =============================================================================
 # Subdirectories
@@ -53,16 +115,6 @@ MODEL_SCORES_TSV = "model_scores.tsv"
 MODEL_SCORES_PDF = "model_scores.pdf"
 ELBO_TRACES_PDF = "elbo_traces.pdf"
 HMM_INIT_PDF = "hmm_init.pdf"
-
-# wide-format BBC per-sample FORMAT keys in on-disk order and their dtypes.
-WIDE_BBC_FIELDS = ["RD", "COV", "BAF", "ALPHA", "BETA"]
-FORMAT_DTYPE = {
-    "RD": "float32",
-    "COV": "float32",
-    "BAF": "float32",
-    "ALPHA": "int32",
-    "BETA": "int32",
-}
 
 
 # Per-K BBC/SEG under labels/: full path resolved here; BBC extension picked by

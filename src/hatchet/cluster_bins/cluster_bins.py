@@ -18,7 +18,7 @@ from hatchet.io_utils import (
     write_bbc_file,
     write_seg_file,
 )
-from hatchet import filenames as fn
+from hatchet import const
 from hatchet.cluster_bins.cluster_utils import (
     compute_baf_se,
     compute_rdr_se,
@@ -81,13 +81,13 @@ def run(args=None):
 
     # inputs
     bb_dir = args["bb_dir"]
-    bb_file = os.path.join(bb_dir, fn.BB_TSV_GZ)
-    sample_file = os.path.join(bb_dir, fn.SAMPLE_IDS)
-    rdr_mfile = os.path.join(bb_dir, fn.BB_RDR_NPZ)
-    depth_mfile = os.path.join(bb_dir, fn.BB_DEPTH_NPZ)
-    a_mfile = os.path.join(bb_dir, fn.BB_A_ALLELE_NPZ)
-    b_mfile = os.path.join(bb_dir, fn.BB_B_ALLELE_NPZ)
-    t_mfile = os.path.join(bb_dir, fn.BB_T_ALLELE_NPZ)
+    bb_file = os.path.join(bb_dir, const.BB_TSV_GZ)
+    sample_file = os.path.join(bb_dir, const.SAMPLE_IDS)
+    rdr_mfile = os.path.join(bb_dir, const.BB_RDR_NPZ)
+    depth_mfile = os.path.join(bb_dir, const.BB_DEPTH_NPZ)
+    a_mfile = os.path.join(bb_dir, const.BB_A_ALLELE_NPZ)
+    b_mfile = os.path.join(bb_dir, const.BB_B_ALLELE_NPZ)
+    t_mfile = os.path.join(bb_dir, const.BB_T_ALLELE_NPZ)
 
     # aux
     plot_style = get_plot_style(args)
@@ -97,11 +97,11 @@ def run(args=None):
     # outputs
     out_dir = args["bbc_dir"]
     wide_format = args["wide_format"]
-    out_bbc = fn.BULK_BBC(out_dir, wide_format)
-    out_seg = fn.BULK_SEG(out_dir, wide_format)
+    out_bbc = const.BULK_BBC(out_dir, wide_format)
+    out_seg = const.BULK_SEG(out_dir, wide_format)
     os.makedirs(out_dir, exist_ok=True)
-    label_dir = fn.LABELS_DIR(out_dir)
-    plot_dir = fn.PLOTS_DIR(out_dir)
+    label_dir = const.LABELS_DIR(out_dir)
+    plot_dir = const.PLOTS_DIR(out_dir)
     os.makedirs(label_dir, exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
     add_file_logging(out_dir, "cluster-bins")
@@ -268,7 +268,7 @@ def run(args=None):
         inits_maxK,
         ntumor_samples,
         maxK,
-        os.path.join(plot_dir, fn.HMM_INIT_PDF),
+        os.path.join(plot_dir, const.HMM_INIT_PDF),
         baf_taus=baf_taus0,
         log_rdr=log_rdr,
         bbs=bbs,
@@ -281,7 +281,7 @@ def run(args=None):
     inits_run = dict(sorted_inits[:top_restarts])
 
     if DEBUG and inits_diag:
-        init_diag_dir = os.path.join(plot_dir, fn.INIT_DIAG_DIR)
+        init_diag_dir = os.path.join(plot_dir, const.INIT_DIAG_DIR)
         os.makedirs(init_diag_dir, exist_ok=True)
         for it in inits_run:
             diag = inits_diag[it]
@@ -385,10 +385,10 @@ def run(args=None):
         elbo_data.append((K, all_elbo_traces, best_it))
 
         # Save EM parameter trace for best restart
-        trace_dir = os.path.join(out_dir, fn.TRACES_DIR)
+        trace_dir = os.path.join(out_dir, const.TRACES_DIR)
         os.makedirs(trace_dir, exist_ok=True)
         np.savez_compressed(
-            fn.K_EM_TRACE(out_dir, K),
+            const.K_EM_TRACE(out_dir, K),
             elbo_trace=np.array(best_sol["elbo_trace"]),
             rdr_means=best_sol["trace_rdr_means"],
             rdr_vars=best_sol["trace_rdr_vars"],
@@ -509,7 +509,7 @@ def run(args=None):
         bbs["PHASE_POSTS"] = best_sol["phase_posts"][:, 1]
         if not wide_format:
             bbs[["#CHR", "START", "END", "PHASE", "PHASE_POSTS", "switchprobs"]].to_csv(
-                fn.BULK_K_PHASED(out_dir, K),
+                const.BULK_K_PHASED(out_dir, K),
                 sep="\t",
                 header=True,
                 index=False,
@@ -540,7 +540,7 @@ def run(args=None):
         k_segs["is_balanced"] = k_segs["CLUSTER"].isin(balanced_ids)
         k_segs["is_filtered"] = k_segs["CLUSTER"].isin(filtered_ids)
         write_bbc_file(
-            fn.BULK_BBC_k(out_dir, wide_format, K),
+            const.BULK_BBC_k(out_dir, wide_format, K),
             bbs,
             k_labels,
             field_mats,
@@ -548,13 +548,13 @@ def run(args=None):
             is_wide_format=wide_format,
         )
         write_seg_file(
-            fn.BULK_SEG_k(out_dir, wide_format, K),
+            const.BULK_SEG_k(out_dir, wide_format, K),
             k_segs,
             tumor_samples,
             is_wide_format=wide_format,
         )
 
-    plot_elbo_traces(elbo_data, os.path.join(plot_dir, fn.ELBO_TRACES_PDF))
+    plot_elbo_traces(elbo_data, os.path.join(plot_dir, const.ELBO_TRACES_PDF))
 
     scores_df = pd.DataFrame(score_records)
     best_K = model_select_K(scores_df, score_criteria, score_method)
@@ -562,33 +562,35 @@ def run(args=None):
     logging.info(
         f"model selection ({score_criteria}): best K={best_K} {score_method}={best_score:.4f}"
     )
-    scores_df.to_csv(os.path.join(out_dir, fn.MODEL_SCORES_TSV), sep="\t", index=False)
-    plot_score(scores_df, score_method, os.path.join(plot_dir, fn.MODEL_SCORES_PDF))
+    scores_df.to_csv(
+        os.path.join(out_dir, const.MODEL_SCORES_TSV), sep="\t", index=False
+    )
+    plot_score(scores_df, score_method, os.path.join(plot_dir, const.MODEL_SCORES_PDF))
 
     ##################################################
     # copy best-K results to top-level output
     copy_pairs = [
         (
-            fn.BULK_BBC_k(out_dir, wide_format, best_K),
-            fn.BULK_BBC(out_dir, wide_format),
+            const.BULK_BBC_k(out_dir, wide_format, best_K),
+            const.BULK_BBC(out_dir, wide_format),
         ),
         (
-            fn.BULK_SEG_k(out_dir, wide_format, best_K),
-            fn.BULK_SEG(out_dir, wide_format),
+            const.BULK_SEG_k(out_dir, wide_format, best_K),
+            const.BULK_SEG(out_dir, wide_format),
         ),
     ]
     if not wide_format:
         copy_pairs.append(
             (
-                fn.BULK_K_PHASED(out_dir, best_K),
-                os.path.join(out_dir, fn.BB_PHASED_TSV_GZ),
+                const.BULK_K_PHASED(out_dir, best_K),
+                os.path.join(out_dir, const.BB_PHASED_TSV_GZ),
             )
         )
     for src_path, dst_path in copy_pairs:
         shutil.copy2(src_path, dst_path)
     shutil.copy2(
-        fn.K_PLOT(out_dir, best_K),
-        fn.BULK_K_PLOT(out_dir, best_K),
+        const.K_PLOT(out_dir, best_K),
+        const.BULK_K_PLOT(out_dir, best_K),
     )
 
     _log_done("cluster-bins")

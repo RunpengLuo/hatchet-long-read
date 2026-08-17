@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from hatchet.evaluate.vaf_utils import estimate_vaf, is_explained_mut, relative_error
-from hatchet import filenames as fn
+from hatchet import const
 
 
 def read_snv_vcf(vcf_path, sample="tumor"):
@@ -368,9 +368,9 @@ def evaluate_pool_solutions(result_dir, snv_df, gamma=0.05):
     Returns a DataFrame with one row per pool solution: ploidy, n_clones, tag,
     IMF/REG objectives (from summary.tsv), and VAF evaluation metrics.
     """
-    summary_path = fn.SUMMARY_TSV(result_dir)
+    summary_path = const.SUMMARY_TSV(result_dir)
     bbc_path = os.path.join(result_dir, "bulk.good.bbc")  # legacy: no current producer
-    sols_dir = os.path.join(result_dir, fn.SOLS_DIR)
+    sols_dir = os.path.join(result_dir, const.SOLS_DIR)
 
     summary = pd.read_csv(summary_path, sep="\t")
     bbc_df = pd.read_csv(bbc_path, sep="\t")
@@ -387,7 +387,7 @@ def evaluate_pool_solutions(result_dir, snv_df, gamma=0.05):
         if not m:
             continue
         pparam, pidx = m.group(1), m.group(2)
-        sol_subdir = fn.PLOIDY_N_SUBDIR(sols_dir, ploidy, n_clones)
+        sol_subdir = const.PLOIDY_N_SUBDIR(sols_dir, ploidy, n_clones)
         sol_file = os.path.join(
             sol_subdir, f"cd_sol{pparam}_pool{pidx}.tsv"
         )  # legacy format

@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.special import betaln, gammaln
 
-from hatchet import filenames as fn
+from hatchet import const
 from hatchet.io_utils import read_bbc_ucn
 
 
@@ -163,7 +163,7 @@ def model_selection_ploidy(
     def _compute_scores(ploidy):
         gammas = scaling[ploidy]["gammas"]
         ns_sorted = sorted(chosen_sols[ploidy].keys())
-        first_ucn = fn.RESULTS_BBC_UCN(out_dir, ploidy, ns_sorted[0])
+        first_ucn = const.RESULTS_BBC_UCN(out_dir, ploidy, ns_sorted[0])
         ll_n1, nobs_n1, n_clusters, n_samples = _compute_loglik_from_ucn(
             first_ucn, 1, gammas, clusters, samples, rdr_var_df, baf_tau_df
         )
@@ -172,7 +172,7 @@ def model_selection_ploidy(
         ns_all = [1] + ns_sorted
         lls = [ll_n1]
         for clone_n in ns_sorted:
-            ucn_file = fn.RESULTS_BBC_UCN(out_dir, ploidy, clone_n)
+            ucn_file = const.RESULTS_BBC_UCN(out_dir, ploidy, clone_n)
             ll, nobs, n_clusters, n_samples = _compute_loglik_from_ucn(
                 ucn_file, clone_n, gammas, clusters, samples, rdr_var_df, baf_tau_df
             )

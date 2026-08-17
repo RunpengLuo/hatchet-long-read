@@ -13,7 +13,7 @@ from hatchet.utils import (
     setup_logging,
 )
 from hatchet.io_utils import read_bbc_file, read_seg_file
-from hatchet import filenames as fn
+from hatchet import const
 from hatchet.compute_cn.compute_cn_utils import (
     store_gammas,
     store_solve_input,
@@ -54,8 +54,8 @@ def run(args=None):
     os.makedirs(out_dir, exist_ok=True)
     add_file_logging(out_dir, "compute-cn")
     log_arguments(args)
-    plot_dir = fn.PLOTS_DIR(out_dir)
-    sols_dir = os.path.join(out_dir, fn.SOLS_DIR)
+    plot_dir = const.PLOTS_DIR(out_dir)
+    sols_dir = os.path.join(out_dir, const.SOLS_DIR)
     os.makedirs(plot_dir, exist_ok=True)
     os.makedirs(sols_dir, exist_ok=True)
 
@@ -131,7 +131,7 @@ def run(args=None):
         maxcn=args["diploidcmax"],
         maxcn_wgd=args["tetraploidcmax"],
     )
-    gamma_outfile = fn.GAMMA_FILE(out_dir)
+    gamma_outfile = const.GAMMA_FILE(out_dir)
     store_gammas(gamma_outfile, scaling, samples)
 
     plot_scaling_2d(
@@ -143,7 +143,7 @@ def run(args=None):
         seg_rdr,
         seg_baf,
         scaling,
-        fn.SCALING_2D_PDF(plot_dir),
+        const.SCALING_2D_PDF(plot_dir),
     )
 
     solve_mode = args["mode"]
@@ -190,14 +190,16 @@ def run(args=None):
             min_ci_margin=args["min_ci_margin"],
         )
         store_solve_input(
-            fn.SOLVER_INPUT(out_dir, ploidy),
+            const.SOLVER_INPUT(out_dir, ploidy),
             fcn_data,
         )
 
         for n in range(minClone, maxClone):
-            out_bbc = fn.RESULTS_BBC_UCN(out_dir, ploidy, n)
-            out_seg = fn.RESULTS_SEG_UCN(out_dir, ploidy, n)
-            sol_dir = fn.PLOIDY_N_SUBDIR(os.path.join(out_dir, fn.SOLS_DIR), ploidy, n)
+            out_bbc = const.RESULTS_BBC_UCN(out_dir, ploidy, n)
+            out_seg = const.RESULTS_SEG_UCN(out_dir, ploidy, n)
+            sol_dir = const.PLOIDY_N_SUBDIR(
+                os.path.join(out_dir, const.SOLS_DIR), ploidy, n
+            )
             if (
                 not args["force"]
                 and os.path.exists(out_bbc)
@@ -259,7 +261,7 @@ def run(args=None):
                 )
 
             pid = args["patient_id"] or "panel"
-            nplot_dir = fn.PLOIDY_N_SUBDIR(plot_dir, ploidy, n)
+            nplot_dir = const.PLOIDY_N_SUBDIR(plot_dir, ploidy, n)
             run_plot_cn(
                 args,
                 out_bbc,
@@ -278,7 +280,7 @@ def run(args=None):
                 sel_df=sel_df,
                 segs=cn_segs,
                 title=f"{ploidy} n={n}",
-                out_name=fn.POOL_CNP_PDF(pid, ploidy, n),
+                out_name=const.POOL_CNP_PDF(pid, ploidy, n),
             )
 
     if obj_dfs:
@@ -289,7 +291,7 @@ def run(args=None):
         if model_selection_df
         else pd.DataFrame()
     )
-    summary_path = fn.SUMMARY_TSV(out_dir)
+    summary_path = const.SUMMARY_TSV(out_dir)
     summary_df.to_csv(summary_path, sep="\t", index=False)
     logging.info(f"wrote {summary_path} ({len(summary_df)} solutions)")
 
@@ -308,23 +310,23 @@ def run(args=None):
     # Write chosen per-ploidy
     for ploidy, n in chosen_n.items():
         shutil.copy2(
-            fn.RESULTS_BBC_UCN(out_dir, ploidy, n),
-            fn.CHOSEN_BBC_UCN(out_dir, ploidy),
+            const.RESULTS_BBC_UCN(out_dir, ploidy, n),
+            const.CHOSEN_BBC_UCN(out_dir, ploidy),
         )
         shutil.copy2(
-            fn.RESULTS_SEG_UCN(out_dir, ploidy, n),
-            fn.CHOSEN_SEG_UCN(out_dir, ploidy),
+            const.RESULTS_SEG_UCN(out_dir, ploidy, n),
+            const.CHOSEN_SEG_UCN(out_dir, ploidy),
         )
-        logging.info(f"chosen {ploidy} n={n}: {fn.CHOSEN_BBC_UCN(out_dir, ploidy)}")
+        logging.info(f"chosen {ploidy} n={n}: {const.CHOSEN_BBC_UCN(out_dir, ploidy)}")
 
     # Write best (across ploidies)
     shutil.copy2(
-        fn.CHOSEN_BBC_UCN(out_dir, best_ploidy),
-        fn.BEST_BBC_UCN(out_dir),
+        const.CHOSEN_BBC_UCN(out_dir, best_ploidy),
+        const.BEST_BBC_UCN(out_dir),
     )
     shutil.copy2(
-        fn.CHOSEN_SEG_UCN(out_dir, best_ploidy),
-        fn.BEST_SEG_UCN(out_dir),
+        const.CHOSEN_SEG_UCN(out_dir, best_ploidy),
+        const.BEST_SEG_UCN(out_dir),
     )
     logging.info(f"model-selected: {best_ploidy} n={best_n}")
     _log_done("compute-cn")
@@ -372,7 +374,7 @@ def solve(
 
     cd_instances = None
     pool_instances = {}
-    u0_tsv_path = fn.U0_SEEDS_TSV(sol_dir) if sol_dir is not None else None
+    u0_tsv_path = const.U0_SEEDS_TSV(sol_dir) if sol_dir is not None else None
     cd_run_kwargs = dict(
         solver_type=solver_type,
         max_iters=args["cd_niters"],
