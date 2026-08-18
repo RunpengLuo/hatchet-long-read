@@ -143,11 +143,41 @@ RunHMMResult run_hmm_cpp(
     transpose_nm_to_mn(X_alphas, alphas_mn.data(), N, M);
     transpose_nm_to_mn(X_betas,  betas_mn.data(),  N, M);
 
+    // ---- Precompute data-invariant log binomial coefficient (once) ----
+    // log_bc_nm = lgamma(total+1) - lgamma(alpha+1) - lgamma(beta+1)
+    const long NM = (long)N * M;
+    std::vector<double> log_bc_nm(NM);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+    for (long i = 0; i < NM; ++i)
+        log_bc_nm[i] = std::lgamma(X_totals[i] + 1.0)
+                     - std::lgamma(X_alphas[i] + 1.0)
+                     - std::lgamma(X_betas[i]  + 1.0);
+
+    // ---- lgamma(total+tau) buffer (share_tau); recomputed while tau updates,
+    //      then frozen once tau stops changing (after tau_iters). ----
+    std::vector<double> lgamma_tot_tau_nm(share_tau ? NM : 0);
+    auto recompute_tot_tau = [&]() {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+        for (int n = 0; n < N; ++n)
+            for (int m = 0; m < M; ++m)
+                lgamma_tot_tau_nm[(long)n * M + m] =
+                    std::lgamma(X_totals[(long)n * M + m] + baf_taus[m]);
+    };
+    const double* lg_tot_tau_ptr = share_tau ? lgamma_tot_tau_nm.data() : nullptr;
+
     // ---- Parameter traces (row 0 = init params) ----
-    std::vector<double> trace_rdr_means(rdr_means);
-    std::vector<double> trace_rdr_vars(rdr_vars);
-    std::vector<double> trace_baf_means(baf_means);
-    std::vector<double> trace_baf_taus(baf_taus);
+    std::vector<double> trace_rdr_means; trace_rdr_means.reserve((size_t)(n_iter + 1) * K * M);
+    std::vector<double> trace_rdr_vars;  trace_rdr_vars.reserve((size_t)(n_iter + 1) * K * M);
+    std::vector<double> trace_baf_means; trace_baf_means.reserve((size_t)(n_iter + 1) * K * M);
+    std::vector<double> trace_baf_taus;  trace_baf_taus.reserve((size_t)(n_iter + 1) * K * M);
+    trace_rdr_means.insert(trace_rdr_means.end(), rdr_means.begin(), rdr_means.end());
+    trace_rdr_vars.insert(trace_rdr_vars.end(),   rdr_vars.begin(),  rdr_vars.end());
+    trace_baf_means.insert(trace_baf_means.end(), baf_means.begin(), baf_means.end());
+    trace_baf_taus.insert(trace_baf_taus.end(),   baf_taus.begin(),  baf_taus.end());
 
     // ---- EM loop ----
     std::vector<double> elbo_trace;
@@ -158,10 +188,14 @@ RunHMMResult run_hmm_cpp(
 
     for (int it = 0; it < n_iter; ++it) {
 
+        // Refresh lgamma(total+tau) while tau still changes; frozen afterwards.
+        if (share_tau && it <= tau_iters) recompute_tot_tau();
+
         // E-step: log-likelihood kernel
         compute_loglik_cpp(
             X_rdrs, X_alphas, X_betas, X_totals,
             rdr_means.data(), rdr_vars.data(), baf_means.data(), baf_taus.data(),
+            log_bc_nm.data(), lg_tot_tau_ptr,
             lls0.data(), lls1.data(), N, K, M, share_tau);
 
         // E-step: forward-backward
@@ -232,10 +266,12 @@ RunHMMResult run_hmm_cpp(
         trace_baf_taus.insert(trace_baf_taus.end(), baf_taus.begin(), baf_taus.end());
     }
 
-    // Final loglik with fitted params (needed for Viterbi decoding)
+    // Final loglik with fitted params (needed for Viterbi decoding).
+    // tau is frozen after tau_iters, so lgamma_tot_tau_nm already matches baf_taus.
     compute_loglik_cpp(
         X_rdrs, X_alphas, X_betas, X_totals,
         rdr_means.data(), rdr_vars.data(), baf_means.data(), baf_taus.data(),
+        log_bc_nm.data(), lg_tot_tau_ptr,
         lls0.data(), lls1.data(), N, K, M, share_tau);
 
     RunHMMResult result;

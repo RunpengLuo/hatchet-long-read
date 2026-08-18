@@ -1,28 +1,50 @@
 /**
- * BAF M-step: MLE for Beta-Binomial means via Boost.Math Brent minimization.
+ * BAF M-step: MLE for Beta-Binomial means.
  *
  * For each (k, m) pair, maximizes the posterior-weighted Beta-Binomial
- * log-likelihood over p in (eps, 1-eps):
+ * log-likelihood over p in (eps, 1-eps), with a = τp, b = τ(1-p):
  *
- *   Q(p) = C + Σ_n [ w0[n]*(lgamma(α_n+τp) + lgamma(β_n+τ(1-p)))
- *                   + w1[n]*(lgamma(β_n+τp) + lgamma(α_n+τ(1-p))) ]
- *             - Wk * (lgamma(τp) + lgamma(τ(1-p)))
+ *   Q(p) = C + Σ_n [ w0[n]*(lgamma(α_n+a) + lgamma(β_n+b))
+ *                   + w1[n]*(lgamma(β_n+a) + lgamma(α_n+b)) ]
+ *             - Wk * (lgamma(a) + lgamma(b))
  *
- * where C = Σ_n (w0+w1)*(-lgamma(α_n+β_n+τ)) + Wk*lgamma(τ) is a constant
- * w.r.t. p precomputed once per (k,m) outside Brent.
+ * With τ fixed, a+b=τ is constant, so the normalizers lgamma(total+τ)/lgamma(τ)
+ * drop out and Q'' = τ² Σ w [trigamma(count+a) - trigamma(a)] ≤ 0: Q is concave
+ * and unimodal. The maximizer is found by a warm-started, boost-safeguarded
+ * Newton iteration on Q'(p)=0 (derivatives in digamma/trigamma; no lgamma), with
+ * closed-form boundary handling and a Brent fallback for numerical pathologies.
  *
  * The outer (k, m) loop is parallelised with OpenMP collapse(2).
  */
 
 #include "m_steps.h"
+#include "lgamma_batch.h"
 
 #include <cmath>
+#include <cstdint>
+#include <utility>
 #include <vector>
+#include <boost/math/special_functions/digamma.hpp>
+#include <boost/math/special_functions/trigamma.hpp>
 #include <boost/math/tools/minima.hpp>
+#include <boost/math/tools/roots.hpp>
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+
+// Root/optimizer precision (bits of the bracket). 22 bits ~= 1e-7 on the search
+// interval, far tighter than any downstream use.
+static const int SOLVE_BITS = 22;
+
+// Batched digamma/trigamma: a tight loop overlaps many independent special-fn
+// pipelines (same instruction-level-parallelism win as lgamma_batch).
+static inline void digamma_batch(const double* in, double* out, int n) {
+    for (int i = 0; i < n; ++i) out[i] = boost::math::digamma(in[i]);
+}
+static inline void trigamma_batch(const double* in, double* out, int n) {
+    for (int i = 0; i < n; ++i) out[i] = boost::math::trigamma(in[i]);
+}
 
 
 void update_baf_means_cpp(
@@ -34,6 +56,7 @@ void update_baf_means_cpp(
     int N, int K, int M, double eps,
     int k_start)
 {
+    const double lo = eps, hi = 1.0 - eps;
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2) schedule(dynamic)
 #endif
@@ -44,49 +67,98 @@ void update_baf_means_cpp(
             // posts_kn2[k, n, h] = posts_kn2[k*N*2 + n*2 + h]
             const double* pkn2    = posts_kn2 + (long)k * N * 2;
             double tau = baf_taus[(long)k * M + m];
-            double lgamma_tau = std::lgamma(tau);
 
-            // Precompute per-n constants and aggregate weights
-            // lgt[n] = lgamma(alpha_n + beta_n + tau)  [constant w.r.t. p]
-            // Wk = Σ_n (w0[n] + w1[n])
-            // C  = Σ_n (w0[n]+w1[n]) * (-lgt[n]) + Wk * lgamma(tau)
-            std::vector<double> lgt(N);
+            // Wk = Σ_n (w0[n] + w1[n]); Newton needs no lgamma precompute.
             double Wk = 0.0;
-            double C  = 0.0;
+            for (int n = 0; n < N; ++n) Wk += pkn2[n * 2 + 0] + pkn2[n * 2 + 1];
 
-            for (int n = 0; n < N; ++n) {
-                double w0n = pkn2[n * 2 + 0];
-                double w1n = pkn2[n * 2 + 1];
-                double wn  = w0n + w1n;
-                lgt[n] = std::lgamma(alpha_m[n] + beta_m[n] + tau);
-                Wk += wn;
-                C  -= wn * lgt[n];
-            }
-            C += Wk * lgamma_tau;
+            // Thread-local scratch reused across evals and (k,m) pairs.
+            static thread_local std::vector<double> qarg, qpsi, qpsi1;
+            qarg.resize(4 * (size_t)N);
+            qpsi.resize(4 * (size_t)N);
+            qpsi1.resize(4 * (size_t)N);
 
-            // neg_Q(p): with constants hoisted, inner loop needs 4 lgamma per n
-            auto neg_Q = [&](double p) -> double {
+            // Gradient/Hessian of Q at p, batched over the 4 shared points
+            // {α_n+a, β_n+b, β_n+a, α_n+b}.
+            auto grad_hess = [&](double p) -> std::pair<double, double> {
                 double a = tau * p;
                 double b = tau * (1.0 - p);
-                // betaln(a,b) normalizer contribution (no n-dependence)
-                double norm_term = Wk * (std::lgamma(a) + std::lgamma(b));
-                double Q = C - norm_term;
                 for (int n = 0; n < N; ++n) {
-                    double alpha_n = alpha_m[n];
-                    double beta_n  = beta_m[n];
-                    double w0n = pkn2[n * 2 + 0];
-                    double w1n = pkn2[n * 2 + 1];
-                    // h=0 contribution: lgamma(α_n+a) + lgamma(β_n+b) - lgt[n]
-                    // h=1 contribution: lgamma(β_n+a) + lgamma(α_n+b) - lgt[n]
-                    // lgt[n] absorbed into C above
-                    Q += w0n * (std::lgamma(alpha_n + a) + std::lgamma(beta_n + b))
-                       + w1n * (std::lgamma(beta_n  + a) + std::lgamma(alpha_n + b));
+                    double al = alpha_m[n];
+                    double be = beta_m[n];
+                    long base = 4 * (long)n;
+                    qarg[base + 0] = al + a;
+                    qarg[base + 1] = be + b;
+                    qarg[base + 2] = be + a;
+                    qarg[base + 3] = al + b;
                 }
-                return -Q;
+                digamma_batch(qarg.data(), qpsi.data(), 4 * N);
+                trigamma_batch(qarg.data(), qpsi1.data(), 4 * N);
+                double G = 0.0, H = 0.0;
+                for (int n = 0; n < N; ++n) {
+                    double w0 = pkn2[n * 2 + 0];
+                    double w1 = pkn2[n * 2 + 1];
+                    long base = 4 * (long)n;
+                    G += w0 * (qpsi[base + 0] - qpsi[base + 1])
+                       + w1 * (qpsi[base + 2] - qpsi[base + 3]);
+                    H += w0 * (qpsi1[base + 0] + qpsi1[base + 1])
+                       + w1 * (qpsi1[base + 2] + qpsi1[base + 3]);
+                }
+                double psia = boost::math::digamma(a), psib = boost::math::digamma(b);
+                double t1a  = boost::math::trigamma(a), t1b = boost::math::trigamma(b);
+                double Qp  = tau * (G - Wk * (psia - psib));
+                double Qpp = tau * tau * (H - Wk * (t1a + t1b));
+                return {Qp, Qpp};
             };
 
-            auto result = boost::math::tools::brent_find_minima(neg_Q, eps, 1.0 - eps, 32);
-            p_km[(long)k * M + m] = result.first;
+            // Concavity => the maximizer is pinned by the endpoint gradients.
+            double p_star;
+            if (grad_hess(lo).first <= 0.0) {
+                p_star = lo;                       // Q' already <= 0 at lo
+            } else if (grad_hess(hi).first >= 0.0) {
+                p_star = hi;                       // Q' still >= 0 at hi
+            } else {
+                double guess = std::min(std::max(p_km[(long)k * M + m], lo), hi);
+                std::uintmax_t max_iter = 60;
+                p_star = boost::math::tools::newton_raphson_iterate(
+                    grad_hess, guess, lo, hi, SOLVE_BITS, max_iter);
+                if (max_iter >= 60) {
+                    // Did not converge (should not happen for concave Q): fall
+                    // back to Brent on the exact objective for this (k,m).
+                    static thread_local std::vector<double> lgt, lgt_arg, qa, qr;
+                    lgt.resize(N); lgt_arg.resize(N);
+                    qa.resize(4 * (size_t)N); qr.resize(4 * (size_t)N);
+                    double lgamma_tau = std::lgamma(tau);
+                    double C = 0.0;
+                    for (int n = 0; n < N; ++n) lgt_arg[n] = alpha_m[n] + beta_m[n] + tau;
+                    lgamma_batch(lgt_arg.data(), lgt.data(), N);
+                    for (int n = 0; n < N; ++n)
+                        C -= (pkn2[n * 2 + 0] + pkn2[n * 2 + 1]) * lgt[n];
+                    C += Wk * lgamma_tau;
+                    auto neg_Q = [&](double p) -> double {
+                        double a = tau * p, b = tau * (1.0 - p);
+                        double norm_term = Wk * (std::lgamma(a) + std::lgamma(b));
+                        for (int n = 0; n < N; ++n) {
+                            double al = alpha_m[n], be = beta_m[n];
+                            long base = 4 * (long)n;
+                            qa[base + 0] = al + a; qa[base + 1] = be + b;
+                            qa[base + 2] = be + a; qa[base + 3] = al + b;
+                        }
+                        lgamma_batch(qa.data(), qr.data(), 4 * N);
+                        double Q = C - norm_term;
+                        for (int n = 0; n < N; ++n) {
+                            double w0 = pkn2[n * 2 + 0], w1 = pkn2[n * 2 + 1];
+                            long base = 4 * (long)n;
+                            Q += w0 * (qr[base + 0] + qr[base + 1])
+                               + w1 * (qr[base + 2] + qr[base + 3]);
+                        }
+                        return -Q;
+                    };
+                    p_star = boost::math::tools::brent_find_minima(
+                        neg_Q, lo, hi, SOLVE_BITS).first;
+                }
+            }
+            p_km[(long)k * M + m] = p_star;
         }
     }
 }
@@ -224,7 +296,7 @@ void update_baf_tau_cpp(
             };
 
             auto result = boost::math::tools::brent_find_minima(
-                neg_Q_logtau, lo, hi, 32);
+                neg_Q_logtau, lo, hi, SOLVE_BITS);
             double tau_m = std::exp(result.first);
             for (int k = 0; k < K; ++k) baf_taus[(long)k * M + m] = tau_m;
         }
@@ -262,7 +334,7 @@ void update_baf_tau_cpp(
                 };
 
                 auto result = boost::math::tools::brent_find_minima(
-                    neg_Q_logtau, lo, hi, 32);
+                    neg_Q_logtau, lo, hi, SOLVE_BITS);
                 baf_taus[(long)k * M + m] = std::exp(result.first);
             }
         }

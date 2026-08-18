@@ -49,10 +49,14 @@ static double fwd_bwd_seg_cpp(
     double*       posts_seg,
     int T, int K)
 {
-    std::vector<double> fwd(T * K * 2);
-    std::vector<double> bwd(T * K * 2, 0.0);
-    std::vector<double> log_c(T);
-    std::vector<double> tmp(K);
+    // Thread-local scratch reused across segments and EM iterations.
+    // fwd/log_c/tmp are fully overwritten before use; bwd must be zeroed (its
+    // last timestep row stays 0 by construction).
+    static thread_local std::vector<double> fwd, bwd, log_c, tmp;
+    fwd.resize((size_t)T * K * 2);
+    bwd.assign((size_t)T * K * 2, 0.0);
+    log_c.resize(T);
+    tmp.resize(K);
 
     // ---- Forward t=0 ----
     for (int k = 0; k < K; ++k) {
