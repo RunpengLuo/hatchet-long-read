@@ -166,7 +166,7 @@ def plot_scaling_2d(
     seg_rdr: pd.DataFrame,
     seg_baf: pd.DataFrame,
     scaling: dict,
-    out_file: str,
+    plot_dir: str,
     markersize: float = 3.0,
     markersize_centroid: float = 14,
     dpi: int = 300,
@@ -175,11 +175,12 @@ def plot_scaling_2d(
 ):
     """2D RDR-vs-BAF scatter anchoring the scaling inference from get_scaling_factor.
 
-    One PDF page per sample and WGD mode (noWGD = diploid, WGD = tetraploid,
-    drawn only when a WGD scaling was inferred). Bins are colored per cluster via
-    cnplot's plot_scatter_2d; anchor clusters are circled and annotated with their
-    inferred (a, b) clonal states via annotate_landmarks. Cluster centroids come
-    from the per-(cluster, sample) seg RD/BAF frames, indexed by cluster label.
+    One PDF per WGD mode (scaling_2d.diploid.pdf for noWGD, scaling_2d.tetraploid.pdf
+    for WGD, written only when a WGD scaling was inferred), with one page per sample.
+    Bins are colored per cluster via cnplot's plot_scatter_2d; anchor clusters are
+    circled and annotated with their inferred (a, b) clonal states via
+    annotate_landmarks. Cluster centroids come from the per-(cluster, sample) seg
+    RD/BAF frames, indexed by cluster label.
     """
     use_editable_fonts()
 
@@ -187,22 +188,23 @@ def plot_scaling_2d(
         palette = set_palette(num_colors=len(clusters))
     pal = {str(c): palette[i] for i, c in enumerate(clusters)}
 
-    panels = [("noWGD", scaling["diploid"])]
+    panels = [("diploid", "noWGD", scaling["diploid"])]
     if scaling.get("tetraploid") is not None:
-        panels.append(("WGD", scaling["tetraploid"]))
+        panels.append(("tetraploid", "WGD", scaling["tetraploid"]))
 
     cluster_set = set(clusters)
     cluster_str = bins["CLUSTER"].astype(str).to_numpy()
 
-    pdf = PdfPages(out_file)
-    for si, sample in enumerate(samples):
-        obs = pd.DataFrame({"BAF": baf_mat[:, si], "RD": rd_mat[:, si]})
-        obs["CLUSTER"] = cluster_str
+    for ploidy, label, info in panels:
+        out_file = const.SCALING_2D_PDF(plot_dir, ploidy)
+        pdf = PdfPages(out_file)
+        for si, sample in enumerate(samples):
+            obs = pd.DataFrame({"BAF": baf_mat[:, si], "RD": rd_mat[:, si]})
+            obs["CLUSTER"] = cluster_str
 
-        lim_baf = (0, 1) if obs["BAF"].max() > 0.5 else (0, 0.55)
-        lim_rdr = (0, min(max(2, int(np.ceil(obs["RD"].max()))), maxlim_rdr))
+            lim_baf = (0, 1) if obs["BAF"].max() > 0.5 else (0, 0.55)
+            lim_rdr = (0, min(max(2, int(np.ceil(obs["RD"].max()))), maxlim_rdr))
 
-        for label, info in panels:
             landmarks = []
             for c, (a, b) in info["clonal"].items():
                 if c not in cluster_set:
@@ -237,8 +239,8 @@ def plot_scaling_2d(
                 grid.figure, dpi=dpi, bbox_inches="tight", transparent=transparent
             )
             plt.close(grid.figure)
-    pdf.close()
-    logging.info(f"scaling 2D scatter saved to {out_file}")
+        pdf.close()
+        logging.info(f"scaling 2D scatter saved to {out_file}")
 
 
 def run_plot_cn(args, bbc, seg, gamma_file, plot_dir, ploidy, name=None):

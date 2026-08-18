@@ -143,7 +143,7 @@ def run(args=None):
         seg_rdr,
         seg_baf,
         scaling,
-        const.SCALING_2D_PDF(plot_dir),
+        plot_dir,
     )
 
     solve_mode = args["mode"]

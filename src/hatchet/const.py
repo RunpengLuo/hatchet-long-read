@@ -139,7 +139,9 @@ INIT_PDF = lambda plot_dir, name: os.path.join(plot_dir, f"{name}_init.pdf")
 # =============================================================================
 # Fully-resolved paths under the compute-cn result dir (or its plots/ or sols/).
 GAMMA_FILE = lambda out_dir: os.path.join(out_dir, "gammas.tsv")
-SCALING_2D_PDF = lambda plot_dir: os.path.join(plot_dir, "scaling_2d.pdf")
+SCALING_2D_PDF = lambda plot_dir, ploidy: os.path.join(
+    plot_dir, f"scaling_2d.{ploidy}.pdf"
+)
 SUMMARY_TSV = lambda out_dir: os.path.join(out_dir, "summary.tsv")
 BEST_BBC_UCN = lambda out_dir: os.path.join(out_dir, "best.bbc.ucn")
 BEST_SEG_UCN = lambda out_dir: os.path.join(out_dir, "best.seg.ucn")

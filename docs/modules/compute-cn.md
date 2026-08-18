@@ -153,7 +153,8 @@ Copy-number solutions written to `--result_dir`: the model-selected `best.bbc.uc
       <mode>_<sol_id>.tsv                 # one per candidate solution on the regularization path
       u0_seeds.tsv                        # U-initialization seeds for coordinate descent
   plots/
-    scaling_2d.pdf                        # RDR-vs-BAF scaling diagnostic
+    scaling_2d.diploid.pdf                # RDR-vs-BAF scaling diagnostic (noWGD)
+    scaling_2d.tetraploid.pdf             # RDR-vs-BAF scaling diagnostic (WGD, if inferred)
     model_selection.pdf                   # Pareto front + elbow/BIC selection page
     <ploidy>_n*/                          # per-(ploidy, n) plots
       <patient_id>.<ploidy>_n*.1D.pdf        # 1D genome-wide CN profile (selected solution)
