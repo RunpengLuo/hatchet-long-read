@@ -257,7 +257,6 @@ def run(args=None):
             random_state=seed,
             restarts=restarts,
             n_local_trials=n_local_trials,
-            log_rdr=log_rdr,
             baf_eps=baf_eps,
             bal_margin=args["bal_margin"],
             collect_diag=DEBUG,

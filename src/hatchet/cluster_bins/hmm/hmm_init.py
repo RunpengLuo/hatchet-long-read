@@ -23,7 +23,6 @@ def init_hmm_cna_plus_plus(
     random_state=42,
     restarts=10,
     n_local_trials: int | None = None,
-    log_rdr=False,
     baf_eps: float = 1e-3,
     bal_margin: float = 0.03,
     collect_diag: bool = False,
@@ -47,7 +46,6 @@ def init_hmm_cna_plus_plus(
         random_state: base random seed for candidate sampling.
         restarts: number of independent seeding runs.
         n_local_trials: candidates evaluated per seeding step; None -> max(2 + round(log K), 1).
-        log_rdr: seed the first centroid RDR in log space.
         baf_eps: lower bound clipping BAF candidates to avoid degenerate Beta-Binomial params.
         bal_margin: half-width of the |BAF - 0.5| band defining balanced bins for the RDR anchor.
         collect_diag: return per-restart seeding diagnostics in the second output.
@@ -115,7 +113,8 @@ def init_hmm_cna_plus_plus(
     bal_mask = np.all(np.abs(X_bafs - 0.5) <= bal_margin, axis=1)
     rdr_pool = X_rdrs[bal_mask] if np.any(bal_mask) else X_rdrs
     median_rdr = np.median(rdr_pool, axis=0)
-    rdr_means0 = np.log(median_rdr)[None, :] if log_rdr else median_rdr[None, :]
+    # NB: X_rdrs already in model space (raw or log); anchor needs no further transform
+    rdr_means0 = median_rdr[None, :]
     rdr_vars0 = rdr_vars
 
     # Compute loglik for the first centroid once — shared across all restarts
