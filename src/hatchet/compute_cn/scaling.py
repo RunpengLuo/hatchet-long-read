@@ -200,8 +200,7 @@ def get_scaling_factor(
 
     if purities_dip is None:
         clonal_dip = {s0: (1, 1), **fix_cn_dip}
-        purities_dip = {s: 0.0 for s in samples}
-        logging.warning("no valid noWGD pair, using s0 only")
+        logging.warning("no valid noWGD pair; leaving purity free for the solve step")
 
     clonal_tet, purities_tet, gammas_wgd = None, None, None
     for z, cn in fix_cn_tet.items():
