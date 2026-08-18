@@ -77,6 +77,7 @@ def get_scaling_factor(
     logging.info(f"imbalanced clusters={imbalanced_z}")
 
     def _purity_from_baf(z, a, b):
+        """Solve per-sample tumor purity from cluster z's BAF given clonal CN (a, b); None if any purity leaves (0, 1]."""
         bz = baf.loc[z].values
         dom = (b - 1) - bz * (a + b - 2)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -84,6 +85,7 @@ def get_scaling_factor(
         return None if np.any((p <= 0) | (p > 1)) else p
 
     def _wgd_gamma(z, a, b, purs):
+        """RDR scaling gamma under WGD for cluster z given clonal CN (a, b) and purity; None if the denominator is zero."""
         c = a + b
         if c == 4:
             return (2 + 2 * purs) / rdr_s0
@@ -91,6 +93,7 @@ def get_scaling_factor(
         return None if np.any(dom == 0) else (2 * c - 8) / dom
 
     def _cn_candidates(mx):
+        """Enumerate imbalanced allele-specific CN candidates (a, b) with total copies up to mx."""
         return [(1, 0)] + [
             (c - b, b)
             for c in range(2, mx + 1)
@@ -99,6 +102,7 @@ def get_scaling_factor(
         ]
 
     def _is_concordant(z, a, b, purs, gams, base_ploidy):
+        """True if cluster z's BAF-derived and RDR-derived purities agree (two-sided z-test, no sample p<0.05)."""
         c = a + b
         if c == base_ploidy or c == 2:
             return True
@@ -114,6 +118,7 @@ def get_scaling_factor(
         return not np.any((se > 0) & (pvals < 0.05))
 
     def _fits_grid(purs, gams, mx):
+        """True if every cluster's BAF and RDR fall within the feasible band implied by purity, gamma, and max CN mx."""
         d = 2 * (1 - purs) + mx * purs
         lo_baf, hi_baf = (1 - purs) / d, (1 - purs + mx * purs) / d
         lo_rdr, hi_rdr = 2 * (1 - purs) / gams, d / gams
@@ -123,6 +128,7 @@ def get_scaling_factor(
         )
 
     def _rdr_mse(z, a, b, purs, gams):
+        """Mean squared error of cluster z's per-bin RDR against the RDR expected for CN (a, b) at given purity and gamma."""
         exp_rdr = (2 * (1 - purs) + (a + b) * purs) / gams
         ss, n = 0.0, 0
         for si, s in enumerate(samples):
@@ -132,6 +138,7 @@ def get_scaling_factor(
         return ss / n if n >= 2 else None
 
     def _score_candidates(cn_list, base_ploidy, maxcn_grid, is_wgd, gams_default):
+        """Return the (cluster, CN, purity, gamma) with lowest RDR MSE that passes purity/concordance/grid filters, or None."""
         best = {}
         for z in imbalanced_z:
             baf_z, rdr_z = baf.loc[z].values, rdr.loc[z].values
