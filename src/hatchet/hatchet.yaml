@@ -91,7 +91,7 @@ solver_threads: null
 # plotting (shared: cluster-bins plot-rdr-baf + plot-cn + plot-panel)
 plot_dpi: 300
 # plot_img_type: pdf | png | svg
-plot_img_type: png
+plot_img_type: pdf
 plot_transparent: false
 plot_show_gap: false
 
