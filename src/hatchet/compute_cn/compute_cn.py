@@ -260,7 +260,7 @@ def run(args=None):
                     is_wide_format=args["wide_format"],
                 )
 
-            pid = args["patient_id"] or "panel"
+            pid = args["sample_id"] or "tumor"
             nplot_dir = const.PLOIDY_N_SUBDIR(plot_dir, ploidy, n)
             run_plot_cn(
                 args,

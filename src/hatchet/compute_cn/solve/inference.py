@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import pandas as pd
 from pyomo import environ as pe
+from pyomo.common.errors import ApplicationError
 from pyomo.opt import SolverStatus, TerminationCondition
 
 from hatchet.compute_cn.solve.model import (
@@ -65,13 +66,23 @@ def create_solver(solver_type, threads=None, timelimit=None):
 
 
 def solve_model(model, solver, warmstart, timelimit):
-    """Solve a Pyomo model. Returns True on success."""
+    """Solve a Pyomo model. Returns True on success.
+
+    CBC 2.10.13 aborts (SIGABRT, Clp assertion ClpNonLinearCost.cpp:1065) both on
+    the ``-mipstart`` warm-start file and on some degenerate instances; warm-start
+    is skipped for CBC and a solver crash is caught and reported as a failed solve
+    (a dead CD seed) rather than aborting the whole run.
+    """
     kwargs = {"report_timing": False}
     if timelimit is not None:
         kwargs["timelimit"] = int(timelimit)
-    if solver.warm_start_capable():
+    if solver.warm_start_capable() and solver.name != "cbc":
         kwargs["warmstart"] = warmstart
-    results = solver.solve(model, **kwargs)
+    try:
+        results = solver.solve(model, **kwargs)
+    except ApplicationError as e:
+        logging.debug(f"solver {solver.name} crashed, treating as failed solve: {e}")
+        return False
     ok = (
         results.solver.status == SolverStatus.ok
         and results.solver.termination_condition

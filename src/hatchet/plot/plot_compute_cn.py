@@ -255,7 +255,7 @@ def run_plot_cn(args, bbc, seg, gamma_file, plot_dir, ploidy, name=None):
             "region_bed": args["region_bed"],
             "gamma_file": gamma_file,
             "solfile": None,
-            "patient_id": name,
+            "sample_id": name,
             "plot_dir": plot_dir,
             "ploidy": ploidy,
         }

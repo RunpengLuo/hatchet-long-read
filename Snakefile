@@ -133,7 +133,7 @@ rule run_compute_cn:
                 "bulk.seg" if manual_k is None else f"labels/bulk{manual_k}.seg",
             )
         ),
-        patient_id=config.get("patient_id", "panel"),
+        sample_id=config.get("sample_id", "tumor"),
         args=compute_cn_args,
     log:
         os.path.join(config["log_dir"], "compute_cn.log"),
@@ -147,6 +147,6 @@ rule run_compute_cn:
             --result_dir {output.result_dir} \
             --genome_size {input.genome_size} \
             --region_bed {input.region_bed} \
-            --patient_id {params.patient_id} \
+            --sample_id {params.sample_id} \
             {params.args} > {log} 2>&1
         """

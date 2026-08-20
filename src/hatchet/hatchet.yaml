@@ -99,8 +99,8 @@ plot_show_gap: false
 plot_tail_alpha: 0.8
 plot_center_alpha: 1.0
 plot_onetail_area: 0.025
-plot_maxlim_fcn: 30
-patient_id: panel
+plot_maxlim_fcn: 12
+sample_id: tumor
 # combined 1D figure width (inches)
 plot_row_width: 25
 # per-sample vertical block height (inches)

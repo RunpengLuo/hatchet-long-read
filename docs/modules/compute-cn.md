@@ -13,7 +13,7 @@ The BBC and SEG tables produced by `cluster-bins` (`--bbc`, `--seg`; e.g. `bbc/b
 | `--result_dir` | *(required)* | Output directory for computed CN results |
 | `--genome_size` | *(required)* | Reference chromosome sizes file |
 | `--region_bed` | *(required)* | Reference chromosome BED file |
-| `--patient_id` | `panel` | Output filename prefix for per-(ploidy, n) plots |
+| `--sample_id` | `tumor` | Output filename prefix for per-(ploidy, n) plots |
 | `--force` | False | Re-solve even if results already exist (default: skip existing) |
 | `--verbosity` | 0 | Verbose level: 0, 1, or 2 |
 
@@ -43,7 +43,7 @@ usage: hatchet compute-cn [-h] --result_dir RESULT_DIR --bbc BBC --seg SEG
                           [--u_dir_alpha U_DIR_ALPHA]
                           [--solver_threads SOLVER_THREADS]
                           [--verbosity VERBOSITY] --genome_size GENOME_SIZE
-                          --region_bed REGION_BED [--patient_id PATIENT_ID]
+                          --region_bed REGION_BED [--sample_id SAMPLE_ID]
 ```
 
 ## Main parameters
@@ -157,10 +157,10 @@ Copy-number solutions written to `--result_dir`: the model-selected `best.bbc.uc
     scaling_2d.tetraploid.pdf             # RDR-vs-BAF scaling diagnostic (WGD, if inferred)
     model_selection.pdf                   # Pareto front + elbow/BIC selection page
     <ploidy>_n*/                          # per-(ploidy, n) plots
-      <patient_id>.<ploidy>_n*.1D.pdf        # 1D genome-wide CN profile (selected solution)
-      <patient_id>.<ploidy>_n*.1D.FCN_AB.pdf # allele-specific 1D profile
-      <patient_id>.<ploidy>_n*.2D.pdf        # RDR-vs-BAF 2D scatter
-      <patient_id>.pool_<ploidy>_n*.pdf      # pool panel of all Pareto (alternative) solutions
+      <sample_id>.<ploidy>_n*.1D.pdf        # 1D genome-wide CN profile (selected solution)
+      <sample_id>.<ploidy>_n*.1D.FCN_AB.pdf # allele-specific 1D profile
+      <sample_id>.<ploidy>_n*.2D.pdf        # RDR-vs-BAF 2D scatter
+      <sample_id>.pool_<ploidy>_n*.pdf      # pool panel of all Pareto (alternative) solutions
   compute-cn.log                          # run log (ends with the runtime/peak-RSS table)
 ```
 
@@ -182,7 +182,7 @@ For each `(ploidy, n)`, `compute-cn` explores a regularization path and keeps th
 candidate solutions, not only the model-selected one. Each candidate is written under
 `sols/<ploidy>_n<n>/` as `<mode>_<sol_id>.tsv` (`<mode>` is `cd`/`ilp`; `<sol_id>` encodes the
 regularization weight, e.g. `cd_p0.0500_s0.tsv`). The pool is visualized as a single panel
-`plots/<ploidy>_n<n>/<patient_id>.pool_<ploidy>_n<n>.pdf` (one row per Pareto solution, the selected
+`plots/<ploidy>_n<n>/<sample_id>.pool_<ploidy>_n<n>.pdf` (one row per Pareto solution, the selected
 one marked `*`); `sols/objectives.tsv` records each solution's fit/regularization objectives and
 `plots/model_selection.pdf` shows the Pareto front with the elbow/BIC pick.
 

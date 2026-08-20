@@ -208,12 +208,12 @@ def run(args=None):
     lim_fcn = (-0.05 * top_fcn, top_fcn)
 
     ##################################################
-    patient_id = args["patient_id"] or "panel"
+    sample_id = args["sample_id"] or "tumor"
     ext = style["img_type"]
     tag = solID and "." + solID
-    out_1d = os.path.join(plot_dir, f"{patient_id}{tag}.1D.{ext}")
-    out_1d_ab = os.path.join(plot_dir, f"{patient_id}{tag}.1D.FCN_AB.{ext}")
-    out_2d = os.path.join(plot_dir, f"{patient_id}{tag}.2D.{ext}")
+    out_1d = os.path.join(plot_dir, f"{sample_id}{tag}.1D.{ext}")
+    out_1d_ab = os.path.join(plot_dir, f"{sample_id}{tag}.1D.FCN_AB.{ext}")
+    out_2d = os.path.join(plot_dir, f"{sample_id}{tag}.2D.{ext}")
 
     common_1d = dict(
         obs_df=obs_df,
@@ -294,7 +294,7 @@ def run(args=None):
             path = (
                 out_2d
                 if len(samples) == 1
-                else os.path.join(plot_dir, f"{patient_id}{tag}.2D.{sample}.{ext}")
+                else os.path.join(plot_dir, f"{sample_id}{tag}.2D.{sample}.{ext}")
             )
             fig_2d.savefig(path, dpi=dpi, bbox_inches="tight", transparent=transparent)
         plt.close(fig_2d)

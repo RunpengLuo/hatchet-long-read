@@ -618,11 +618,11 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         help="Reference chromosome BED file",
     )
     parser.add_argument(
-        "--patient_id",
+        "--sample_id",
         required=False,
         default=argparse.SUPPRESS,
         type=str,
-        help="Output filename prefix for per-(ploidy,n) plots (default: 'panel')",
+        help="Output filename prefix for per-(ploidy,n) plots (default: 'tumor')",
     )
     # compute-cn renders per-(ploidy,n) plots internally; share the plot styling knobs.
     add_arguments_plot_style(parser)
@@ -795,7 +795,7 @@ def add_arguments_plot_cn(parser: argparse.ArgumentParser):
         help="Ploidy of the solution (selects gamma column from gamma file).",
     )
     parser.add_argument(
-        "--patient_id",
+        "--sample_id",
         required=False,
         default=argparse.SUPPRESS,
         type=str,

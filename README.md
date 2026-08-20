@@ -81,7 +81,7 @@ HATCHet (v3) inputs genomic bin by sample read-depth ratio (RDR), phased B-allel
 ### Running Snakemake Pipeline
 We include a [Snakemake](https://snakemake.readthedocs.io/) pipeline (version 9 or newer) that runs the full HATCHet (v3) pipeline for a single patient. First, copy and modify the Snakemake configuration file from [config/snakemake-hatchet.yaml](config/snakemake-hatchet.yaml):
 ```yaml
-patient_id: sample                # output filename prefix
+sample_id: tumor                  # output filename prefix
 bb_dir: "/path/to/bb"             # input directory of preprocessed matrices (see Input)
 genome_size: "/path/to/hg38.chrom.sizes"   # reference chromosome sizes
 region_bed: "/path/to/regions.bed"         # BED of whitelist regions

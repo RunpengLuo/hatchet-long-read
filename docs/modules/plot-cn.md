@@ -18,7 +18,7 @@ A per-bin BBC UCN table (`--bbc`) and per-segment SEG UCN table (`--seg`) from `
 | `--img_type` | `png` | File format: `pdf`, `png`, or `svg` |
 | `--dpi` | 500 | Image resolution |
 | `--transparent` | False | Transparent background |
-| `--patient_id` | *(none)* | Output filename prefix for combined plots |
+| `--sample_id` | *(none)* | Output filename prefix for combined plots |
 
 ## Usage
 
@@ -30,7 +30,7 @@ usage: hatchet plot-cn [-h] --bbc BBC --seg SEG --genome_size GENOME_SIZE
                        [--transparent] [--show_gap | --no-show_gap]
                        [--tail_alpha TAIL_ALPHA] [--center_alpha CENTER_ALPHA]
                        [--onetail_area ONETAIL_AREA] [--maxlim_fcn MAXLIM_FCN]
-                       --ploidy {diploid,tetraploid} [--patient_id PATIENT_ID]
+                       --ploidy {diploid,tetraploid} [--sample_id SAMPLE_ID]
 ```
 
 ## Main parameters
