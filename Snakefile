@@ -2,6 +2,7 @@ import os
 import shlex
 import argparse
 
+from hatchet import const
 from hatchet.hatchet_parser import (
     add_arguments_cluster_bins,
     add_arguments_compute_cn,
@@ -56,6 +57,11 @@ compute_cn_params = config.get("compute-cn", {})
 
 manual_k = compute_cn_params.get("k")
 
+# wide_format is a cluster-bins choice; mirror it into compute-cn so it reads the
+# matching on-disk BBC format and so output paths resolve to the same names.
+wide_format = bool(cluster_bins_params.get("wide_format", False))
+compute_cn_params = {**compute_cn_params, "wide_format": wide_format}
+
 cluster_bins_args = render_cli_args(add_arguments_cluster_bins, cluster_bins_params)
 compute_cn_args = render_cli_args(add_arguments_compute_cn, compute_cn_params)
 
@@ -87,8 +93,8 @@ rule run_cluster_bins:
         region_bed=config["region_bed"],
     output:
         bbc_dir=directory(bbc_dir),
-        bbc=os.path.join(bbc_dir, "bulk.bbc"),
-        seg=os.path.join(bbc_dir, "bulk.seg"),
+        bbc=const.BULK_BBC(bbc_dir, wide_format),
+        seg=const.BULK_SEG(bbc_dir, wide_format),
     threads: config["threads"]
     params:
         args=cluster_bins_args,
@@ -110,8 +116,8 @@ rule run_cluster_bins:
 ##################################################
 rule run_compute_cn:
     input:
-        bbc_default=os.path.join(bbc_dir, "bulk.bbc"),
-        seg_default=os.path.join(bbc_dir, "bulk.seg"),
+        bbc_default=const.BULK_BBC(bbc_dir, wide_format),
+        seg_default=const.BULK_SEG(bbc_dir, wide_format),
         genome_size=config["genome_size"],
         region_bed=config["region_bed"],
     output:
@@ -122,16 +128,14 @@ rule run_compute_cn:
     threads: config["threads"]
     params:
         bbc=(
-            os.path.join(
-                bbc_dir,
-                "bulk.bbc" if manual_k is None else f"labels/bulk{manual_k}.bbc",
-            )
+            const.BULK_BBC(bbc_dir, wide_format)
+            if manual_k is None
+            else const.BULK_BBC_k(bbc_dir, wide_format, manual_k)
         ),
         seg=(
-            os.path.join(
-                bbc_dir,
-                "bulk.seg" if manual_k is None else f"labels/bulk{manual_k}.seg",
-            )
+            const.BULK_SEG(bbc_dir, wide_format)
+            if manual_k is None
+            else const.BULK_SEG_k(bbc_dir, wide_format, manual_k)
         ),
         sample_id=config.get("sample_id", "tumor"),
         args=compute_cn_args,
