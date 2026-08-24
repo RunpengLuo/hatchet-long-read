@@ -161,6 +161,7 @@ def run_baum_welch(
     min_tau: float = 50,
     max_tau: float = 100,
     share_tau: bool = True,
+    share_phi: bool = False,
     baf_eps: float = 1e-3,
     restart_id: int | None = None,
     ig_alpha: float = 10.0,
@@ -169,8 +170,7 @@ def run_baum_welch(
     rdr_emission: str = "gaussian",
     baf_emission: str = "betabinom",
     X_counts: np.ndarray | None = None,
-    X_props: np.ndarray | None = None,
-    X_libsizes: np.ndarray | None = None,
+    X_nb_offsets: np.ndarray | None = None,
 ) -> dict:
     """Run EM training for a K-state 2-mixture BAF+RDR HMM.
 
@@ -204,11 +204,12 @@ def run_baum_welch(
         min_tau:           Lower bound for tau optimisation.
         max_tau:           Upper bound for tau optimisation.
         baf_eps:           Brent search bounds for BAF mean: [baf_eps, 1-baf_eps].
-        rdr_emission:      RDR emission model: "gaussian" or "negbinom" (TODO).
+        rdr_emission:      RDR emission model: "gaussian" or "negbinom".
         baf_emission:      BAF emission model: "betabinom".
+        share_phi:         Tie NB phi across clusters within a sample (negbinom).
         X_counts:          (N, M) per-bin per-sample counts (negbinom only).
-        X_props:           (N,) per-bin baseline proportion (negbinom only).
-        X_libsizes:        (M,) per-sample library size (negbinom only).
+        X_nb_offsets:      (N, M) per-bin per-sample NB offset lambda_i*T_s
+                           (negbinom only).
 
     Returns:
         dict with keys: RDR_means, RDR_vars, BAF_means, BAF_taus,
@@ -265,6 +266,9 @@ def run_baum_welch(
 
     log_startprobs = np.log(np.full((K, 2), 1.0 / (2 * K), dtype=np.float64))
 
+    # IG prior is a Gaussian-variance prior; skip it under non-gaussian RDR
+    ig_active = ig_alpha > 0 and rdr_emission == "gaussian"
+
     elbo_trace = [-np.inf]
     trace_rdr_means = [rdr_means.copy()]
     trace_rdr_vars = [rdr_vars.copy()]
@@ -288,8 +292,7 @@ def run_baum_welch(
             rdr_emission=rdr_emission,
             baf_emission=baf_emission,
             X_counts=X_counts,
-            X_props=X_props,
-            X_libsizes=X_libsizes,
+            X_nb_offsets=X_nb_offsets,
         )
         t1_loglik = time.perf_counter()
 
@@ -306,8 +309,8 @@ def run_baum_welch(
         t_loglik_sum += t1_loglik - t0
         t_fwdbwd_sum += t2_fwdbwd - t1_loglik
 
-        # Penalized ELBO (IG log-prior on RDR variance)
-        if ig_alpha > 0:
+        # Penalized ELBO (IG log-prior on RDR variance; gaussian emission only)
+        if ig_active:
             ig_log_prior = np.sum(
                 -(ig_alpha + 1) * np.log(rdr_vars) - ig_beta / rdr_vars
             )
@@ -334,6 +337,7 @@ def run_baum_welch(
             X_lengths,
             update_tau=(it < tau_iters),
             share_tau=share_tau,
+            share_phi=share_phi,
             min_covar=min_covar,
             tol=tol,
             min_tau=min_tau,
@@ -345,8 +349,7 @@ def run_baum_welch(
             rdr_emission=rdr_emission,
             baf_emission=baf_emission,
             X_counts=X_counts,
-            X_props=X_props,
-            X_libsizes=X_libsizes,
+            X_nb_offsets=X_nb_offsets,
         )
         t3_mstep = time.perf_counter()
         t_mstep_sum += t3_mstep - t2_fwdbwd
@@ -426,6 +429,7 @@ def run_viterbi_training(
     min_tau: float = 50,
     max_tau: float = 100,
     share_tau: bool = True,
+    share_phi: bool = False,
     baf_eps: float = 1e-3,
     restart_id: int | None = None,
     ig_alpha: float = 10.0,
@@ -434,8 +438,7 @@ def run_viterbi_training(
     rdr_emission: str = "gaussian",
     baf_emission: str = "betabinom",
     X_counts: np.ndarray | None = None,
-    X_props: np.ndarray | None = None,
-    X_libsizes: np.ndarray | None = None,
+    X_nb_offsets: np.ndarray | None = None,
 ) -> dict:
     """Viterbi training (hard EM) — same interface as run_baum_welch.
 
@@ -451,6 +454,9 @@ def run_viterbi_training(
     )  # (K, M); rows equal when init is per-sample
 
     log_startprobs = np.log(np.full((K, 2), 1.0 / (2 * K), dtype=np.float64))
+
+    # IG prior is a Gaussian-variance prior; skip it under non-gaussian RDR
+    ig_active = ig_alpha > 0 and rdr_emission == "gaussian"
 
     trace_rdr_means = [rdr_means.copy()]
     trace_rdr_vars = [rdr_vars.copy()]
@@ -471,8 +477,7 @@ def run_viterbi_training(
             rdr_emission=rdr_emission,
             baf_emission=baf_emission,
             X_counts=X_counts,
-            X_props=X_props,
-            X_libsizes=X_libsizes,
+            X_nb_offsets=X_nb_offsets,
         )
 
         # Viterbi decode → hard assignments
@@ -498,7 +503,8 @@ def run_viterbi_training(
         for n in range(N):
             posts[n, cluster_labels[n], phase_labels[n]] = 1.0
 
-        if ig_alpha > 0:
+        # IG log-prior on RDR variance; gaussian emission only
+        if ig_active:
             ig_log_prior = np.sum(
                 -(ig_alpha + 1) * np.log(rdr_vars) - ig_beta / rdr_vars
             )
@@ -527,6 +533,7 @@ def run_viterbi_training(
             X_lengths,
             update_tau=(it < tau_iters),
             share_tau=share_tau,
+            share_phi=share_phi,
             min_covar=min_covar,
             tol=tol,
             min_tau=min_tau,
@@ -538,8 +545,7 @@ def run_viterbi_training(
             rdr_emission=rdr_emission,
             baf_emission=baf_emission,
             X_counts=X_counts,
-            X_props=X_props,
-            X_libsizes=X_libsizes,
+            X_nb_offsets=X_nb_offsets,
         )
 
         trace_rdr_means.append(rdr_means.copy())

@@ -6,7 +6,7 @@ import numpy as np
 from scipy.special import gammaln
 from sklearn.cluster import kmeans_plusplus
 
-from hatchet.cluster_bins.hmm.hmm_likelihoods import compute_loglik_single_cluster_batch
+from hatchet.cluster_bins.hmm.hmm_likelihoods import compute_loglik_unroll
 from hatchet.cluster_bins.hmm.hmm_utils import convert_mhbafs
 
 
@@ -26,22 +26,33 @@ def init_hmm_cna_plus_plus(
     baf_eps: float = 1e-3,
     bal_margin: float = 0.03,
     collect_diag: bool = False,
+    rdr_emission: str = "gaussian",
+    X_counts: np.ndarray | None = None,
+    X_nb_offsets: np.ndarray | None = None,
 ):
     """k-means++ style initialization for the HMM emission parameters.
 
-    Seeds K centroids sequentially: first centroid is fixed at (RDR=1, BAF=0.5);
-    each subsequent centroid is drawn proportionally to how poorly the current
-    centroids explain each bin.  Repeats for `restarts` independent restarts;
-    all are returned so the caller can screen with short EM runs and pick the best.
+    Seeds K centroids sequentially: first centroid is the RDR/BAF anchor
+    (gaussian: RDR=median of balanced bins, BAF=0.5; negbinom: relative-copy
+    rho=1, BAF=0.5); each subsequent centroid is drawn proportionally to how
+    poorly the current centroids explain each bin.  Repeats for `restarts`
+    independent restarts; all are returned so the caller can screen with short
+    EM runs and pick the best.
+
+    For negbinom the RDR feature is the per-bin method-of-moments relative copy
+    X_counts / X_nb_offsets; the returned rdr_means then hold rho and rdr_vars
+    hold phi (the negbinom slot convention), so the output feeds run_baum_welch
+    directly under rdr_emission="negbinom".
 
     Args:
-        X_rdrs: (N, M) RDR values.
+        X_rdrs: (N, M) RDR values (gaussian; may be None for negbinom).
         X_bafs: (N, M) raw BAF values.
         X_alphas: (N, M) A-haplotype allele counts.
         X_betas: (N, M) B-haplotype allele counts.
         X_totals: (N, M) total allele counts (alpha + beta).
         baf_taus0: (M,) initial Beta-Binomial dispersion per sample.
-        rdr_vars: (1, M) initial RDR variances per sample.
+        rdr_vars: (1, M) initial RDR dispersion per sample (variance for
+            gaussian, phi for negbinom).
         K: number of clusters to seed.
         random_state: base random seed for candidate sampling.
         restarts: number of independent seeding runs.
@@ -49,17 +60,34 @@ def init_hmm_cna_plus_plus(
         baf_eps: lower bound clipping BAF candidates to avoid degenerate Beta-Binomial params.
         bal_margin: half-width of the |BAF - 0.5| band defining balanced bins for the RDR anchor.
         collect_diag: return per-restart seeding diagnostics in the second output.
+        rdr_emission: "gaussian" or "negbinom".
+        X_counts: (N, M) per-bin per-sample counts (negbinom only).
+        X_nb_offsets: (N, M) per-bin per-sample NB offset lambda_i*T_s (negbinom only).
 
     Returns:
         params_dict: dict mapping restart index → [baf_means, rdr_means, rdr_vars, potential].
         diag_dict: per-restart diagnostics if collect_diag else empty dict.
+
+    Raises:
+        ValueError: when rdr_emission="negbinom" but X_counts/X_nb_offsets missing.
     """
     logging.info(
         f"cna++ seeding, K={K}, restarts={restarts}, random_state={random_state}"
     )
     if n_local_trials is None:
         n_local_trials = max(2 + round(np.log(K)), 1)
-    N, M = X_rdrs.shape
+
+    negbinom = rdr_emission == "negbinom"
+    if negbinom and (X_counts is None or X_nb_offsets is None):
+        raise ValueError("negbinom seeding requires X_counts and X_nb_offsets")
+    if negbinom:
+        N, M = X_counts.shape
+        # NB: per-bin method-of-moments relative copy rho_i = count / offset
+        X_rdr_feat = np.maximum(X_counts / np.maximum(X_nb_offsets, 1e-12), 1e-6)
+    else:
+        N, M = X_rdrs.shape
+        X_rdr_feat = X_rdrs
+
     unif_probs = np.ones(N) / N
     # Working buffer reused across _weights_from_lls calls to avoid repeated allocation
     nll_weights_buf = np.zeros(N, dtype=np.float64)
@@ -110,15 +138,17 @@ def init_hmm_cna_plus_plus(
 
     rng = np.random.default_rng(random_state)
     baf_means0 = np.array([[0.5] * M])
-    bal_mask = np.all(np.abs(X_bafs - 0.5) <= bal_margin, axis=1)
-    rdr_pool = X_rdrs[bal_mask] if np.any(bal_mask) else X_rdrs
-    median_rdr = np.median(rdr_pool, axis=0)
-    # NB: X_rdrs already in model space (raw or log); anchor needs no further transform
-    rdr_means0 = median_rdr[None, :]
+    if negbinom:
+        rdr_means0 = np.ones((1, M))  # NB: anchor relative copy rho = 1
+    else:
+        bal_mask = np.all(np.abs(X_bafs - 0.5) <= bal_margin, axis=1)
+        rdr_pool = X_rdr_feat[bal_mask] if np.any(bal_mask) else X_rdr_feat
+        # NB: X_rdrs already in model space (raw or log); anchor needs no transform
+        rdr_means0 = np.median(rdr_pool, axis=0)[None, :]
     rdr_vars0 = rdr_vars
 
     # Compute loglik for the first centroid once — shared across all restarts
-    lls0_init, lls1_init = compute_loglik_single_cluster_batch(
+    lls0_init, lls1_init = compute_loglik_unroll(
         X_rdrs,
         X_alphas,
         X_betas,
@@ -127,6 +157,9 @@ def init_hmm_cna_plus_plus(
         baf_means0,
         baf_taus0,
         log_binom_const,
+        rdr_emission=rdr_emission,
+        X_counts=X_counts,
+        X_nb_offsets=X_nb_offsets,
     )  # (N, 1, M) each
     probs0, _, _ = _weights_from_lls(lls0_init, lls1_init, d=2)
 
@@ -156,9 +189,9 @@ def init_hmm_cna_plus_plus(
             cand_baf = np.clip(
                 X_bafs[candidates, :], baf_eps, 1 - baf_eps
             )  # (n_draw, M)
-            cand_rdr = X_rdrs[candidates, :]  # (n_draw, M)
+            cand_rdr = X_rdr_feat[candidates, :]  # (n_draw, M)
             cand_rdr_vars = np.tile(rdr_vars0[0], (n_draw, 1))  # (n_draw, M)
-            cand_lls0, cand_lls1 = compute_loglik_single_cluster_batch(
+            cand_lls0, cand_lls1 = compute_loglik_unroll(
                 X_rdrs,
                 X_alphas,
                 X_betas,
@@ -167,6 +200,9 @@ def init_hmm_cna_plus_plus(
                 cand_baf,
                 baf_taus0,
                 log_binom_const,
+                rdr_emission=rdr_emission,
+                X_counts=X_counts,
+                X_nb_offsets=X_nb_offsets,
             )  # (N, n_draw, M) each
 
             # Evaluate potential for each candidate using cached logliks
@@ -186,7 +222,7 @@ def init_hmm_cna_plus_plus(
                     "  cand=%d BAF=%s RDR=%s rdr_vars=%s phi=%.4f entropy=%.3f",
                     cand,
                     np.round(X_bafs[cand], 3),
-                    np.round(X_rdrs[cand], 3),
+                    np.round(X_rdr_feat[cand], 3),
                     np.round(cand_rdr_vars[j], 3),
                     potential,
                     entropy,
@@ -201,7 +237,7 @@ def init_hmm_cna_plus_plus(
                 best_idx = int(candidates[0])
                 best_j = 0
             baf_means = np.vstack([baf_means, X_bafs[best_idx, :][None, :]])
-            rdr_means = np.vstack([rdr_means, X_rdrs[best_idx, :][None, :]])
+            rdr_means = np.vstack([rdr_means, X_rdr_feat[best_idx, :][None, :]])
             rdr_vars_k = np.vstack([rdr_vars_k, rdr_vars0[:1]])
 
             # Extend cache with the winner's loglik column
@@ -216,7 +252,7 @@ def init_hmm_cna_plus_plus(
                 "  k=%d: BAF=%s  RDR=%s",
                 k,
                 np.round(np.asarray(X_bafs[best_idx, :]), 3),
-                np.round(np.asarray(X_rdrs[best_idx, :]), 3),
+                np.round(np.asarray(X_rdr_feat[best_idx, :]), 3),
             )
 
             if collect_diag:
