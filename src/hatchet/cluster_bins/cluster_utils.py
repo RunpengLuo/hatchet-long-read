@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import betaln
 from scipy.optimize import minimize_scalar
-from scipy.signal import find_peaks
-from scipy.stats import gaussian_kde, betabinom
+from scipy.stats import betabinom
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -570,46 +569,3 @@ def plot_score(scores_df: pd.DataFrame, score_method: str, out_file: str):
 
     plt.savefig(out_file)
     plt.close()
-
-
-def _is_multimodal(obs, min_count=30):
-    """Return True if KDE of obs has >1 prominent peak."""
-    if len(obs) < min_count:
-        return False
-    try:
-        kde = gaussian_kde(obs)
-    except (np.linalg.LinAlgError, ValueError):
-        return False
-    grid = np.linspace(obs.min(), obs.max(), 200)
-    kde_vals = kde(grid)
-    peaks, _ = find_peaks(kde_vals, prominence=0.1 * kde_vals.max())
-    return len(peaks) > 1
-
-
-def count_multimodal_clusters(labels, X_rdrs, X_bafs, log_rdr):
-    """Count clusters whose marginal RDR or BAF distribution is multimodal.
-
-    Args:
-        labels:   (N,) 0-indexed cluster assignments.
-        X_rdrs:   (N, M) RDR values (original scale).
-        X_bafs:   (N, M) phased BAF values in [0, 1].
-        log_rdr:  if True, check multimodality on log(RDR).
-
-    Returns:
-        (n_multimodal, multimodal_ids): count and list of multimodal cluster IDs.
-    """
-    cluster_ids = np.unique(labels)
-    M = X_rdrs.shape[1]
-    multimodal_ids = []
-    for k in cluster_ids:
-        mask = labels == k
-        for m in range(M):
-            baf_obs = X_bafs[mask, m]
-            if log_rdr:
-                rdr_obs = np.log(np.clip(X_rdrs[mask, m], 1e-6, None))
-            else:
-                rdr_obs = X_rdrs[mask, m]
-            if _is_multimodal(baf_obs) or _is_multimodal(rdr_obs):
-                multimodal_ids.append(int(k))
-                break
-    return len(multimodal_ids), multimodal_ids

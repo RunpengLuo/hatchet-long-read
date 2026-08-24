@@ -1,8 +1,11 @@
 """EM M-step routines for the 2-mixture BAF+RDR HMM.
-- RDR Gaussian means & variances: closed-form weighted statistics.
-- BAF Beta-Binomial means: scipy bounded scalar optimization (Brent).
-- BAF tau (optional): posterior-weighted MLE over all clusters.
-- Start probabilities: posterior counts at segment starts.
+
+RDR and BAF emission updates are pluggable and dispatched by ``do_mstep`` on
+the option strings:
+- RDR "gaussian": closed-form posterior-weighted mean & variance.
+- RDR "negbinom": TODO.
+- BAF "betabinom": scipy Brent means + optional posterior-weighted tau MLE.
+- Start probabilities (emission-independent): posterior counts at segment starts.
 """
 
 import logging
@@ -30,14 +33,25 @@ def do_mstep(
     ig_alpha=10.0,
     ig_beta=0.01,
     baf_k_start=0,
+    rdr_emission="gaussian",
+    baf_emission="betabinom",
+    X_counts=None,
+    X_props=None,
+    X_libsizes=None,
 ):
     """EM M-step: emission parameters + start probabilities.
 
-    Updates RDR Gaussian parameters (means and variances) via closed-form
-    weighted statistics, BAF Beta-Binomial means via scipy bounded scalar
-    optimization, and start probabilities from posterior counts at segment
-    starts.  BAF means are NOT folded here; the mhBAF fold is applied
-    after decoding in cluster_bins.py to preserve EM monotonicity.
+    Dispatches the RDR and BAF emission updates on the option strings and
+    computes start probabilities from posterior counts at segment starts.
+    BAF means are NOT folded here; the mhBAF fold is applied after decoding
+    in cluster_bins.py to preserve EM monotonicity.
+
+    Args:
+        rdr_emission: "gaussian" or "negbinom" (TODO).
+        baf_emission: "betabinom".
+        X_counts:     (N, M) per-bin per-sample counts (negbinom emission).
+        X_props:      (N,)   per-bin baseline proportion (negbinom emission).
+        X_libsizes:   (M,)   per-sample library size (negbinom emission).
 
     Returns:
         rdr_means:      (K, M) numpy array.
@@ -45,6 +59,9 @@ def do_mstep(
         baf_means:      (K, M) numpy array.
         baf_taus:       (K, M) numpy array.
         log_startprobs: (K, 2) numpy array.
+
+    Raises:
+        ValueError: on an unknown emission option string.
     """
     N, K, _ = posts.shape
 
@@ -53,13 +70,76 @@ def do_mstep(
     gamma0 = np.sum(np.maximum(posts[seg_starts], tol), axis=0)  # (K, 2)
     log_startprobs = np.log(gamma0 / np.sum(gamma0))  # (K, 2)
 
-    # ---- RDR means and variances (closed-form) ----
+    # ---- RDR emission parameters ----
     posts_marg = np.sum(posts, axis=-1)  # (N, K)
     Nk = np.sum(posts_marg, axis=0)  # (K,)
-
     if np.any(Nk < tol):
         logging.warning(f"Some clusters have effective Nk < {tol}")
 
+    if rdr_emission == "gaussian":
+        rdr_means, rdr_vars = _update_rdr_gaussian(
+            X_rdrs, posts_marg, Nk, min_covar, ig_alpha, ig_beta, tol
+        )
+    elif rdr_emission == "negbinom":
+        if X_counts is None or X_props is None or X_libsizes is None:
+            raise ValueError(
+                "negbinom emission requires X_counts, X_props, and X_libsizes"
+            )
+        rdr_means, rdr_vars = _update_rdr_negbinom(
+            X_counts, X_props, X_libsizes, posts_marg, Nk, min_covar, tol
+        )
+    else:
+        raise ValueError(f"unknown rdr_emission: {rdr_emission!r}")
+
+    # ---- BAF emission parameters ----
+    if baf_emission == "betabinom":
+        # tau first (optional), before means so p is optimal for the new tau
+        if update_tau:
+            baf_taus = _update_baf_tau(
+                X_alphas,
+                X_betas,
+                posts,
+                baf_means_init,
+                baf_taus,
+                min_tau=min_tau,
+                max_tau=max_tau,
+                share_tau=share_tau,
+            )
+        posts_kn2 = np.ascontiguousarray(posts.transpose(1, 0, 2))  # (K, N, 2)
+        baf_means = _update_baf_means(
+            baf_means_init,
+            X_alphas.T,
+            X_betas.T,
+            baf_taus,
+            posts_kn2,
+            baf_eps,
+            k_start=baf_k_start,
+        )
+    else:
+        raise ValueError(f"unknown baf_emission: {baf_emission!r}")
+
+    return rdr_means, rdr_vars, baf_means, baf_taus, log_startprobs
+
+
+def _update_rdr_gaussian(X_rdrs, posts_marg, Nk, min_covar, ig_alpha, ig_beta, tol):
+    """Closed-form posterior-weighted Gaussian RDR mean/variance update.
+
+    The variance uses an inverse-gamma MAP shrinkage when ig_alpha > 0, else
+    the plain weighted variance; both are floored at min_covar.
+
+    Args:
+        X_rdrs:     (N, M) (log-)RDR observations.
+        posts_marg: (N, K) cluster-marginal posteriors.
+        Nk:         (K,)   effective per-cluster counts.
+        min_covar:  variance floor.
+        ig_alpha:   inverse-gamma shape (<=0 disables the prior).
+        ig_beta:    inverse-gamma scale.
+        tol:        lower clamp for Nk in denominators.
+
+    Returns:
+        rdr_means: (K, M) numpy array.
+        rdr_vars:  (K, M) numpy array.
+    """
     safe_Nk = np.maximum(Nk, tol)[:, None]  # (K, 1)
     rdr_means = np.einsum("nk,nm->km", posts_marg, X_rdrs) / safe_Nk
     weighted_var = (
@@ -73,33 +153,32 @@ def do_mstep(
         )
     else:
         rdr_vars = np.maximum(weighted_var, min_covar)
+    return rdr_means, rdr_vars
 
-    # ---- BAF tau (optional, before BAF means so p is optimal for new tau) ----
-    if update_tau:
-        baf_taus = _update_baf_tau(
-            X_alphas,
-            X_betas,
-            posts,
-            baf_means_init,
-            baf_taus,
-            min_tau=min_tau,
-            max_tau=max_tau,
-            share_tau=share_tau,
-        )
 
-    # ---- BAF means (scipy Brent, uses possibly updated tau) ----
-    posts_kn2 = np.ascontiguousarray(posts.transpose(1, 0, 2))  # (K, N, 2)
-    baf_means = _update_baf_means(
-        baf_means_init,
-        X_alphas.T,
-        X_betas.T,
-        baf_taus,
-        posts_kn2,
-        baf_eps,
-        k_start=baf_k_start,
-    )
+def _update_rdr_negbinom(X_counts, X_props, X_libsizes, posts_marg, Nk, min_covar, tol):
+    """TODO: negative-binomial count M-step.
 
-    return rdr_means, rdr_vars, baf_means, baf_taus, log_startprobs
+    Update the state relative-copy rho (returned in the rdr_means slot) and
+    per-sample dispersion phi (returned in the rdr_vars slot) for the model
+    X_counts[i, s] ~ NB(X_props[i] * X_libsizes[s] * rho[k, s], phi[s]).
+    rho has a posterior-weighted closed form given the NB offset
+    X_props[i] * X_libsizes[s]; phi has none and needs a per-sample solve.
+
+    Args:
+        X_counts:   (N, M) per-bin per-sample counts.
+        X_props:    (N,)   per-bin baseline proportion.
+        X_libsizes: (M,)   per-sample library size.
+        posts_marg: (N, K) cluster-marginal posteriors.
+        Nk:         (K,)   effective per-cluster counts.
+        min_covar:  dispersion floor.
+        tol:        lower clamp for Nk in denominators.
+
+    Returns:
+        rho: (K, M) numpy array.
+        phi: (K, M) numpy array.
+    """
+    raise NotImplementedError("negbinom count M-step not implemented")
 
 
 def _update_baf_tau(
