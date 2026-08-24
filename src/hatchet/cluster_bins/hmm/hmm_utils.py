@@ -59,7 +59,7 @@ def score_model(
     N: int,
     rdr_emission: str = "gaussian",
     share_tau: bool = True,
-    share_phi: bool = False,
+    share_invphi: bool = False,
     eps=1e-15,
 ):
     """Return both model-selection scores as {"bic": ..., "icl": ...}.
@@ -67,7 +67,7 @@ def score_model(
     BIC = -2*ll + num_free_params*log(N); ICL = BIC + 2*classification_entropy.
     The RDR free-parameter count depends on the emission: gaussian has 2*K*M
     (means + variances); negbinom has K*M relative-copies rho plus phi, which
-    is M when share_phi else K*M. baf_taus is M when share_tau else K*M.
+    is M when share_invphi else K*M. baf_taus is M when share_tau else K*M.
     posts: (N, K) cluster posteriors.
 
     Raises:
@@ -79,7 +79,7 @@ def score_model(
         num_free_params += 2 * K * M  # RDR means + variances
     elif rdr_emission == "negbinom":
         num_free_params += K * M  # rho (relative copy)
-        num_free_params += M if share_phi else K * M  # phi (dispersion)
+        num_free_params += M if share_invphi else K * M  # phi (dispersion)
     else:
         raise ValueError(f"unknown rdr_emission: {rdr_emission!r}")
     num_free_params += 1  # transition diag

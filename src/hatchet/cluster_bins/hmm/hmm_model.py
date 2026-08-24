@@ -161,7 +161,7 @@ def run_baum_welch(
     min_tau: float = 50,
     max_tau: float = 100,
     share_tau: bool = True,
-    share_phi: bool = False,
+    share_invphi: bool = False,
     baf_eps: float = 1e-3,
     restart_id: int | None = None,
     ig_alpha: float = 10.0,
@@ -169,6 +169,8 @@ def run_baum_welch(
     baf_k_start: int = 0,
     rdr_emission: str = "gaussian",
     baf_emission: str = "betabinom",
+    min_invphi: float = 1e-6,
+    max_invphi: float = 1e6,
     X_counts: np.ndarray | None = None,
     X_nb_offsets: np.ndarray | None = None,
 ) -> dict:
@@ -206,7 +208,9 @@ def run_baum_welch(
         baf_eps:           Brent search bounds for BAF mean: [baf_eps, 1-baf_eps].
         rdr_emission:      RDR emission model: "gaussian" or "negbinom".
         baf_emission:      BAF emission model: "betabinom".
-        share_phi:         Tie NB phi across clusters within a sample (negbinom).
+        share_invphi:         Tie NB phi across clusters within a sample (negbinom).
+        min_invphi:        Lower search bound on NB invphi=1/phi (negbinom).
+        max_invphi:        Upper search bound on NB invphi=1/phi (negbinom).
         X_counts:          (N, M) per-bin per-sample counts (negbinom only).
         X_nb_offsets:      (N, M) per-bin per-sample NB offset lambda_i*T_s
                            (negbinom only).
@@ -337,7 +341,9 @@ def run_baum_welch(
             X_lengths,
             update_tau=(it < tau_iters),
             share_tau=share_tau,
-            share_phi=share_phi,
+            share_invphi=share_invphi,
+            min_invphi=min_invphi,
+            max_invphi=max_invphi,
             min_covar=min_covar,
             tol=tol,
             min_tau=min_tau,
@@ -429,7 +435,7 @@ def run_viterbi_training(
     min_tau: float = 50,
     max_tau: float = 100,
     share_tau: bool = True,
-    share_phi: bool = False,
+    share_invphi: bool = False,
     baf_eps: float = 1e-3,
     restart_id: int | None = None,
     ig_alpha: float = 10.0,
@@ -437,6 +443,8 @@ def run_viterbi_training(
     baf_k_start: int = 0,
     rdr_emission: str = "gaussian",
     baf_emission: str = "betabinom",
+    min_invphi: float = 1e-6,
+    max_invphi: float = 1e6,
     X_counts: np.ndarray | None = None,
     X_nb_offsets: np.ndarray | None = None,
 ) -> dict:
@@ -533,7 +541,9 @@ def run_viterbi_training(
             X_lengths,
             update_tau=(it < tau_iters),
             share_tau=share_tau,
-            share_phi=share_phi,
+            share_invphi=share_invphi,
+            min_invphi=min_invphi,
+            max_invphi=max_invphi,
             min_covar=min_covar,
             tol=tol,
             min_tau=min_tau,

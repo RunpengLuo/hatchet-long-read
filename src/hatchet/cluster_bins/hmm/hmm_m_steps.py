@@ -36,7 +36,9 @@ def do_mstep(
     baf_k_start=0,
     rdr_emission="gaussian",
     baf_emission="betabinom",
-    share_phi=False,
+    share_invphi=False,
+    min_invphi=1e-6,
+    max_invphi=1e6,
     X_counts=None,
     X_nb_offsets=None,
 ):
@@ -50,7 +52,9 @@ def do_mstep(
     Args:
         rdr_emission: "gaussian" or "negbinom".
         baf_emission: "betabinom".
-        share_phi:    tie NB phi across clusters within a sample (negbinom).
+        share_invphi:    tie NB phi across clusters within a sample (negbinom).
+        min_invphi:   lower search bound on NB invphi = 1/phi (negbinom).
+        max_invphi:   upper search bound on NB invphi = 1/phi (negbinom).
         X_counts:     (N, M) per-bin per-sample counts (negbinom emission).
         X_nb_offsets: (N, M) per-bin per-sample NB offset lambda_i*T_s
                       (negbinom emission).
@@ -86,7 +90,15 @@ def do_mstep(
         if X_counts is None or X_nb_offsets is None:
             raise ValueError("negbinom emission requires X_counts and X_nb_offsets")
         rdr_means, rdr_vars = _update_rdr_negbinom(
-            X_counts, X_nb_offsets, posts_marg, Nk, min_covar, tol, share_phi=share_phi
+            X_counts,
+            X_nb_offsets,
+            posts_marg,
+            Nk,
+            min_covar,
+            tol,
+            share_invphi=share_invphi,
+            min_invphi=min_invphi,
+            max_invphi=max_invphi,
         )
     else:
         raise ValueError(f"unknown rdr_emission: {rdr_emission!r}")
@@ -163,12 +175,13 @@ def _update_rdr_negbinom(
     Nk,
     min_covar,
     tol,
-    share_phi=False,
+    share_invphi=False,
+    min_invphi=1e-6,
+    max_invphi=1e6,
     max_ecm=50,
     ecm_tol=1e-7,
     max_newton=50,
     newton_tol=1e-8,
-    max_phi=1e3,
 ):
     """Negative-binomial count M-step via ECM (Meng & Rubin 1993).
 
@@ -179,29 +192,31 @@ def _update_rdr_negbinom(
     - rho | phi: per-(k, s) 1D concave solve by Newton, warm-started from the
       method-of-moments estimate sum_i w y / sum_i w offset (exact rho MLE in
       the Poisson phi->0 limit).
-    - phi | rho: 1D solve (Brent in log-phi); per (cluster, sample) when
-      share_phi is False, else one per sample pooled across clusters.
+    - phi | rho: 1D solve (Brent in log inverse-dispersion invphi = 1/phi);
+      per (cluster, sample) when share_invphi is False, else one per sample pooled
+      across clusters.
     Iterating to convergence makes ECM equal joint (rho, phi) maximization
     while preserving EM monotone ascent (doi:10.1093/biomet/80.2.267). rho is
     returned in the rdr_means slot, phi in the rdr_vars slot.
 
     Args:
-        X_counts:     (N, M) per-bin per-sample counts.
-        X_nb_offsets: (N, M) per-bin per-sample NB offset lambda_i*T_s.
-        posts_marg:   (N, K) cluster-marginal posteriors.
-        Nk:           (K,)   effective per-cluster counts.
-        min_covar:    dispersion (phi) floor.
-        tol:          lower clamp for rho and weight sums in denominators.
-        share_phi:    tie phi across clusters within a sample.
-        max_ecm:      max ECM sweeps.
-        ecm_tol:      ECM stop tolerance on the weighted log-likelihood.
-        max_newton:   max Newton iters per rho conditional-maximization.
-        newton_tol:   Newton stop tolerance on max |step / rho|.
-        max_phi:      upper bound on phi in the Brent search.
+        X_counts:      (N, M) per-bin per-sample counts.
+        X_nb_offsets:  (N, M) per-bin per-sample NB offset lambda_i*T_s.
+        posts_marg:    (N, K) cluster-marginal posteriors.
+        Nk:            (K,)   effective per-cluster counts.
+        min_covar:     phi init floor.
+        tol:           lower clamp for rho and weight sums in denominators.
+        share_invphi:     tie phi across clusters within a sample.
+        min_invphi:    lower search bound on invphi = 1/phi (the NB size).
+        max_invphi:    upper search bound on invphi = 1/phi (the NB size).
+        max_ecm:       max ECM sweeps.
+        ecm_tol:       ECM stop tolerance on the weighted log-likelihood.
+        max_newton:    max Newton iters per rho conditional-maximization.
+        newton_tol:    Newton stop tolerance on max |step / rho|.
 
     Returns:
         rho: (K, M) numpy array.
-        phi: (K, M) numpy array (rows tied across clusters when share_phi).
+        phi: (K, M) numpy array (rows tied across clusters when share_invphi).
     """
     K = posts_marg.shape[1]
     M = X_counts.shape[1]
@@ -214,7 +229,14 @@ def _update_rdr_negbinom(
     prev_ll = -np.inf
     for _ in range(max_ecm):
         phi = _cm_phi_negbinom(
-            X_counts, X_nb_offsets, posts_marg, rho, phi, min_covar, max_phi, share_phi
+            X_counts,
+            X_nb_offsets,
+            posts_marg,
+            rho,
+            phi,
+            min_invphi,
+            max_invphi,
+            share_invphi,
         )
         rho = _cm_rho_negbinom(
             X_counts,
@@ -272,33 +294,37 @@ def _cm_rho_negbinom(
     return rho
 
 
-def _neg_Q_phi(log_phi, mu, y, w):
-    """Negative posterior-weighted NB log-likelihood as a function of log-phi.
+def _neg_Q_invphi(log_invphi, mu, y, w):
+    """Negative posterior-weighted NB log-likelihood as a function of log-invphi.
+
+    invphi = 1/phi is the NB size r; parameterizing by it drops the reciprocal
+    from the pmf (r = exp(log_invphi)) and lets the search bound r directly.
 
     Args:
-        log_phi: scalar log-dispersion.
-        mu:      NB means, broadcastable with y and w.
-        y:       observed counts, broadcastable with mu.
-        w:       posterior weights, same shape as the mu*y grid.
+        log_invphi: scalar log inverse-dispersion (log NB size).
+        mu:         NB means, broadcastable with y and w.
+        y:          observed counts, broadcastable with mu.
+        w:          posterior weights, same shape as the mu*y grid.
 
     Returns:
         scalar negative weighted log-likelihood.
     """
-    r = 1.0 / np.exp(log_phi)
+    r = np.exp(log_invphi)
     frac = mu / (r + mu)
     ll = gammaln(y + r) - gammaln(r) + r * np.log1p(-frac) + xlogy(y, frac)
     return -np.sum(w * ll)
 
 
 def _cm_phi_negbinom(
-    X_counts, offset, posts_marg, rho, phi, min_covar, max_phi, share_phi
+    X_counts, offset, posts_marg, rho, phi, min_invphi, max_invphi, share_invphi
 ):
-    """CM-step for phi: NB dispersion MLE by Brent in log-phi at fixed rho.
+    """CM-step for phi: NB dispersion MLE by Brent in log-invphi at fixed rho.
 
-    With share_phi=True a single phi per sample (pooling all clusters via the
-    posterior weights) is fit and broadcast to all K rows; with share_phi=False
-    phi is fit independently per (cluster, sample). The search runs over
-    [log(min_covar), log(max_phi)].
+    The search variable is log-invphi (invphi = 1/phi = NB size r) over
+    [log(min_invphi), log(max_invphi)]; the fitted phi = 1/invphi is stored.
+    With share_invphi=True a single phi per sample (pooling all clusters via the
+    posterior weights) is fit and broadcast to all K rows; with share_invphi=False
+    phi is fit independently per (cluster, sample).
 
     Args:
         X_counts:   (N, M) counts.
@@ -306,9 +332,9 @@ def _cm_phi_negbinom(
         posts_marg: (N, K) cluster-marginal posteriors.
         rho:        (K, M) fixed relative-copy state.
         phi:        (K, M) current dispersion (returned shape).
-        min_covar:  phi floor (lower Brent bound).
-        max_phi:    phi ceiling (upper Brent bound).
-        share_phi:  tie phi across clusters within a sample.
+        min_invphi: lower Brent bound on invphi = 1/phi.
+        max_invphi: upper Brent bound on invphi = 1/phi.
+        share_invphi:  tie phi across clusters within a sample.
 
     Returns:
         (K, M) updated phi.
@@ -316,29 +342,29 @@ def _cm_phi_negbinom(
     M = X_counts.shape[1]
     K = posts_marg.shape[1]
     phi_new = phi.copy()
-    lo, hi = np.log(min_covar), np.log(max_phi)
+    lo, hi = np.log(min_invphi), np.log(max_invphi)
 
     for s in range(M):
-        if share_phi:
+        if share_invphi:
             mu = offset[:, s][:, None] * rho[:, s][None, :]  # (N, K)
             y = X_counts[:, s][:, None]  # (N, 1)
             res = minimize_scalar(
-                _neg_Q_phi,
+                _neg_Q_invphi,
                 bounds=(lo, hi),
                 method="bounded",
                 args=(mu, y, posts_marg),
             )
-            phi_new[:, s] = np.exp(res.x)
+            phi_new[:, s] = 1.0 / np.exp(res.x)
         else:
             for k in range(K):
                 mu = offset[:, s] * rho[k, s]  # (N,)
                 res = minimize_scalar(
-                    _neg_Q_phi,
+                    _neg_Q_invphi,
                     bounds=(lo, hi),
                     method="bounded",
                     args=(mu, X_counts[:, s], posts_marg[:, k]),
                 )
-                phi_new[k, s] = np.exp(res.x)
+                phi_new[k, s] = 1.0 / np.exp(res.x)
     return phi_new
 
 
