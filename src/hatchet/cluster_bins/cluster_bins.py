@@ -432,7 +432,7 @@ def run(args=None):
             k_baf_means,
             k_baf_taus,
             alpha=args["bal_lrt_alpha"],
-            margin=args["bal_margin"],
+            margin=args["bal_lrt_margin"],
             baf_eps=baf_eps,
         )
         for ci, c in enumerate(k_cids):

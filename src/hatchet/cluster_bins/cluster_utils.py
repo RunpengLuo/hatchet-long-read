@@ -338,6 +338,11 @@ def label_balanced_clusters(
     Otherwise, calibrate via parametric bootstrap at boundary p = 0.5 - δ.
 
     Balanced if p-value ≥ alpha for ALL samples.
+
+    ``margin`` is a cluster-level equivalence bound, not a per-bin band: a
+    cluster pooling hundreds of bins has a BAF standard error of order 1e-3,
+    so any δ larger than that makes the neutral zone, rather than ``alpha``,
+    the decision rule. Keep it separate from the per-bin seeding band.
     """
 
     def _negll(p, b, n, tau):

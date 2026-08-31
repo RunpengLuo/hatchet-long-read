@@ -36,12 +36,21 @@ ig_alpha: 10.0
 tau_iters: 3
 seed: 42
 log_rdr: false
-bal_lrt_alpha: 0.05
+# per-bin |BAF-0.5| band selecting the diploid RDR anchor during seeding
 bal_margin: 0.03
+
+# balanced-cluster interval LRT
+bal_lrt_alpha: 0.05
+# cluster-level neutral-zone half-width
+bal_lrt_margin: 0.01
+
+# post filtering
 filter_std: 2.0
 min_nbins: 10
 ub_nbins: 50
+
 skip_mhbafs: false
+
 # EXPERIMENTAL: wide BBC output (cluster-bins writer + compute-cn reader)
 wide_format: false
 

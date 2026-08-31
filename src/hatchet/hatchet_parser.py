@@ -252,7 +252,14 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         type=float,
         required=False,
         default=argparse.SUPPRESS,
-        help="Half-width of neutral zone [0.5-δ, 0.5+δ] for balanced cluster test (default: 0.03)",
+        help="Per-bin |BAF-0.5| band selecting the diploid RDR anchor during seeding (default: 0.03)",
+    )
+    parser.add_argument(
+        "--bal_lrt_margin",
+        type=float,
+        required=False,
+        default=argparse.SUPPRESS,
+        help="Cluster-level neutral-zone half-width for the balanced cluster interval LRT (default: 0.01)",
     )
 
     ##################################################
