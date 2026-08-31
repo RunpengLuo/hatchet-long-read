@@ -262,6 +262,24 @@ def run_plot_cn(args, bbc, seg, gamma_file, plot_dir, ploidy, name=None):
     )
 
 
+# Mathtext (matplotlib $...$) of each regularization objective; sum over clusters c
+# weighted by w_c, a/b = allele-A/B CN, n = tumor clone (n=0 is normal).
+_REG_FORMULAS = {
+    "MAXCN": r"$\sum_c w_c\,(\max_n a_{c,n} + \max_n b_{c,n})$",
+    "DROOT_SUM": r"$\sum_c w_c \sum_n (|a_{c,n}-a_{c,0}| + |b_{c,n}-b_{c,0}|)$",
+    "DADJ_SUM": r"$\sum_c w_c \sum_{n_1<n_2} (|a_{c,n_1}-a_{c,n_2}| + |b_{c,n_1}-b_{c,n_2}|)$",
+    "DBOX_L1": r"$\sum_c w_c\,[(\max_n a_{c,n}-\min_n a_{c,n}) + (\max_n b_{c,n}-\min_n b_{c,n})]$",
+    "DBOX_L0": r"$\sum_c w_c\,\mathbf{1}[\mathrm{span}_c > 0]$",
+    "RAW": "",
+}
+
+
+def _reg_xlabel(reg_term):
+    """x-axis label: '<TERM>:  <formula>', falling back to the bare term name."""
+    formula = _REG_FORMULAS.get(str(reg_term).upper())
+    return f"{reg_term}:  {formula}" if formula else str(reg_term)
+
+
 def plot_pareto_curve(summary_df, plot_dir, reg_term, elbow_fig=None):
     """Plot REG vs IMF Pareto curves + elbow/BIC page as a multi-page PDF."""
     outfile = const.MODEL_SELECTION_PDF(plot_dir)
@@ -318,7 +336,7 @@ def plot_pareto_curve(summary_df, plot_dir, reg_term, elbow_fig=None):
                         linewidths=1,
                     )
 
-            ax.set_xlabel(reg_col, fontsize=11)
+            ax.set_xlabel(_reg_xlabel(reg_term), fontsize=10)
             ax.set_ylabel("IMF", fontsize=11)
             ax.set_title(
                 f"{ploidy} ({len(pdf_grp)} solutions)",
