@@ -259,6 +259,7 @@ def run(args=None):
             n_local_trials=n_local_trials,
             baf_eps=baf_eps,
             bal_margin=args["bal_margin"],
+            cna_plus_plus_d=args["cna_plus_plus_d"],
             collect_diag=DEBUG,
         )
     plot_2d_inits(

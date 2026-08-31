@@ -87,6 +87,14 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         "best by log-likelihood is kept (default: 3)",
     )
     parser.add_argument(
+        "--cna_plus_plus_d",
+        type=float,
+        required=False,
+        default=argparse.SUPPRESS,
+        help="Exponent l of the D^l adaptive-sampling weight in cna++ seeding, applied to "
+        "the per-bin NLL; l=1 matches the HMM log-likelihood objective (default: 1.0)",
+    )
+    parser.add_argument(
         "--niters",
         required=False,
         default=argparse.SUPPRESS,

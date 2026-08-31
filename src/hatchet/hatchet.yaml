@@ -24,6 +24,8 @@ score_method: icl
 score_criteria: min
 # init_method: cna_plus_plus | kmeans_plus_plus
 init_method: cna_plus_plus
+# exponent l of the D^l adaptive-sampling weight in cna++ seeding
+cna_plus_plus_d: 1.0
 free_baf_c0: false
 # training_method: baum_welch | viterbi
 training_method: baum_welch

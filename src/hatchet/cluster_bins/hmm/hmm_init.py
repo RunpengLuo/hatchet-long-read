@@ -25,6 +25,7 @@ def init_hmm_cna_plus_plus(
     n_local_trials: int | None = None,
     baf_eps: float = 1e-3,
     bal_margin: float = 0.03,
+    cna_plus_plus_d: float = 1.0,
     collect_diag: bool = False,
     rdr_emission: str = "gaussian",
     X_counts: np.ndarray | None = None,
@@ -59,6 +60,9 @@ def init_hmm_cna_plus_plus(
         n_local_trials: candidates evaluated per seeding step; None -> max(2 + round(log K), 1).
         baf_eps: lower bound clipping BAF candidates to avoid degenerate Beta-Binomial params.
         bal_margin: half-width of the |BAF - 0.5| band defining balanced bins for the RDR anchor.
+        cna_plus_plus_d: exponent l of the D^l adaptive-sampling weight, applied to the shifted
+            per-bin NLL. Matches the seeded objective sum_i D_i^l (Arthur & Vassilvitskii
+            2007, Sec. 5); l=1 is the exponent matching the HMM log-likelihood.
         collect_diag: return per-restart seeding diagnostics in the second output.
         rdr_emission: "gaussian" or "negbinom".
         X_counts: (N, M) per-bin per-sample counts (negbinom only).
@@ -98,13 +102,13 @@ def init_hmm_cna_plus_plus(
         gammaln(X_totals + 1) - gammaln(X_betas + 1) - gammaln(X_alphas + 1)
     )  # (N, M)
 
-    def _weights_from_lls(lls0_full, lls1_full, d=2):
+    def _weights_from_lls(lls0_full, lls1_full, d=cna_plus_plus_d):
         """Compute sampling weights from per-sample logliks.
 
         Args:
             lls0_full: (N, k, M) log-likelihoods under haplotype orientation h=0.
             lls1_full: (N, k, M) log-likelihoods under haplotype orientation h=1.
-            d: exponent applied to shifted NLL distances (default 2).
+            d: exponent applied to shifted NLL distances (default cna_plus_plus_d).
 
         Returns:
             probs_w:   (N,) sampling probability for each bin (sums to 1).
@@ -161,7 +165,7 @@ def init_hmm_cna_plus_plus(
         X_counts=X_counts,
         X_nb_offsets=X_nb_offsets,
     )  # (N, 1, M) each
-    probs0, _, _ = _weights_from_lls(lls0_init, lls1_init, d=2)
+    probs0, _, _ = _weights_from_lls(lls0_init, lls1_init)
 
     params_dict = {}
     diag_dict = {}
@@ -217,7 +221,7 @@ def init_hmm_cna_plus_plus(
                 full_lls1 = np.concatenate(
                     [lls1_cached, cand_lls1[:, j : j + 1, :]], axis=1
                 )
-                _, potential, entropy = _weights_from_lls(full_lls0, full_lls1, d=2)
+                _, potential, entropy = _weights_from_lls(full_lls0, full_lls1)
                 logging.debug(
                     "  cand=%d BAF=%s RDR=%s rdr_vars=%s phi=%.4f entropy=%.3f",
                     cand,
@@ -260,7 +264,7 @@ def init_hmm_cna_plus_plus(
                 selected_bins_hist.append(best_idx)
                 candidates_hist.append((candidates.copy(), best_idx))
                 centroids_hist.append((baf_means.copy(), rdr_means.copy()))
-            probs, it_potential, _ = _weights_from_lls(lls0_cached, lls1_cached, d=2)
+            probs, it_potential, _ = _weights_from_lls(lls0_cached, lls1_cached)
 
         mhbaf_means = convert_mhbafs(baf_means)
         params_dict[it] = [mhbaf_means, rdr_means, rdr_vars_k, it_potential]
