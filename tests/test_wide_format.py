@@ -20,7 +20,7 @@ from hatchet.io_utils import (
     read_seg_ucn,
     read_wide_bbc,
 )
-from tests.conftest import CBC_AVAILABLE
+from conftest import CBC_AVAILABLE
 
 MAXK = 5
 MINK = 3
