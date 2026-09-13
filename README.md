@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/raphael-group/hatchet/actions/workflows/ci.yml/badge.svg?branch=hatchet3-dev)](https://github.com/raphael-group/hatchet/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/raphael-group/hatchet/branch/hatchet3-dev/graph/badge.svg)](https://codecov.io/gh/raphael-group/hatchet)
-[![Version](https://img.shields.io/badge/version-3.0.0b1-blue.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-3.0.0b2-blue.svg)](VERSION)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
