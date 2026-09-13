@@ -1,7 +1,6 @@
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 
 from hatchet.compute_cn.compute_cn_utils import segmentation
@@ -37,7 +36,9 @@ if __name__ == "__main__":
     # Reconstruct cA, cB (num_clusters, num_clones) from one sample slice; cluster order
     # defines cluster_ids used to index CN back onto bins.
     sol_s = (
-        sol[sol["SAMPLE"] == sample_ids[0]].sort_values("CLUSTER").reset_index(drop=True)
+        sol[sol["SAMPLE"] == sample_ids[0]]
+        .sort_values("CLUSTER")
+        .reset_index(drop=True)
     )
     cluster_ids = sol_s["CLUSTER"].tolist()
     cA, cB = [], []
@@ -58,9 +59,7 @@ if __name__ == "__main__":
     bin_cols = ["#CHR", "START", "END", "#SNPS", "CLUSTER"]
 
     def mat(field):
-        p = bbc.pivot_table(
-            index=bin_cols, columns="SAMPLE", values=field, sort=False
-        )
+        p = bbc.pivot_table(index=bin_cols, columns="SAMPLE", values=field, sort=False)
         return p.reindex(columns=samples)
 
     piv_rd = mat("RD")
