@@ -100,8 +100,6 @@ def snakemake_result(tmp_path_factory):
             "min_ci_margin": 0.1,
             "obj_type": "imf",
             "model_select": "bic",
-            "tree_file": None,
-            "eps_fit": 0.01,
         },
     }
 

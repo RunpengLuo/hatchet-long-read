@@ -1,9 +1,54 @@
 # `cluster-bins`
 `cluster-bins` performs local-global genome segmentation using a Gaussian RDR + Beta-Binomial BAF multi-sample factorial HMM with phase switch correction.
 
+## Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `HATCHET_DISABLE_CPP` | `0` | When set to `1`, `true`, or `yes` (case-insensitive), `cluster-bins` uses the pure-Python (Numba) HMM backend instead of the compiled C++ extension (`_hmm_cpp`). |
+
 ## Input
 
-The preprocessed bin-by-sample matrices in `--bb_dir` (RDR, phased allele counts, bin metadata, and the sample table), plus the reference `--genome_size` and `--region_bed`. See [reference.md#input](../reference.md#input) for file layouts and formats.
+The preprocessed bin-by-sample matrices in `--bb_dir` (RDR, phased allele counts, bin metadata, and the sample table), plus the reference `--genome_size` and `--region_bed`.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--bb_dir` | *(required)* | Input directory: NPZ count matrices and `bb.tsv.gz` |
+| `--bbc_dir` | *(required)* | Output directory for BBC/SEG TSV files |
+| `--genome_size` | *(required)* | Reference chromosome sizes file |
+| `--wide_format` | False | EXPERIMENTAL: write BBC as a space-efficient wide gzip TSV (`bulk.bbc.tsv.gz`) and `bulk.seg` in the matching VCF-like wide layout |
+| `--force` | False | Re-run even if results already exist (default: skip existing) |
+| `--verbosity` | 0 | Verbose level: 0, 1, or 2 |
+
+```
+<bb_dir>/
+  bb.tsv.gz         # BED format bin meta-informations, one row per bin, aligned with matrix rows.
+  sample_ids.tsv    # dataset meta-informations, one row per sample, aligned with matrix columns.
+                    #   columns: SAMPLE, sample_type (normal|tumor), [assay_type]
+  bb.rdr.npz        # (bins, tumor samples) float  - NumPy format, read-depth ratio, tumor samples only
+  bb.depth.npz      # (bins, samples) float        - NumPy format, read depth, all samples
+  bb.Aallele.npz    # (bins, samples) int          - NumPy format, A-haplotype allele counts
+  bb.Ballele.npz    # (bins, samples) int          - NumPy format, B-haplotype allele counts
+  bb.Tallele.npz    # (bins, samples) int          - NumPy format, total allele counts
+```
+
+`bb.tsv.gz` columns (one row per bin; row order defines the matrix row order):
+
+| Column | Description |
+|---|---|
+| `#CHR` | Chromosome of the bin |
+| `START` / `END` | Bin genomic interval (bp) in BED format (0-index, left-close right-open) |
+| `region_id` | Region/segment identifier; bins are grouped into segments by this column (HMM decoding runs per segment) |
+| `switchprobs` | Per-bin phase switch transition probability |
+| `#SNPS` | Number of heterozygous SNPs in the bin |
+
+`sample_ids.tsv` columns (one row per sample; row order defines the matrix column order):
+
+| Column | Required | Description |
+|---|---|---|
+| `SAMPLE` | yes | Sample name; also the matrix column label |
+| `sample_type` | yes | `normal` or `tumor`; the tumor-only `bb.rdr.npz` holds just the `tumor` columns |
+| `assay_type` | no | Optional sequencing-assay label; samples are grouped by assay |
 
 ## Usage
 
@@ -34,7 +79,38 @@ usage: hatchet cluster-bins [-h] --bb_dir BB_DIR --bbc_dir BBC_DIR [--force]
 
 ## Main parameters
 
-Here we describe the main parameters. See [reference.md#cluster-bins](../reference.md#cluster-bins) for the full parameter description.
+Here we describe the main parameters; the full HMM and model-selection parameter table follows.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--minK` | 3 | Minimum number of HMM cluster states |
+| `--maxK` | 30 | Maximum number of HMM cluster states |
+| `-t` | 1e-6 | Initial off-diagonal transition mass |
+| `--restarts` | 10 | Number of random restarts per K |
+| `--top_restarts` | *(= restarts)* | Number of top-scoring inits to run full EM on |
+| `--n_local_trials` | 3 | Candidate bins evaluated per k-means++ seeding step |
+| `--niters` | 50 | Number of EM iterations per restart |
+| `--decode_method` | `map` | HMM decoding: `viterbi` (most-likely path) or `map` (marginal per-bin posterior) |
+| `--score_method` | `icl` | Model selection score: `bic` or `icl` |
+| `--score_criteria` | `min` | How to pick K from the score curve: `min`, `elbow`, or `margin-<int>` |
+| `--init_method` | `cna_plus_plus` | Init method: `cna_plus_plus` (HMM-aware) or `kmeans_plus_plus` (sklearn KMeans++) |
+| `--training_method` | `baum_welch` | HMM training: `baum_welch` (soft EM) or `viterbi` (hard EM) |
+| `--free_baf_c0` | False | Allow cluster-0 BAF to update during EM (default: fixed at 0.5) |
+| `--min_tau` | 1 | Minimum Beta-Binomial dispersion tau |
+| `--max_tau` | 1e6 | Maximum Beta-Binomial dispersion tau |
+| `--share_tau` | True | Share BB dispersion tau across clusters within a sample (`--no-share_tau` for per-cluster) |
+| `--tau_iters` | 3 | Number of EM iterations during which BAF dispersion tau is updated |
+| `--baf_eps` | 1e-3 | BAF mean Brent search bounds `[baf_eps, 1-baf_eps]`; sequencing error floor |
+| `--min_covar` | 1e-3 | Minimum RDR variance floor applied after each M-step |
+| `--ig_alpha` | 10.0 | Inverse-gamma prior shape parameter for RDR variance updates |
+| `--log_rdr` | False | Use log(RDR) instead of raw RDR in the Gaussian emission |
+| `--seed` | 42 | Random seed for HMM init step |
+| `--bal_lrt_alpha` | 0.05 | Significance level for the balanced-cluster interval LRT |
+| `--bal_margin` | 0.03 | Half-width of neutral zone `[0.5-δ, 0.5+δ]` for the balanced-cluster test |
+| `--filter_std` | 2.0 | Filter clusters whose variance deviates from mean by `filter_std × std` |
+| `--min_nbins` | 10 | Remove clusters with fewer than `min_nbins` bins |
+| `--ub_nbins` | 50 | Variance-outlier filtering only applies to clusters with #bins ≤ `ub_nbins` |
+| `--skip_mhbafs` | False | Skip minor-haplotype BAF folding after decoding |
 
 ### HMM inference
 
@@ -60,4 +136,74 @@ Outlier clusters are removed before output: any cluster with fewer than `--min_n
 
 ## Output
 
-Clustering results written to `--bbc_dir`: the model-selected $K$ cluster results (`bulk.bbc`, `bulk.seg`), per-$K$ sweeps under `labels/`, `model_scores.tsv`, and diagnostic plots under `plots/`. See [reference.md#output](../reference.md#output) for the full directory tree.
+Clustering results written to `--bbc_dir`: the model-selected $K$ cluster results (`bulk.bbc`, `bulk.seg`), per-$K$ sweeps under `labels/`, `model_scores.tsv`, and diagnostic plots under `plots/`.
+
+```
+<bbc_dir>/                         # cluster-bins output (--bbc_dir)
+  bulk.bbc                         # per-bin cluster assignments (optimal K)
+  bulk.seg                         # per-cluster summary statistics (optimal K)
+  labels/
+    bulk<K>.bbc                    # per-bin assignments for each swept K
+    bulk<K>.seg                    # per-cluster summary for each swept K
+  cluster_infos/                   # per-K cluster-label TSVs
+  plots/                           # ELBO traces, RDR-BAF scatter, model score
+  model_scores.tsv                 # BIC and ICL scores across K
+  cluster-bins.log                 # run log (ends with the runtime/peak-RSS table)
+```
+
+`bulk.bbc` (per-bin, one row per bin x tumor sample) columns:
+
+| Column | Description |
+|---|---|
+| `#CHR` | Chromosome of the bin |
+| `START` / `END` | Bin genomic interval (bp) in BED format (0-index, left-close right-open) |
+| `SAMPLE` | Tumor sample name |
+| `#SNPS` | Number of heterozygous SNPs in the bin |
+| `CLUSTER` | Cluster ID assigned to the bin |
+| `RD` | Read-depth ratio (RDR) of the bin in `SAMPLE` |
+| `COV` | Mean per-base coverage of the bin in `SAMPLE` |
+| `BAF` | minor-haplotype B-allele frequency (mhBAF) of the bin in `SAMPLE` |
+| `ALPHA` | Phased major-allele read count (`Tallele - BETA`) |
+| `BETA` | Phased minor-haplotype read count |
+
+With `--wide_format`, `bulk.bbc` is instead a single gzip TSV `bulk.bbc.tsv.gz` (one row per bin) in
+a VCF-like layout (`region_id`/`switchprobs` stay in `bb.tsv.gz`):
+
+| Column | Description |
+|---|---|
+| `#CHR`, `START`, `END`, `#SNPS`, `CLUSTER` | Bin-level columns, as in `bulk.bbc` |
+| `PHASE` | Haplotype phase orientation of the bin (0/1), from `bb.phased.tsv.gz` |
+| `PHASE_POSTS` | Posterior probability of the bin's phase |
+| `FORMAT` | Colon-joined per-sample field keys, `RD:COV:BAF:ALPHA:BETA` |
+| `<sample>` | One column per tumor sample; the `FORMAT` fields colon-joined in that order |
+
+`bulk.seg` (per-cluster, one row per cluster x tumor sample) columns:
+
+| Column | Description |
+|---|---|
+| `CLUSTER` | Cluster ID |
+| `SAMPLE` | Sample ID |
+| `#BINS` | Number of bins |
+| `#SNPS` | Number of gHETs |
+| `LENGTH` | Total lengths in bp |
+| `ALPHA` / `BETA` | Summed phased major / minor-haplotype counts |
+| `COV` | Normalized sequencing coverage |
+| `BAF` | Cluster minor-haplotype BAF |
+| `BAF-se` | Standard error of `BAF` |
+| `BAF-tau` | Beta-Binomial dispersion |
+| `RD` | Cluster RDR |
+| `RD-se` | Standard error of `RD` |
+| `RD-var` | RDR variance |
+| `is_balanced` | Whether the cluster is labeled allelic balanced (BAF near 0.5) |
+| `is_filtered` | Whether the cluster is filtered out (excluded from `compute-cn`) |
+
+With `--wide_format`, `bulk.seg` (and `labels/bulk<K>.seg`) uses the same VCF-like layout as the
+wide BBC - one row per cluster, still named `bulk.seg` (plain TSV, not gzipped; the `FORMAT` column
+makes it self-describing):
+
+| Column | Description |
+|---|---|
+| `CLUSTER`, `#BINS`, `#SNPS`, `LENGTH` | Cluster-level columns, as in the long `bulk.seg` |
+| `is_balanced`, `is_filtered` | Cluster-level flags, as in the long `bulk.seg` |
+| `FORMAT` | Colon-joined per-sample field keys, `ALPHA:BETA:COV:BAF:BAF-se:BAF-tau:RD:RD-se:RD-var` |
+| `<sample>` | One column per tumor sample; the `FORMAT` fields colon-joined in that order |

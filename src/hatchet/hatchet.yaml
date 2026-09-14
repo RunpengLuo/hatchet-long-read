@@ -24,6 +24,8 @@ score_method: icl
 score_criteria: min
 # init_method: cna_plus_plus | kmeans_plus_plus
 init_method: cna_plus_plus
+# exponent l of the D^l adaptive-sampling weight in cna++ seeding
+cna_plus_plus_d: 1.0
 free_baf_c0: false
 # training_method: baum_welch | viterbi
 training_method: baum_welch
@@ -36,12 +38,23 @@ ig_alpha: 10.0
 tau_iters: 3
 seed: 42
 log_rdr: false
-bal_lrt_alpha: 0.05
+# per-bin |BAF-0.5| band selecting the diploid RDR anchor during seeding
 bal_margin: 0.03
+
+# balanced-cluster interval LRT
+bal_lrt_alpha: 0.05
+# cluster-level neutral-zone half-width
+bal_lrt_margin: 0.01
+
+# post filtering
 filter_std: 2.0
 min_nbins: 10
 ub_nbins: 50
+
 skip_mhbafs: false
+
+# EXPERIMENTAL: wide BBC output (cluster-bins writer + compute-cn reader)
+wide_format: false
 
 ##################################################
 # compute-cn
@@ -84,13 +97,12 @@ cd_seed: 42
 u_init: dirichlet
 u_dir_alpha: 0.3
 solver_threads: null
-eps_fit: 0.01
 
 ##################################################
 # plotting (shared: cluster-bins plot-rdr-baf + plot-cn + plot-panel)
 plot_dpi: 300
 # plot_img_type: pdf | png | svg
-plot_img_type: png
+plot_img_type: pdf
 plot_transparent: false
 plot_show_gap: false
 
@@ -98,8 +110,8 @@ plot_show_gap: false
 plot_tail_alpha: 0.8
 plot_center_alpha: 1.0
 plot_onetail_area: 0.025
-plot_maxlim_fcn: 30
-patient_id: panel
+plot_maxlim_fcn: 12
+sample_id: tumor
 # combined 1D figure width (inches)
 plot_row_width: 25
 # per-sample vertical block height (inches)

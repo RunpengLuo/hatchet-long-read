@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import betaln
 from scipy.optimize import minimize_scalar
-from scipy.signal import find_peaks
-from scipy.stats import gaussian_kde, betabinom
+from scipy.stats import betabinom
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -51,14 +50,16 @@ def estimate_BB_dispersion_normal(
     min_tau=50,
     max_tau=500,
 ):
-    """Estimate BB dispersion tau from a single normal sample (BAF ≈ 0.5).
+    """Estimate BB dispersion tau by pooling all matched normal samples (BAF ~ 0.5).
 
-    The normal sample is diploid genome-wide, so it provides a clean estimate
-    of the sequencing/technical dispersion without copy-number confounding.
+    Normal samples are diploid genome-wide, so they give a clean estimate of the
+    sequencing/technical dispersion without copy-number confounding. Counts from
+    all normals are pooled as independent observations sharing one tau, so a
+    single estimate is returned regardless of how many normals are supplied.
 
     Args:
-        X_alphas_normal: (N,) A-allele counts for the normal sample.
-        X_betas_normal:  (N,) B-allele counts for the normal sample.
+        X_alphas_normal: (N,) or (N, n_normals) A-allele counts across normal samples.
+        X_betas_normal:  (N,) or (N, n_normals) B-allele counts across normal samples.
         min_tau, max_tau: Bounds passed to mle_BB_dispersion.
 
     Returns:
@@ -66,7 +67,11 @@ def estimate_BB_dispersion_normal(
     """
     return float(
         mle_BB_dispersion(
-            X_alphas_normal, X_betas_normal, p=0.5, min_tau=min_tau, max_tau=max_tau
+            np.ravel(X_alphas_normal),
+            np.ravel(X_betas_normal),
+            p=0.5,
+            min_tau=min_tau,
+            max_tau=max_tau,
         )
     )
 
@@ -98,6 +103,7 @@ def estimate_BB_dispersion_segment(
         bb_taus: (M,) float32 array of per-sample tau estimates.
     """
     # TODO: support panel-of-normals (PON) file as an alternative source
+    # TODO: per-bin hypothesis testing on two-side binomial p = 0.5 in margin?
     logging.info("estimate BB dispersion from most balanced segment (no normal sample)")
     logging.info(f"tau bound=[{min_tau},{max_tau}]")
 
@@ -169,6 +175,10 @@ def estimate_rdr_vars(
     return global_var[None, :]  # (1, M)
 
 
+def estimate_ig_beta(ig_alpha, vars):
+    return vars * (ig_alpha + 1)
+
+
 def compute_baf_se(k_labels, k_bafs, k_cids):
     """Observed SE of per-cluster BAF means from per-bin phased BAFs.
 
@@ -218,8 +228,10 @@ def compute_rdr_se(k_labels, k_rdr_vars, k_cids):
 
 ##################################################
 def mat2segs(
-    bbcs: pd.DataFrame,
+    bbs: pd.DataFrame,
+    k_labels: np.ndarray,
     tumor_samples: list,
+    field_mats: dict,
     baf_means: np.ndarray,
     baf_taus: np.ndarray,
     k_baf_ses: np.ndarray,
@@ -228,14 +240,18 @@ def mat2segs(
     k_rdr_ses: np.ndarray,
     cluster_ids: np.ndarray,
 ):
-    """Build the SEG summary DataFrame from per-bin BBC data and cluster parameters.
+    """Build the SEG summary DataFrame from per-(bin, sample) arrays and cluster parameters.
 
-    Groups bins by cluster, then for each (cluster, sample) pair records the
-    number of bins, total SNP count, and the fitted emission parameters.
+    For each (cluster, sample) pair records the number of bins, total SNP count,
+    summed allele counts, length-weighted coverage, and the fitted emission
+    parameters. Aggregates directly from the ``(N, M)`` matrices, without
+    materializing the long BBC frame.
 
     Args:
-        bbcs:         BBC DataFrame with columns CLUSTER, SAMPLE, START, END, #SNPS, ALPHA, BETA, COV, BAF, RD.
+        bbs:          Per-bin frame with START, END, #SNPS (one row per bin).
+        k_labels:     (N,) cluster label per bin.
         tumor_samples: Ordered list of tumor sample names.
+        field_mats:   dict of (N, M) arrays keyed by field; reads ALPHA, BETA, COV.
         baf_means:    (K, M) fitted BAF means.
         baf_taus:     (K, M) fitted BAF dispersions (Beta-Binomial tau per cluster per sample).
         rdr_means:    (K, M) fitted RDR means.
@@ -244,56 +260,56 @@ def mat2segs(
         baf_ses:      (K, M) BAF standard errors (optional; NaN if not provided).
 
     Returns:
-        segs: DataFrame with columns #ID, SAMPLE, #BINS, #SNPS, LENGTH, ALPHA, BETA, COV, BAF, BAF-se, BAF-tau, RD, RD-var.
+        segs: DataFrame with columns CLUSTER, SAMPLE, #BINS, #SNPS, LENGTH, ALPHA, BETA, COV, BAF, BAF-se, BAF-tau, RD, RD-var.
               LENGTH is the total base-pair span of bins in the cluster.
               COV is the bin-length-weighted mean depth across bins in the cluster.
     """
-    bb_grps = bbcs.groupby(by="CLUSTER", sort=False)
+    bin_lengths = (bbs["END"] - bbs["START"]).to_numpy()
+    snps = bbs["#SNPS"].to_numpy()
+    alpha, beta, cov = field_mats["ALPHA"], field_mats["BETA"], field_mats["COV"]
     seg_rows = []
     for li, label in enumerate(cluster_ids):
-        bb_grp = bb_grps.get_group(label)
+        mask = k_labels == label
+        blen = bin_lengths[mask]
+        total_len = blen.sum()
+        n_bins = int(mask.sum())
+        snps_sum = snps[mask].sum()
         for s, sample in enumerate(tumor_samples):
-            bb_sample = bb_grp.loc[bb_grp["SAMPLE"] == sample, :]
-            bin_lengths = (bb_sample["END"] - bb_sample["START"]).to_numpy()
-            total_len = bin_lengths.sum()
-            cov = (bb_sample["COV"].to_numpy() * bin_lengths).sum() / total_len
-            seg_rows.append(
-                [
-                    label,
-                    sample,
-                    len(bb_sample),
-                    bb_sample["#SNPS"].sum(),
-                    total_len,
-                    bb_sample["ALPHA"].sum(),
-                    bb_sample["BETA"].sum(),
-                    cov,
-                    baf_means[li, s],
-                    k_baf_ses[li, s],
-                    baf_taus[li, s],
-                    rdr_means[li, s],
-                    k_rdr_ses[li, s],
-                    rdr_vars[li, s],
-                ]
-            )
-    segs = pd.DataFrame(
-        data=seg_rows,
-        columns=[
-            "#ID",
-            "SAMPLE",
-            "#BINS",
-            "#SNPS",
-            "LENGTH",
-            "ALPHA",
-            "BETA",
-            "COV",
-            "BAF",
-            "BAF-se",
-            "BAF-tau",
-            "RD",
-            "RD-se",
-            "RD-var",
-        ],
-    )
+            cov_w = (cov[mask, s] * blen).sum() / total_len
+            row = [
+                label,
+                sample,
+                n_bins,
+                snps_sum,
+                total_len,
+                alpha[mask, s].sum(),
+                beta[mask, s].sum(),
+                cov_w,
+                baf_means[li, s],
+                k_baf_ses[li, s],
+                baf_taus[li, s],
+                rdr_means[li, s],
+                k_rdr_ses[li, s],
+                rdr_vars[li, s],
+            ]
+            seg_rows.append(row)
+    columns = [
+        "CLUSTER",
+        "SAMPLE",
+        "#BINS",
+        "#SNPS",
+        "LENGTH",
+        "ALPHA",
+        "BETA",
+        "COV",
+        "BAF",
+        "BAF-se",
+        "BAF-tau",
+        "RD",
+        "RD-se",
+        "RD-var",
+    ]
+    segs = pd.DataFrame(data=seg_rows, columns=columns)
     return segs
 
 
@@ -322,6 +338,11 @@ def label_balanced_clusters(
     Otherwise, calibrate via parametric bootstrap at boundary p = 0.5 - δ.
 
     Balanced if p-value ≥ alpha for ALL samples.
+
+    ``margin`` is a cluster-level equivalence bound, not a per-bin band: a
+    cluster pooling hundreds of bins has a BAF standard error of order 1e-3,
+    so any δ larger than that makes the neutral zone, rather than ``alpha``,
+    the decision rule. Keep it separate from the per-bin seeding band.
     """
 
     def _negll(p, b, n, tau):
@@ -553,46 +574,3 @@ def plot_score(scores_df: pd.DataFrame, score_method: str, out_file: str):
 
     plt.savefig(out_file)
     plt.close()
-
-
-def _is_multimodal(obs, min_count=30):
-    """Return True if KDE of obs has >1 prominent peak."""
-    if len(obs) < min_count:
-        return False
-    try:
-        kde = gaussian_kde(obs)
-    except (np.linalg.LinAlgError, ValueError):
-        return False
-    grid = np.linspace(obs.min(), obs.max(), 200)
-    kde_vals = kde(grid)
-    peaks, _ = find_peaks(kde_vals, prominence=0.1 * kde_vals.max())
-    return len(peaks) > 1
-
-
-def count_multimodal_clusters(labels, X_rdrs, X_bafs, log_rdr):
-    """Count clusters whose marginal RDR or BAF distribution is multimodal.
-
-    Args:
-        labels:   (N,) 0-indexed cluster assignments.
-        X_rdrs:   (N, M) RDR values (original scale).
-        X_bafs:   (N, M) phased BAF values in [0, 1].
-        log_rdr:  if True, check multimodality on log(RDR).
-
-    Returns:
-        (n_multimodal, multimodal_ids): count and list of multimodal cluster IDs.
-    """
-    cluster_ids = np.unique(labels)
-    M = X_rdrs.shape[1]
-    multimodal_ids = []
-    for k in cluster_ids:
-        mask = labels == k
-        for m in range(M):
-            baf_obs = X_bafs[mask, m]
-            if log_rdr:
-                rdr_obs = np.log(np.clip(X_rdrs[mask, m], 1e-6, None))
-            else:
-                rdr_obs = X_rdrs[mask, m]
-            if _is_multimodal(baf_obs) or _is_multimodal(rdr_obs):
-                multimodal_ids.append(int(k))
-                break
-    return len(multimodal_ids), multimodal_ids

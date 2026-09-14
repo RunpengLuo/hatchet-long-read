@@ -1,15 +1,19 @@
 """EM M-step routines for the 2-mixture BAF+RDR HMM.
-- RDR Gaussian means & variances: closed-form weighted statistics.
-- BAF Beta-Binomial means: scipy bounded scalar optimization (Brent).
-- BAF tau (optional): posterior-weighted MLE over all clusters.
-- Start probabilities: posterior counts at segment starts.
+
+RDR and BAF emission updates are pluggable and dispatched by ``do_mstep`` on
+the option strings:
+- RDR "gaussian": closed-form posterior-weighted mean & variance.
+- RDR "negbinom": ECM (Meng & Rubin 1993) alternating rho|phi (Newton) and
+  phi|rho (Brent) to their common fixed point.
+- BAF "betabinom": scipy Brent means + optional posterior-weighted tau MLE.
+- Start probabilities (emission-independent): posterior counts at segment starts.
 """
 
 import logging
 
 import numpy as np
 from scipy.optimize import minimize_scalar
-from scipy.special import betaln
+from scipy.special import betaln, gammaln, xlogy
 
 
 def do_mstep(
@@ -30,14 +34,30 @@ def do_mstep(
     ig_alpha=10.0,
     ig_beta=0.01,
     baf_k_start=0,
+    rdr_emission="gaussian",
+    baf_emission="betabinom",
+    share_invphi=False,
+    min_invphi=1e-6,
+    max_invphi=1e6,
+    X_counts=None,
+    X_nb_offsets=None,
 ):
     """EM M-step: emission parameters + start probabilities.
 
-    Updates RDR Gaussian parameters (means and variances) via closed-form
-    weighted statistics, BAF Beta-Binomial means via scipy bounded scalar
-    optimization, and start probabilities from posterior counts at segment
-    starts.  BAF means are NOT folded here; the mhBAF fold is applied
-    after decoding in cluster_bins.py to preserve EM monotonicity.
+    Dispatches the RDR and BAF emission updates on the option strings and
+    computes start probabilities from posterior counts at segment starts.
+    BAF means are NOT folded here; the mhBAF fold is applied after decoding
+    in cluster_bins.py to preserve EM monotonicity.
+
+    Args:
+        rdr_emission: "gaussian" or "negbinom".
+        baf_emission: "betabinom".
+        share_invphi:    tie NB phi across clusters within a sample (negbinom).
+        min_invphi:   lower search bound on NB invphi = 1/phi (negbinom).
+        max_invphi:   upper search bound on NB invphi = 1/phi (negbinom).
+        X_counts:     (N, M) per-bin per-sample counts (negbinom emission).
+        X_nb_offsets: (N, M) per-bin per-sample NB offset lambda_i*T_s
+                      (negbinom emission).
 
     Returns:
         rdr_means:      (K, M) numpy array.
@@ -45,6 +65,9 @@ def do_mstep(
         baf_means:      (K, M) numpy array.
         baf_taus:       (K, M) numpy array.
         log_startprobs: (K, 2) numpy array.
+
+    Raises:
+        ValueError: on an unknown emission option string.
     """
     N, K, _ = posts.shape
 
@@ -53,13 +76,82 @@ def do_mstep(
     gamma0 = np.sum(np.maximum(posts[seg_starts], tol), axis=0)  # (K, 2)
     log_startprobs = np.log(gamma0 / np.sum(gamma0))  # (K, 2)
 
-    # ---- RDR means and variances (closed-form) ----
+    # ---- RDR emission parameters ----
     posts_marg = np.sum(posts, axis=-1)  # (N, K)
     Nk = np.sum(posts_marg, axis=0)  # (K,)
-
     if np.any(Nk < tol):
         logging.warning(f"Some clusters have effective Nk < {tol}")
 
+    if rdr_emission == "gaussian":
+        rdr_means, rdr_vars = _update_rdr_gaussian(
+            X_rdrs, posts_marg, Nk, min_covar, ig_alpha, ig_beta, tol
+        )
+    elif rdr_emission == "negbinom":
+        if X_counts is None or X_nb_offsets is None:
+            raise ValueError("negbinom emission requires X_counts and X_nb_offsets")
+        rdr_means, rdr_vars = _update_rdr_negbinom(
+            X_counts,
+            X_nb_offsets,
+            posts_marg,
+            Nk,
+            min_covar,
+            tol,
+            share_invphi=share_invphi,
+            min_invphi=min_invphi,
+            max_invphi=max_invphi,
+        )
+    else:
+        raise ValueError(f"unknown rdr_emission: {rdr_emission!r}")
+
+    # ---- BAF emission parameters ----
+    if baf_emission == "betabinom":
+        # tau first (optional), before means so p is optimal for the new tau
+        if update_tau:
+            baf_taus = _update_baf_tau(
+                X_alphas,
+                X_betas,
+                posts,
+                baf_means_init,
+                baf_taus,
+                min_tau=min_tau,
+                max_tau=max_tau,
+                share_tau=share_tau,
+            )
+        posts_kn2 = np.ascontiguousarray(posts.transpose(1, 0, 2))  # (K, N, 2)
+        baf_means = _update_baf_means(
+            baf_means_init,
+            X_alphas.T,
+            X_betas.T,
+            baf_taus,
+            posts_kn2,
+            baf_eps,
+            k_start=baf_k_start,
+        )
+    else:
+        raise ValueError(f"unknown baf_emission: {baf_emission!r}")
+
+    return rdr_means, rdr_vars, baf_means, baf_taus, log_startprobs
+
+
+def _update_rdr_gaussian(X_rdrs, posts_marg, Nk, min_covar, ig_alpha, ig_beta, tol):
+    """Closed-form posterior-weighted Gaussian RDR mean/variance update.
+
+    The variance uses an inverse-gamma MAP shrinkage when ig_alpha > 0, else
+    the plain weighted variance; both are floored at min_covar.
+
+    Args:
+        X_rdrs:     (N, M) (log-)RDR observations.
+        posts_marg: (N, K) cluster-marginal posteriors.
+        Nk:         (K,)   effective per-cluster counts.
+        min_covar:  variance floor.
+        ig_alpha:   inverse-gamma shape (<=0 disables the prior).
+        ig_beta:    inverse-gamma scale.
+        tol:        lower clamp for Nk in denominators.
+
+    Returns:
+        rdr_means: (K, M) numpy array.
+        rdr_vars:  (K, M) numpy array.
+    """
     safe_Nk = np.maximum(Nk, tol)[:, None]  # (K, 1)
     rdr_means = np.einsum("nk,nm->km", posts_marg, X_rdrs) / safe_Nk
     weighted_var = (
@@ -73,33 +165,231 @@ def do_mstep(
         )
     else:
         rdr_vars = np.maximum(weighted_var, min_covar)
+    return rdr_means, rdr_vars
 
-    # ---- BAF tau (optional, before BAF means so p is optimal for new tau) ----
-    if update_tau:
-        baf_taus = _update_baf_tau(
-            X_alphas,
-            X_betas,
-            posts,
-            baf_means_init,
-            baf_taus,
-            min_tau=min_tau,
-            max_tau=max_tau,
-            share_tau=share_tau,
+
+def _update_rdr_negbinom(
+    X_counts,
+    X_nb_offsets,
+    posts_marg,
+    Nk,
+    min_covar,
+    tol,
+    share_invphi=False,
+    min_invphi=1e-6,
+    max_invphi=1e6,
+    max_ecm=50,
+    ecm_tol=1e-7,
+    max_newton=50,
+    newton_tol=1e-8,
+):
+    """Negative-binomial count M-step via ECM (Meng & Rubin 1993).
+
+    Alternates two conditional-maximization steps to their common fixed
+    point, which equals the joint maximizer of the posterior-weighted NB
+    log-likelihood for X_counts[i, s] ~ NB(mu, phi), Var = mu + phi * mu**2,
+    mu = X_nb_offsets[i, s] * rho[k, s]:
+    - rho | phi: per-(k, s) 1D concave solve by Newton, warm-started from the
+      method-of-moments estimate sum_i w y / sum_i w offset (exact rho MLE in
+      the Poisson phi->0 limit).
+    - phi | rho: 1D solve (Brent in log inverse-dispersion invphi = 1/phi);
+      per (cluster, sample) when share_invphi is False, else one per sample pooled
+      across clusters.
+    Iterating to convergence makes ECM equal joint (rho, phi) maximization
+    while preserving EM monotone ascent (doi:10.1093/biomet/80.2.267). rho is
+    returned in the rdr_means slot, phi in the rdr_vars slot.
+
+    Args:
+        X_counts:      (N, M) per-bin per-sample counts.
+        X_nb_offsets:  (N, M) per-bin per-sample NB offset lambda_i*T_s.
+        posts_marg:    (N, K) cluster-marginal posteriors.
+        Nk:            (K,)   effective per-cluster counts.
+        min_covar:     phi init floor.
+        tol:           lower clamp for rho and weight sums in denominators.
+        share_invphi:     tie phi across clusters within a sample.
+        min_invphi:    lower search bound on invphi = 1/phi (the NB size).
+        max_invphi:    upper search bound on invphi = 1/phi (the NB size).
+        max_ecm:       max ECM sweeps.
+        ecm_tol:       ECM stop tolerance on the weighted log-likelihood.
+        max_newton:    max Newton iters per rho conditional-maximization.
+        newton_tol:    Newton stop tolerance on max |step / rho|.
+
+    Returns:
+        rho: (K, M) numpy array.
+        phi: (K, M) numpy array (rows tied across clusters when share_invphi).
+    """
+    K = posts_marg.shape[1]
+    M = X_counts.shape[1]
+    Wy = posts_marg.T @ X_counts  # (K, M) = sum_i w_ik y_is
+    Woff = posts_marg.T @ X_nb_offsets  # (K, M) = sum_i w_ik offset
+
+    rho = np.maximum(Wy / np.maximum(Woff, tol), tol)  # (K, M) MoM init
+    phi = np.full((K, M), max(min_covar, 1e-2))  # (K, M)
+
+    prev_ll = -np.inf
+    for _ in range(max_ecm):
+        phi = _cm_phi_negbinom(
+            X_counts,
+            X_nb_offsets,
+            posts_marg,
+            rho,
+            phi,
+            min_invphi,
+            max_invphi,
+            share_invphi,
         )
+        rho = _cm_rho_negbinom(
+            X_counts,
+            X_nb_offsets,
+            posts_marg,
+            Wy,
+            rho,
+            phi,
+            tol,
+            max_newton,
+            newton_tol,
+        )
+        ll = _weighted_ll_negbinom(X_counts, X_nb_offsets, posts_marg, rho, phi)
+        if abs(ll - prev_ll) <= ecm_tol * (abs(prev_ll) + ecm_tol):
+            break
+        prev_ll = ll
+    return rho, phi
 
-    # ---- BAF means (scipy Brent, uses possibly updated tau) ----
-    posts_kn2 = np.ascontiguousarray(posts.transpose(1, 0, 2))  # (K, N, 2)
-    baf_means = _update_baf_means(
-        baf_means_init,
-        X_alphas.T,
-        X_betas.T,
-        baf_taus,
-        posts_kn2,
-        baf_eps,
-        k_start=baf_k_start,
-    )
 
-    return rdr_means, rdr_vars, baf_means, baf_taus, log_startprobs
+def _cm_rho_negbinom(
+    X_counts, offset, posts_marg, Wy, rho, phi, tol, max_newton, newton_tol
+):
+    """CM-step for rho: per-(k, s) NB mean-MLE by Newton at fixed phi.
+
+    The posterior-weighted NB log-likelihood is concave in rho[k, s] (log link,
+    linear offset), so Newton from the MoM warm start converges quadratically.
+
+    Args:
+        X_counts:   (N, M) counts.
+        offset:     (N, M) lambda_i * T_s.
+        posts_marg: (N, K) cluster-marginal posteriors.
+        Wy:         (K, M) sum_i w_ik y_is (phi-independent, precomputed).
+        rho:        (K, M) warm start.
+        phi:        (K, M) fixed dispersion.
+        tol:        lower clamp on rho.
+        max_newton: max iterations.
+        newton_tol: stop tolerance on max |step / rho|.
+
+    Returns:
+        (K, M) updated rho.
+    """
+    r = 1.0 / phi  # (K, M) NB size
+    y = X_counts[:, None, :]  # (N, 1, M)
+    c = offset[:, None, :]  # (N, 1, M)
+    rho = np.maximum(rho.copy(), tol)
+    for _ in range(max_newton):
+        denom = r[None, :, :] + c * rho[None, :, :]  # (N, K, M)
+        yr = y + r[None, :, :]  # (N, K, M)
+        g = Wy / rho - np.einsum("nk,nkm->km", posts_marg, c * yr / denom)
+        gp = -Wy / rho**2 + np.einsum("nk,nkm->km", posts_marg, c**2 * yr / denom**2)
+        rho_new = np.maximum(rho - g / gp, tol)
+        if np.max(np.abs(rho_new - rho) / rho) < newton_tol:
+            return rho_new
+        rho = rho_new
+    return rho
+
+
+def _neg_Q_invphi(log_invphi, mu, y, w):
+    """Negative posterior-weighted NB log-likelihood as a function of log-invphi.
+
+    invphi = 1/phi is the NB size r; parameterizing by it drops the reciprocal
+    from the pmf (r = exp(log_invphi)) and lets the search bound r directly.
+
+    Args:
+        log_invphi: scalar log inverse-dispersion (log NB size).
+        mu:         NB means, broadcastable with y and w.
+        y:          observed counts, broadcastable with mu.
+        w:          posterior weights, same shape as the mu*y grid.
+
+    Returns:
+        scalar negative weighted log-likelihood.
+    """
+    r = np.exp(log_invphi)
+    frac = mu / (r + mu)
+    ll = gammaln(y + r) - gammaln(r) + r * np.log1p(-frac) + xlogy(y, frac)
+    return -np.sum(w * ll)
+
+
+def _cm_phi_negbinom(
+    X_counts, offset, posts_marg, rho, phi, min_invphi, max_invphi, share_invphi
+):
+    """CM-step for phi: NB dispersion MLE by Brent in log-invphi at fixed rho.
+
+    The search variable is log-invphi (invphi = 1/phi = NB size r) over
+    [log(min_invphi), log(max_invphi)]; the fitted phi = 1/invphi is stored.
+    With share_invphi=True a single phi per sample (pooling all clusters via the
+    posterior weights) is fit and broadcast to all K rows; with share_invphi=False
+    phi is fit independently per (cluster, sample).
+
+    Args:
+        X_counts:   (N, M) counts.
+        offset:     (N, M) lambda_i * T_s.
+        posts_marg: (N, K) cluster-marginal posteriors.
+        rho:        (K, M) fixed relative-copy state.
+        phi:        (K, M) current dispersion (returned shape).
+        min_invphi: lower Brent bound on invphi = 1/phi.
+        max_invphi: upper Brent bound on invphi = 1/phi.
+        share_invphi:  tie phi across clusters within a sample.
+
+    Returns:
+        (K, M) updated phi.
+    """
+    M = X_counts.shape[1]
+    K = posts_marg.shape[1]
+    phi_new = phi.copy()
+    lo, hi = np.log(min_invphi), np.log(max_invphi)
+
+    for s in range(M):
+        if share_invphi:
+            mu = offset[:, s][:, None] * rho[:, s][None, :]  # (N, K)
+            y = X_counts[:, s][:, None]  # (N, 1)
+            res = minimize_scalar(
+                _neg_Q_invphi,
+                bounds=(lo, hi),
+                method="bounded",
+                args=(mu, y, posts_marg),
+            )
+            phi_new[:, s] = 1.0 / np.exp(res.x)
+        else:
+            for k in range(K):
+                mu = offset[:, s] * rho[k, s]  # (N,)
+                res = minimize_scalar(
+                    _neg_Q_invphi,
+                    bounds=(lo, hi),
+                    method="bounded",
+                    args=(mu, X_counts[:, s], posts_marg[:, k]),
+                )
+                phi_new[k, s] = 1.0 / np.exp(res.x)
+    return phi_new
+
+
+def _weighted_ll_negbinom(X_counts, offset, posts_marg, rho, phi):
+    """Posterior-weighted NB log-likelihood (drops the y! constant).
+
+    Used as the ECM convergence monitor; the constant gammaln(y+1) is omitted
+    since it does not affect the stopping test.
+
+    Args:
+        X_counts:   (N, M) counts.
+        offset:     (N, M) lambda_i * T_s.
+        posts_marg: (N, K) cluster-marginal posteriors.
+        rho:        (K, M) relative-copy state.
+        phi:        (K, M) dispersion.
+
+    Returns:
+        float scalar.
+    """
+    mu = offset[:, None, :] * rho[None, :, :]  # (N, K, M)
+    r = 1.0 / phi[None, :, :]  # (1, K, M)
+    y = X_counts[:, None, :]  # (N, 1, M)
+    frac = mu / (r + mu)  # (N, K, M)
+    ll = gammaln(y + r) - gammaln(r) + r * np.log1p(-frac) + xlogy(y, frac)
+    return float(np.sum(posts_marg * np.sum(ll, axis=2)))
 
 
 def _update_baf_tau(

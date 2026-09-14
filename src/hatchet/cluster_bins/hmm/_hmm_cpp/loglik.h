@@ -17,6 +17,8 @@
  * rdr_vars  (K, M) — per-cluster per-sample Gaussian RDR variances
  * baf_means (K, M) — per-cluster per-sample Beta-Binomial BAF means
  * baf_taus  (K, M) — per-cluster per-sample Beta-Binomial dispersion parameters
+ * log_bc_nm (N, M) — precomputed data-invariant log binomial coefficient
+ * lgamma_tot_tau_nm (N, M) — precomputed lgamma(total+tau), share_tau only (else nullptr)
  * lls0      (N, K) — output log-likelihoods under h=0
  * lls1      (N, K) — output log-likelihoods under h=1
  */
@@ -29,6 +31,8 @@ void compute_loglik_cpp(
     const double* rdr_vars,
     const double* baf_means,
     const double* baf_taus,
+    const double* log_bc_nm,
+    const double* lgamma_tot_tau_nm,
     double*       lls0,
     double*       lls1,
     int N, int K, int M, bool share_tau = true

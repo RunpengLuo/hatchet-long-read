@@ -14,7 +14,6 @@ from hatchet.cluster_bins.hmm.hmm_likelihoods import compute_loglik
 from hatchet.cluster_bins.hmm.hmm_decode import map_decoding, run_viterbi, decode_hmm  # noqa: F401
 from hatchet.cluster_bins.hmm.hmm_utils import score_model, model_select_K  # noqa: F401
 from hatchet.cluster_bins.hmm.hmm_m_steps import do_mstep
-from hatchet.cluster_bins.cluster_utils import count_multimodal_clusters
 from hatchet.cluster_bins import hmm as _hmm_backend
 
 
@@ -154,8 +153,6 @@ def run_baum_welch(
     rdr_vars: np.ndarray,
     baf_means: np.ndarray,
     baf_taus: np.ndarray,
-    X_rdrs_orig: np.ndarray,
-    X_totals_orig: np.ndarray,
     n_iter: int = 10,
     min_covar: float = 1e-3,
     tol_ll: float = 1e-4,
@@ -164,12 +161,18 @@ def run_baum_welch(
     min_tau: float = 50,
     max_tau: float = 100,
     share_tau: bool = True,
+    share_invphi: bool = False,
     baf_eps: float = 1e-3,
-    log_rdr: bool = True,
     restart_id: int | None = None,
     ig_alpha: float = 10.0,
     ig_beta: float | np.ndarray = 0.01,
     baf_k_start: int = 0,
+    rdr_emission: str = "gaussian",
+    baf_emission: str = "betabinom",
+    min_invphi: float = 1e-6,
+    max_invphi: float = 1e6,
+    X_counts: np.ndarray | None = None,
+    X_nb_offsets: np.ndarray | None = None,
 ) -> dict:
     """Run EM training for a K-state 2-mixture BAF+RDR HMM.
 
@@ -195,8 +198,6 @@ def run_baum_welch(
         rdr_vars:          (K, M) float64 — initial RDR variances.
         baf_means:         (K, M) float64 — initial BAF means.
         baf_taus:          (M,) or (K, M) float64 — initial BB dispersion.
-        X_rdrs_orig:       (N, M) float64 — linear-scale RDR for multimodal diagnostic.
-        X_totals_orig:     (N, M) float64 — total counts for multimodal diagnostic.
         n_iter:            Maximum EM iterations.
         min_covar:         Minimum RDR variance floor.
         tol_ll:            Convergence threshold on log-likelihood delta.
@@ -205,7 +206,14 @@ def run_baum_welch(
         min_tau:           Lower bound for tau optimisation.
         max_tau:           Upper bound for tau optimisation.
         baf_eps:           Brent search bounds for BAF mean: [baf_eps, 1-baf_eps].
-        log_rdr:           Whether RDR model params are in log-space.
+        rdr_emission:      RDR emission model: "gaussian" or "negbinom".
+        baf_emission:      BAF emission model: "betabinom".
+        share_invphi:         Tie NB phi across clusters within a sample (negbinom).
+        min_invphi:        Lower search bound on NB invphi=1/phi (negbinom).
+        max_invphi:        Upper search bound on NB invphi=1/phi (negbinom).
+        X_counts:          (N, M) per-bin per-sample counts (negbinom only).
+        X_nb_offsets:      (N, M) per-bin per-sample NB offset lambda_i*T_s
+                           (negbinom only).
 
     Returns:
         dict with keys: RDR_means, RDR_vars, BAF_means, BAF_taus,
@@ -219,6 +227,16 @@ def run_baum_welch(
     baf_taus = np.ascontiguousarray(
         np.broadcast_to(baf_taus, (K, M)), dtype=np.float64
     )  # (K, M); rows equal when init is per-sample
+
+    if (rdr_emission, baf_emission) != (
+        "gaussian",
+        "betabinom",
+    ) and _hmm_backend._USE_CPP:
+        raise NotImplementedError(
+            f"C++ HMM backend supports only gaussian RDR + betabinom BAF; "
+            f"got rdr_emission={rdr_emission!r}, baf_emission={baf_emission!r}. "
+            f"Set HATCHET_DISABLE_CPP=1 to use the Python emission dispatch."
+        )
 
     if _hmm_backend._USE_CPP:
         return _run_hmm_cpp(
@@ -252,6 +270,9 @@ def run_baum_welch(
 
     log_startprobs = np.log(np.full((K, 2), 1.0 / (2 * K), dtype=np.float64))
 
+    # IG prior is a Gaussian-variance prior; skip it under non-gaussian RDR
+    ig_active = ig_alpha > 0 and rdr_emission == "gaussian"
+
     elbo_trace = [-np.inf]
     trace_rdr_means = [rdr_means.copy()]
     trace_rdr_vars = [rdr_vars.copy()]
@@ -272,6 +293,10 @@ def run_baum_welch(
             rdr_vars,
             baf_means,
             baf_taus,
+            rdr_emission=rdr_emission,
+            baf_emission=baf_emission,
+            X_counts=X_counts,
+            X_nb_offsets=X_nb_offsets,
         )
         t1_loglik = time.perf_counter()
 
@@ -288,8 +313,8 @@ def run_baum_welch(
         t_loglik_sum += t1_loglik - t0
         t_fwdbwd_sum += t2_fwdbwd - t1_loglik
 
-        # Penalized ELBO (IG log-prior on RDR variance)
-        if ig_alpha > 0:
+        # Penalized ELBO (IG log-prior on RDR variance; gaussian emission only)
+        if ig_active:
             ig_log_prior = np.sum(
                 -(ig_alpha + 1) * np.log(rdr_vars) - ig_beta / rdr_vars
             )
@@ -300,46 +325,7 @@ def run_baum_welch(
         delta_ll = loglik_penalized - elbo_trace[-1]
         elbo_trace.append(loglik_penalized)
 
-        # Per-iter multimodal diagnostic (cheap MAP decode from posteriors)
-        cluster_posts_it = np.sum(posts, axis=2)  # (N, K)
-        phase_posts_it = np.sum(posts, axis=1)  # (N, 2)
-        labels_it = np.argmax(cluster_posts_it, axis=1)
-        phases_it = np.argmax(phase_posts_it, axis=1)
-        betas_phased = (
-            X_alphas * (1 - phases_it[:, None]) + X_betas * phases_it[:, None]
-        )
-        bafs_it = betas_phased / X_totals_orig
-        n_multi, multi_ids = count_multimodal_clusters(
-            labels_it, X_rdrs_orig, bafs_it, log_rdr
-        )
-        n_used = len(np.unique(labels_it))
-        multi_info = f" | {n_multi}/{n_used} multimodal {multi_ids}"
-
-        logging.info(
-            f"{_pfx}Iter {it:03d} | Q={loglik: .6f} | delta={delta_ll: .6f}{multi_info}"
-        )
-
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            tau_str = " ".join(f"{baf_taus[m]:8.1f}" for m in range(M))
-            tau_hdr = "  ".join(f"{'tau' + str(m + 1):>8s}" for m in range(M))
-            logging.debug(f"  {'tau':>3s}        {tau_hdr}")
-            logging.debug(f"       {' ' * 5}  {tau_str}")
-            sample_hdr = "  ".join(
-                f"{'baf' + str(m + 1):>8s} {'rdr' + str(m + 1):>8s} {'rdr_var' + str(m + 1):>8s}"
-                for m in range(M)
-            )
-            nks = cluster_posts_it.sum(axis=0)
-            total_nk = nks.sum()
-            logging.debug(f"  {'k':>3s}  {'pi_k':>6s}  {sample_hdr}")
-            for k in range(K):
-                nk = float(nks[k])
-                if nk < 0.5:
-                    continue
-                per_sample = "  ".join(
-                    f"{baf_means[k, m]:8.4f} {rdr_means[k, m]:8.4f} {rdr_vars[k, m]:8.4f}"
-                    for m in range(M)
-                )
-                logging.debug(f"  {k:3d}  {nk / total_nk:6.3f}  {per_sample}")
+        logging.info(f"{_pfx}Iter {it:03d} | Q={loglik: .6f} | delta={delta_ll: .6f}")
 
         if abs(delta_ll) / N < tol_ll:
             logging.info(f"{_pfx}Converged at iteration {it}")
@@ -355,6 +341,9 @@ def run_baum_welch(
             X_lengths,
             update_tau=(it < tau_iters),
             share_tau=share_tau,
+            share_invphi=share_invphi,
+            min_invphi=min_invphi,
+            max_invphi=max_invphi,
             min_covar=min_covar,
             tol=tol,
             min_tau=min_tau,
@@ -363,6 +352,10 @@ def run_baum_welch(
             ig_alpha=ig_alpha,
             ig_beta=ig_beta,
             baf_k_start=baf_k_start,
+            rdr_emission=rdr_emission,
+            baf_emission=baf_emission,
+            X_counts=X_counts,
+            X_nb_offsets=X_nb_offsets,
         )
         t3_mstep = time.perf_counter()
         t_mstep_sum += t3_mstep - t2_fwdbwd
@@ -434,8 +427,6 @@ def run_viterbi_training(
     rdr_vars: np.ndarray,
     baf_means: np.ndarray,
     baf_taus: np.ndarray,
-    X_rdrs_orig: np.ndarray,
-    X_totals_orig: np.ndarray,
     n_iter: int = 10,
     min_covar: float = 1e-3,
     tol_ll: float = 1e-4,
@@ -444,12 +435,18 @@ def run_viterbi_training(
     min_tau: float = 50,
     max_tau: float = 100,
     share_tau: bool = True,
+    share_invphi: bool = False,
     baf_eps: float = 1e-3,
-    log_rdr: bool = True,
     restart_id: int | None = None,
     ig_alpha: float = 10.0,
     ig_beta: float | np.ndarray = 0.01,
     baf_k_start: int = 0,
+    rdr_emission: str = "gaussian",
+    baf_emission: str = "betabinom",
+    min_invphi: float = 1e-6,
+    max_invphi: float = 1e6,
+    X_counts: np.ndarray | None = None,
+    X_nb_offsets: np.ndarray | None = None,
 ) -> dict:
     """Viterbi training (hard EM) — same interface as run_baum_welch.
 
@@ -465,6 +462,9 @@ def run_viterbi_training(
     )  # (K, M); rows equal when init is per-sample
 
     log_startprobs = np.log(np.full((K, 2), 1.0 / (2 * K), dtype=np.float64))
+
+    # IG prior is a Gaussian-variance prior; skip it under non-gaussian RDR
+    ig_active = ig_alpha > 0 and rdr_emission == "gaussian"
 
     trace_rdr_means = [rdr_means.copy()]
     trace_rdr_vars = [rdr_vars.copy()]
@@ -482,6 +482,10 @@ def run_viterbi_training(
             rdr_vars,
             baf_means,
             baf_taus,
+            rdr_emission=rdr_emission,
+            baf_emission=baf_emission,
+            X_counts=X_counts,
+            X_nb_offsets=X_nb_offsets,
         )
 
         # Viterbi decode → hard assignments
@@ -507,7 +511,8 @@ def run_viterbi_training(
         for n in range(N):
             posts[n, cluster_labels[n], phase_labels[n]] = 1.0
 
-        if ig_alpha > 0:
+        # IG log-prior on RDR variance; gaussian emission only
+        if ig_active:
             ig_log_prior = np.sum(
                 -(ig_alpha + 1) * np.log(rdr_vars) - ig_beta / rdr_vars
             )
@@ -536,6 +541,9 @@ def run_viterbi_training(
             X_lengths,
             update_tau=(it < tau_iters),
             share_tau=share_tau,
+            share_invphi=share_invphi,
+            min_invphi=min_invphi,
+            max_invphi=max_invphi,
             min_covar=min_covar,
             tol=tol,
             min_tau=min_tau,
@@ -544,6 +552,10 @@ def run_viterbi_training(
             ig_alpha=ig_alpha,
             ig_beta=ig_beta,
             baf_k_start=baf_k_start,
+            rdr_emission=rdr_emission,
+            baf_emission=baf_emission,
+            X_counts=X_counts,
+            X_nb_offsets=X_nb_offsets,
         )
 
         trace_rdr_means.append(rdr_means.copy())

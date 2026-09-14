@@ -87,6 +87,14 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         "best by log-likelihood is kept (default: 3)",
     )
     parser.add_argument(
+        "--cna_plus_plus_d",
+        type=float,
+        required=False,
+        default=argparse.SUPPRESS,
+        help="Exponent l of the D^l adaptive-sampling weight in cna++ seeding, applied to "
+        "the per-bin NLL; l=1 matches the HMM log-likelihood objective (default: 1.0)",
+    )
+    parser.add_argument(
         "--niters",
         required=False,
         default=argparse.SUPPRESS,
@@ -252,7 +260,14 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         type=float,
         required=False,
         default=argparse.SUPPRESS,
-        help="Half-width of neutral zone [0.5-δ, 0.5+δ] for balanced cluster test (default: 0.03)",
+        help="Per-bin |BAF-0.5| band selecting the diploid RDR anchor during seeding (default: 0.03)",
+    )
+    parser.add_argument(
+        "--bal_lrt_margin",
+        type=float,
+        required=False,
+        default=argparse.SUPPRESS,
+        help="Cluster-level neutral-zone half-width for the balanced cluster interval LRT (default: 0.01)",
     )
 
     ##################################################
@@ -282,8 +297,13 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         "--skip_mhbafs",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Skip mhBAF folding after decoding. By default, clusters with BAF > 0.5 "
-        "have their BAF means and per-bin phases flipped to enforce the minor-allele convention.",
+        help="Clusters with averaged BAF > 0.5 are folded to minor-haplotype convection. set to skip.",
+    )
+    parser.add_argument(
+        "--wide_format",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="EXPERIMENTAL: write BBC in memory-efficient wide gzip TSV format.",
     )
     add_arguments_plot_style(parser)
     return parser
@@ -308,6 +328,12 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         required=True,
         type=str,
         help="Filename for SEG table (e.g., results/best.seg.ucn)",
+    )
+    parser.add_argument(
+        "--wide_format",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="EXPERIMENTAL: read BBC in wide file format.",
     )
 
     ##################################################
@@ -587,23 +613,6 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         help="Max threads per solver call (Gurobi). Set to 1 for parallel CD workers (default: solver default)",
     )
 
-    ##################################################
-    # CNT-CD parameters (Experimental)
-    parser.add_argument(
-        "--tree_file",
-        required=False,
-        default=None,
-        type=str,
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--eps_fit",
-        required=False,
-        default=argparse.SUPPRESS,
-        type=float,
-        help=argparse.SUPPRESS,  # cnt_cd only; not user-selectable pre-release
-    )
-
     parser.add_argument(
         "--verbosity",
         required=False,
@@ -624,12 +633,14 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         help="Reference chromosome BED file",
     )
     parser.add_argument(
-        "--patient_id",
+        "--sample_id",
         required=False,
         default=argparse.SUPPRESS,
         type=str,
-        help="Output filename prefix for per-(ploidy,n) plots (default: 'panel')",
+        help="Output filename prefix for per-(ploidy,n) plots (default: 'tumor')",
     )
+    # compute-cn renders per-(ploidy,n) plots internally; share the plot styling knobs.
+    add_arguments_plot_style(parser)
     return parser
 
 
@@ -799,7 +810,7 @@ def add_arguments_plot_cn(parser: argparse.ArgumentParser):
         help="Ploidy of the solution (selects gamma column from gamma file).",
     )
     parser.add_argument(
-        "--patient_id",
+        "--sample_id",
         required=False,
         default=argparse.SUPPRESS,
         type=str,

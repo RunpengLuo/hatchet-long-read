@@ -176,6 +176,7 @@ def simulate_bb_dir(
         {
             "SAMPLE": ["normal", "tumor1"],
             "sample_type": ["normal", "tumor"],
+            "assay_type": ["wgs", "wgs"],
         }
     )
     sample_df.to_csv(os.path.join(bb_dir, "sample_ids.tsv"), sep="\t", index=False)

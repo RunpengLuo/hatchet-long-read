@@ -12,7 +12,7 @@ log_dir: "logs"
 
 ##################################################
 # Inputs
-patient_id: sample
+sample_id: tumor
 bb_dir: "/path/to/bb"
 
 ##################################################
@@ -36,6 +36,8 @@ compute-cn:
   tetraploid: true
   minClone: 2
   maxClone: 4
+  # plot output format for the per-(ploidy,n) plots rendered by compute-cn
+  plot_img_type: pdf
 
 ##################################################
 # Resources

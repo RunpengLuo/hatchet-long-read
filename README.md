@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/raphael-group/hatchet/actions/workflows/ci.yml/badge.svg?branch=hatchet3-dev)](https://github.com/raphael-group/hatchet/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/raphael-group/hatchet/branch/hatchet3-dev/graph/badge.svg)](https://codecov.io/gh/raphael-group/hatchet)
-[![Version](https://img.shields.io/badge/version-3.0.0b1-blue.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-3.0.0b2-blue.svg)](VERSION)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -76,12 +76,12 @@ export GRB_LICENSE_FILE="/path/to/gurobi.lic"
 
 
 ## Usage
-HATCHet (v3) inputs genomic bin by sample read-depth ratio (RDR), phased B-allele counts, and total-allele count matrices preprocessed by [Universal-Genotyping-Pipeline](https://github.com/raphael-group/Universal-Genotyping-Pipeline), see [tutorial](https://github.com/raphael-group/Universal-Genotyping-Pipeline/docs/bulk_genotyping.md) for preprocessing details and [Input](./docs/reference.md#input) for input data formats.
+HATCHet (v3) inputs genomic bin by sample read-depth ratio (RDR), phased B-allele counts, and total-allele count matrices preprocessed by [Universal-Genotyping-Pipeline](https://github.com/raphael-group/Universal-Genotyping-Pipeline), see [tutorial](https://github.com/raphael-group/Universal-Genotyping-Pipeline/docs/bulk_genotyping.md) for preprocessing details and [Input](./docs/modules/cluster-bins.md#input) for input data formats.
 
 ### Running Snakemake Pipeline
 We include a [Snakemake](https://snakemake.readthedocs.io/) pipeline (version 9 or newer) that runs the full HATCHet (v3) pipeline for a single patient. First, copy and modify the Snakemake configuration file from [config/snakemake-hatchet.yaml](config/snakemake-hatchet.yaml):
 ```yaml
-patient_id: sample                # output filename prefix
+sample_id: tumor                  # output filename prefix
 bb_dir: "/path/to/bb"             # input directory of preprocessed matrices (see Input)
 genome_size: "/path/to/hg38.chrom.sizes"   # reference chromosome sizes
 region_bed: "/path/to/regions.bed"         # BED of whitelist regions
@@ -118,5 +118,4 @@ snakemake -p --cores <ncores> -s ./Snakefile \
 
 | Document | Description |
 |----------|-------------|
-| [docs/reference.md](docs/reference.md) | Reference manual |
 | [CHANGELOG.md](CHANGELOG.md) | Change logs |

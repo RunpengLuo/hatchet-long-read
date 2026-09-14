@@ -7,8 +7,15 @@ from scipy.stats import norm
 
 def get_scaling_factor(
     samples: list,
-    segs: pd.DataFrame,
-    bbcs: pd.DataFrame,
+    clusters: list,
+    bins: pd.DataFrame,
+    rd_mat: np.ndarray,
+    seg_rdr: pd.DataFrame,
+    seg_baf: pd.DataFrame,
+    seg_baf_se: pd.DataFrame,
+    seg_rdr_var: pd.DataFrame,
+    seg_nbins: pd.DataFrame,
+    is_balanced: np.ndarray,
     fix_cn_dip: dict,
     fix_cn_tet: dict,
     maxcn: int,
@@ -31,24 +38,27 @@ def get_scaling_factor(
     """
     logging.info("Infer scaling factors & tumor purity")
 
-    def _pivot(col):
-        return segs.pivot(index="#ID", columns="SAMPLE", values=col)[samples]
-
-    rdr, baf = _pivot("RD"), _pivot("BAF")
-    baf_se, rd_var = _pivot("BAF-se"), _pivot("RD-var")
-    nbins = _pivot("#BINS")
-    clusters = baf.index.tolist()
+    # Per-(cluster, sample) frames indexed by cluster label, from read_seg_file.
+    rdr, baf, baf_se, rd_var, nbins = (
+        seg_rdr,
+        seg_baf,
+        seg_baf_se,
+        seg_rdr_var,
+        seg_nbins,
+    )
     baf_mat, rdr_mat = baf.values, rdr.values
 
-    bin_rdrs = {
-        key: g["RD"].values.astype(np.float64)
-        for key, g in bbcs.groupby(["CLUSTER", "SAMPLE"])
-    }
+    cluster_arr = bins["CLUSTER"].to_numpy()
+    bin_rdrs = {}
+    for z in clusters:
+        rz = rd_mat[cluster_arr == z]
+        for si, s in enumerate(samples):
+            bin_rdrs[(z, s)] = rz[:, si].astype(np.float64)
 
     user_balanced = {c for c, cn in fix_cn_dip.items() if cn == (1, 1)} | {
         c for c, cn in fix_cn_tet.items() if cn == (2, 2)
     }
-    seg_balanced = segs.drop_duplicates("#ID").set_index("#ID")["is_balanced"]
+    seg_balanced = pd.Series(is_balanced, index=clusters)
     balanced_s = [c for c in clusters if c in user_balanced or seg_balanced.loc[c]]
     imbalanced_z = [c for c in clusters if c not in balanced_s]
     if not balanced_s:
@@ -67,6 +77,7 @@ def get_scaling_factor(
     logging.info(f"imbalanced clusters={imbalanced_z}")
 
     def _purity_from_baf(z, a, b):
+        """Solve per-sample tumor purity from cluster z's BAF given clonal CN (a, b); None if any purity leaves (0, 1]."""
         bz = baf.loc[z].values
         dom = (b - 1) - bz * (a + b - 2)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -74,6 +85,7 @@ def get_scaling_factor(
         return None if np.any((p <= 0) | (p > 1)) else p
 
     def _wgd_gamma(z, a, b, purs):
+        """RDR scaling gamma under WGD for cluster z given clonal CN (a, b) and purity; None if the denominator is zero."""
         c = a + b
         if c == 4:
             return (2 + 2 * purs) / rdr_s0
@@ -81,6 +93,7 @@ def get_scaling_factor(
         return None if np.any(dom == 0) else (2 * c - 8) / dom
 
     def _cn_candidates(mx):
+        """Enumerate imbalanced allele-specific CN candidates (a, b) with total copies up to mx."""
         return [(1, 0)] + [
             (c - b, b)
             for c in range(2, mx + 1)
@@ -89,6 +102,7 @@ def get_scaling_factor(
         ]
 
     def _is_concordant(z, a, b, purs, gams, base_ploidy):
+        """True if cluster z's BAF-derived and RDR-derived purities agree (two-sided z-test, no sample p<0.05)."""
         c = a + b
         if c == base_ploidy or c == 2:
             return True
@@ -104,6 +118,7 @@ def get_scaling_factor(
         return not np.any((se > 0) & (pvals < 0.05))
 
     def _fits_grid(purs, gams, mx):
+        """True if every cluster's BAF and RDR fall within the feasible band implied by purity, gamma, and max CN mx."""
         d = 2 * (1 - purs) + mx * purs
         lo_baf, hi_baf = (1 - purs) / d, (1 - purs + mx * purs) / d
         lo_rdr, hi_rdr = 2 * (1 - purs) / gams, d / gams
@@ -113,6 +128,7 @@ def get_scaling_factor(
         )
 
     def _rdr_mse(z, a, b, purs, gams):
+        """Mean squared error of cluster z's per-bin RDR against the RDR expected for CN (a, b) at given purity and gamma."""
         exp_rdr = (2 * (1 - purs) + (a + b) * purs) / gams
         ss, n = 0.0, 0
         for si, s in enumerate(samples):
@@ -122,6 +138,7 @@ def get_scaling_factor(
         return ss / n if n >= 2 else None
 
     def _score_candidates(cn_list, base_ploidy, maxcn_grid, is_wgd, gams_default):
+        """Return the (cluster, CN, purity, gamma) with lowest RDR MSE that passes purity/concordance/grid filters, or None."""
         best = {}
         for z in imbalanced_z:
             baf_z, rdr_z = baf.loc[z].values, rdr.loc[z].values
@@ -183,8 +200,7 @@ def get_scaling_factor(
 
     if purities_dip is None:
         clonal_dip = {s0: (1, 1), **fix_cn_dip}
-        purities_dip = {s: 0.0 for s in samples}
-        logging.warning("no valid noWGD pair, using s0 only")
+        logging.warning("no valid noWGD pair; leaving purity free for the solve step")
 
     clonal_tet, purities_tet, gammas_wgd = None, None, None
     for z, cn in fix_cn_tet.items():

@@ -2,21 +2,6 @@ import logging
 import numpy as np
 
 
-def split_by_chromosome(inputs) -> list[np.ndarray]:
-    """Split segment indices by chromosome using chr_boundaries."""
-    S = inputs.m
-    if inputs.chr_boundaries is None:
-        return [np.arange(S)]
-    chrom_groups = []
-    start = 0
-    for i in range(1, S):
-        if inputs.chr_boundaries[i]:
-            chrom_groups.append(np.arange(start, i))
-            start = i
-    chrom_groups.append(np.arange(start, S))
-    return chrom_groups
-
-
 def dedup_pool_instances(pool_instances, u_atol=1e-3):
     """Remove duplicate solutions that differ only by clone ordering.
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-import numpy as np
 import pandas as pd
 
 
@@ -27,9 +26,6 @@ class SolverInputs:
     fb_lo: pd.DataFrame = field(repr=False)
     fb_hi: pd.DataFrame = field(repr=False)
     nbins: pd.DataFrame = field(repr=False)  # bin counts per cluster/sample
-    # CNT-CD fields
-    phase_vector: np.ndarray | None = None  # (S,) in {0,1}
-    chr_boundaries: np.ndarray | None = None  # (S,) bool, True at first seg of each chr
 
     @property
     def m(self):
@@ -54,8 +50,6 @@ class SolverParams:
     zero_cn_thres: float
     reg_name: str = "RAW"
     obj_type: str = "imf"
-    # CNT-CD fields
-    eps_fit: float = 0.01
 
     @property
     def M(self):
