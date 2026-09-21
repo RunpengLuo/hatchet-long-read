@@ -1,6 +1,5 @@
 """Pytest fixtures for HATCHet integration tests."""
 
-import json
 import os
 
 import matplotlib
@@ -9,18 +8,13 @@ matplotlib.use("Agg")
 
 import pytest
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+from hatchet.check.simulate import simulate_bb_dir
 
 
 @pytest.fixture(scope="session")
-def synthetic_data():
-    """Load pre-generated synthetic data from tests/data/."""
-    bb_dir = os.path.join(DATA_DIR, "bb_dir")
-    genome_sizes = os.path.join(DATA_DIR, "genome.sizes")
-    regions_bed = os.path.join(DATA_DIR, "regions.bed")
-    with open(os.path.join(DATA_DIR, "ground_truth.json")) as f:
-        ground_truth = json.load(f)
-    return bb_dir, genome_sizes, regions_bed, ground_truth
+def synthetic_data(tmp_path_factory):
+    """Simulate the synthetic dataset once per session, from a fixed seed."""
+    return simulate_bb_dir(str(tmp_path_factory.mktemp("synthetic")))
 
 
 @pytest.fixture(scope="session")

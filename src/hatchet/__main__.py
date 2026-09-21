@@ -7,12 +7,14 @@ from hatchet.compute_cn.compute_cn import run as hatchet_compute_cn
 from hatchet.plot.plot_cn import run as hatchet_plot_cn
 from hatchet.plot.plot_cnp_panel import run as hatchet_plot_panel
 from hatchet.evaluate.evaluate import run as hatchet_evaluate
+from hatchet.check.check import run as hatchet_check
 from hatchet.hatchet_parser import (
     add_arguments_cluster_bins,
     add_arguments_compute_cn,
     add_arguments_evaluate,
     add_arguments_plot_cn,
     add_arguments_plot_panel,
+    add_arguments_check,
 )
 
 
@@ -22,6 +24,7 @@ SUBCOMMANDS = [
     ("plot-cn", add_arguments_plot_cn, hatchet_plot_cn),
     ("plot-panel", add_arguments_plot_panel, hatchet_plot_panel),
     ("evaluate", add_arguments_evaluate, hatchet_evaluate),
+    ("check", add_arguments_check, hatchet_check),
 ]
 
 

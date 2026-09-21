@@ -14,7 +14,7 @@ from snakemake.settings.types import (
 )
 
 from conftest import CBC_AVAILABLE
-from simulate_bb_dir import simulate_bb_dir
+from hatchet.check.simulate import simulate_bb_dir
 
 pytestmark = pytest.mark.skipif(not CBC_AVAILABLE, reason="CBC solver not available")
 
@@ -25,13 +25,9 @@ SNAKEFILE = Path(__file__).resolve().parent.parent / "Snakefile"
 def snakemake_result(tmp_path_factory):
     """Run the full Snakemake pipeline on synthetic data."""
     base = tmp_path_factory.mktemp("snakemake")
-    bb_dir = str(base / "bb_dir")
-    genome_sizes = str(base / "genome.sizes")
-    regions_bed = str(base / "regions.bed")
+    bb_dir, genome_sizes, regions_bed, ground_truth = simulate_bb_dir(str(base))
     workdir = base / "output"
     workdir.mkdir(exist_ok=True)
-
-    ground_truth = simulate_bb_dir(bb_dir, genome_sizes, regions_bed)
 
     config = {
         "bb_dir": bb_dir,

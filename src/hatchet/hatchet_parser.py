@@ -989,3 +989,35 @@ def add_arguments_evaluate(parser):
         help="Logging verbosity (default: 0)",
     )
     return parser
+
+
+def add_arguments_check(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "-O",
+        "--out_dir",
+        type=str,
+        default=None,
+        help="Directory for intermediate and output files (default: a temporary "
+        "directory, removed on success and kept on failure)",
+    )
+    parser.add_argument(
+        "--tmpdir",
+        type=str,
+        default=None,
+        help="Parent directory to create the temporary working directory under "
+        "(default: system temp, honoring TMPDIR); ignored with --out_dir",
+    )
+    parser.add_argument(
+        "--solver",
+        type=str,
+        choices=["gurobi", "cbc"],
+        default=None,
+        help="MILP solver for compute-cn (default: gurobi if licensed, else cbc)",
+    )
+    parser.add_argument(
+        "--verbosity",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="verbose level, 0, 1, 2 (default: 0)",
+    )
+    return parser
