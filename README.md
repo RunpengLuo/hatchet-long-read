@@ -113,6 +113,7 @@ snakemake -p --cores <ncores> -s ./Snakefile \
 | (2) | [`compute-cn`](docs/modules/compute-cn.md) | Allele-specific integer copy numbers and clone proportions deconvolution with regularization using integer linear programming (ILP) or coordinate descent. |
 | (3) | [`plot-cn`](docs/modules/plot-cn.md) | Genome-wide copy-number profiles and RDR-vs-BAF plots for a single CN solution. |
 | (4) | [`plot-panel`](docs/modules/plot-panel.md) | Multi-sample copy-number panel composed from several per-sample CN solutions. |
+| - | [`check`](docs/modules/check.md) | End-to-end installation check on a simulated toy dataset. |
 
 ## Documentation
 

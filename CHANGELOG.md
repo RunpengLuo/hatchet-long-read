@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+**Added**
+
+- `hatchet check` runs cluster-bins -> compute-cn -> plot-cn end to end and asserts the recovered purity, RDR scaling factor, and per-region copy-number states against the simulated truth; it needs no input files, so it can validate an installation from any working directory ([check.py](src/hatchet/check/check.py), [docs/modules/check.md](docs/modules/check.md)).
+- `hatchet.check.simulate.simulate_bb_dir` generates a bb_dir from a fixed seed, drawing RDR from a Gaussian and B-allele counts from a Beta-Binomial around the mixed-clone expectation ([simulate.py](src/hatchet/check/simulate.py)).
+
+**Changed**
+
+- The synthetic test dataset is generated on demand instead of stored: `tests/data/` and `tests/simulate_bb_dir.py` are gone, and `tests/conftest.py` and `tests/test_snakemake.py` call the packaged simulator, so the same fixed-seed input serves the tests and `hatchet check` ([tests/conftest.py](tests/conftest.py), [tests/test_snakemake.py](tests/test_snakemake.py)).
+
 ## [3.0.0b2] - 2026-09-13
 
 **Added**
