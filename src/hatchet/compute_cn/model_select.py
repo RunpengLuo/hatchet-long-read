@@ -323,11 +323,12 @@ def model_select_elbow_from_regularization(pool_instances):
                 df.iloc[i, df.columns.get_loc("is_pareto")] = False
                 break
     pids = df.loc[df["is_pareto"]].index.to_numpy()
-    if len(pids) <= 1:
-        df["is_pareto"] = True
-        df["selected"] = "*"
-        return sol_ids[0], df
     logging.info(f"model selection, #pareto={len(pids)}/{len(df)}")
+    if len(pids) <= 1:
+        # NB: no frontier to take an elbow on; take the Pareto point itself.
+        best_idx = pids[0] if len(pids) else df[imf_col].idxmin()
+        df.loc[best_idx, "selected"] = "*"
+        return df.loc[best_idx, "instance_id"], df
 
     pareto_df = df.loc[pids].sort_values(reg_col)
     pids_sorted = pareto_df.index.to_numpy()
