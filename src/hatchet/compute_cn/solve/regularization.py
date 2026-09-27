@@ -186,3 +186,68 @@ def build_regularization(model, mode: str, params: SolverParams, inputs: SolverI
         obj_reg = builders[pname](model, mode, params, inputs)
 
     return obj_reg
+
+
+def eval_regularization(cA, cB, mode: str, params: SolverParams, inputs: SolverInputs):
+    """Evaluate the regularization term directly from an integer CN solution.
+
+    The auxiliary variables backing each term (``span``, ``hcn``, ``md_root``,
+    ``md_adj``) are pinned to their intended values only when the term carries
+    positive weight in the minimized objective. At ``pparam == 0`` the term
+    drops out, those variables become degenerate, and ``pe.value(obj_reg)``
+    reports an arbitrary feasible point. Recomputing from ``cA``/``cB`` gives
+    the value the corresponding builder defines, at every point of the path.
+
+    Args:
+        cA: (num_rows, num_clones) allele-A CN; clone 0 is the normal.
+        cB: (num_rows, num_clones) allele-B CN; clone 0 is the normal.
+        mode: Model mode, one of "FULL", "CARCH", "UARCH".
+        params: Solver configuration.
+        inputs: Solver data inputs.
+
+    Returns:
+        float: Regularization objective value.
+    """
+    pname = params.reg_name
+    if mode not in ("FULL", "CARCH") or pname == "RAW":
+        return 0.0
+
+    n = params.n
+    clones = list(params.tumor_clones)
+    obj = 0.0
+
+    for _m in inputs.free_rows:
+        cid = inputs.cluster_ids[_m]
+        a = [cA[_m][_n] for _n in clones]
+        b = [cB[_m][_n] for _n in clones]
+        if pname == "MAXCN":
+            obj += inputs.w[cid] * (max(a) + max(b))
+        elif pname == "DROOT_SUM":
+            obj += inputs.w[cid] * sum(
+                abs(ai - cA[_m][0]) + abs(bi - cB[_m][0]) for ai, bi in zip(a, b)
+            )
+        elif pname == "DADJ_SUM":
+            obj += inputs.w[cid] * sum(
+                abs(cA[_m][_n1] - cA[_m][_n2]) + abs(cB[_m][_n1] - cB[_m][_n2])
+                for _n1 in range(1, n - 1)
+                for _n2 in range(_n1 + 1, n)
+            )
+        elif pname == "DBOX_L1":
+            obj += inputs.w[cid] * (max(a) - min(a) + max(b) - min(b))
+        elif pname == "DBOX_L0":
+            obj += inputs.w[cid] * float(max(a) - min(a) + max(b) - min(b) > 0)
+
+    # NB: fixed rows contribute a constant, mirroring the builders.
+    for _m in inputs.fixed_rows:
+        cid = inputs.cluster_ids[_m]
+        ca, cb = inputs.copy_numbers[cid]
+        if pname == "MAXCN":
+            obj += inputs.w[cid] * (max(ca, params.base) + max(cb, params.base))
+        elif pname == "DROOT_SUM":
+            obj += (
+                inputs.w[cid]
+                * (n - 1)
+                * (abs(ca - params.base) + abs(cb - params.base))
+            )
+
+    return float(obj)

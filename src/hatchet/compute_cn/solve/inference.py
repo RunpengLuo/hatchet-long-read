@@ -22,6 +22,7 @@ from hatchet.compute_cn.solve.model import (
     update_fixed_u,
     update_fixed_cn,
 )
+from hatchet.compute_cn.solve.regularization import eval_regularization
 from hatchet.compute_cn.solve.utils import dedup_pool_instances
 
 _random_states = []
@@ -165,7 +166,9 @@ def run_full_ilp(
             raise RuntimeError(f"ILP infeasible at pparam={pparam}")
         sol = extract_solution(model, params, inputs)
         sol["imf_obj"] = pe.value(model.obj_imf)
-        sol["reg_obj"] = pe.value(model.obj_reg)
+        sol["reg_obj"] = eval_regularization(
+            sol["cA"], sol["cB"], "FULL", params, inputs
+        )
         sol_id = f"p{pparam:.4f}_s0"
         pool_instances[sol_id] = sol
         if first_sol is None:
@@ -246,7 +249,7 @@ def _cd_work(
         c_sol = extract_solution(model_c, params, inputs, fixed_u=_u)
         _cA, _cB = c_sol["cA"], c_sol["cB"]
         _imf_c = pe.value(model_c.obj_imf)
-        _reg_c = pe.value(model_c.obj_reg)
+        _reg_c = eval_regularization(_cA, _cB, "CARCH", params, inputs)
         update_fixed_cn(model_u, _cA, _cB, params, inputs)
         if not solve_model(model_u, solver, False, timelimit):
             return None
