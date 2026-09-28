@@ -478,6 +478,15 @@ def add_arguments_compute_cn(parser: argparse.ArgumentParser):
         type=str,
         help="Fix tetraploid cluster CN states: 'cid1:cA|cB;cid2:cA|cB' e.g. '6:4|2'",
     )
+    parser.add_argument(
+        "--free_anchor_dip",
+        required=False,
+        default=argparse.SUPPRESS,
+        action="store_true",
+        help=(
+            "Unpin the imbalanced cluster's clonal CN and purity estimated from diploid scaling step."
+        ),
+    )
 
     parser.add_argument(
         "--zero_cn_thres",
@@ -681,6 +690,12 @@ def parse_arguments_compute_cn(args):
         )
     args["fix_cn_dip"] = parse_fix_cn(args["fix_cn_dip"]) if args["fix_cn_dip"] else {}
     args["fix_cn_tet"] = parse_fix_cn(args["fix_cn_tet"]) if args["fix_cn_tet"] else {}
+    if args["free_anchor_dip"] and args["tetraploid"] and not args["diploid"]:
+        raise RuntimeError(
+            "--free_anchor_dip applies to the diploid branch only, but only the "
+            "tetraploid branch was requested. Under WGD gamma is derived from the "
+            "same anchor, so it cannot be freed."
+        )
     return args
 
 

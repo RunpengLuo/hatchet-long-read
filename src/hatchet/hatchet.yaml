@@ -79,6 +79,7 @@ reg_steps: 15
 reg_bound: 0.15
 fix_cn_dip: null
 fix_cn_tet: null
+free_anchor_dip: false
 zero_cn_thres: 0.001
 cd_tol: 0.001
 tol: 0.001

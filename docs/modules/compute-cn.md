@@ -68,6 +68,7 @@ Here we describe the main parameters; the full deconvolution and optimization pa
 | `--reg_bound` | 0.15 | Maximum penalty weight for the regularization path |
 | `--fix_cn_dip` | None | Fix diploid cluster CN states, e.g. `6:2|0;8:3|1` |
 | `--fix_cn_tet` | None | Fix tetraploid cluster CN states, e.g. `6:4|2` |
+| `--free_anchor_dip` | False | Do not pin the scaling-inferred imbalanced cluster CN or its implied purity (diploid only; the balanced baseline cluster and gamma stay fixed). Explicit `--fix_cn_dip` pins are kept |
 | `--zero_cn_thres` | 0.005 | Clusters with weight ≥ this fraction of total cannot take a (0,0) CN state |
 | `--no_ampdel` | False | Disable the amp/del symmetry constraint |
 | `--num_cnstates` | -1 | Constrain the number of distinct CN states per clone (-1 = unconstrained) |

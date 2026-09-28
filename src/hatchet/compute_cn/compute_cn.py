@@ -115,7 +115,7 @@ def run(args=None):
             beta_mat[keep_bin],
         )
 
-    scaling, _balanced_clusters = get_scaling_factor(
+    scaling, balanced_clusters = get_scaling_factor(
         samples,
         clusters,
         bins,
@@ -179,6 +179,17 @@ def run(args=None):
         gammas = scaling[ploidy]["gammas"]
         clonals = scaling[ploidy]["clonal"]
         purities = scaling[ploidy]["purities"]
+
+        # NB: unpin scaling factor estimated imbalanced z & purity.
+        if ploidy == "diploid":
+            if args["free_anchor_dip"]:
+                logging.info(
+                    "free_anchor_dip: scaling estimated imbalanced clonal cluster & purity is unpinned"
+                )
+                clonals = {balanced_clusters[0]: (1, 1), **args["fix_cn_dip"]}
+                if purities is not None:
+                    purities = None
+
         logging.info(f"{ploidy} clonal CN: {clonals}")
         for sample, gamma in gammas.items():
             logging.info(f"  {sample}\tgamma={gamma}")
