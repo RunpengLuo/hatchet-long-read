@@ -15,7 +15,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-from cnplot import annotate_landmarks, plot_cnv_profile, plot_scatter_2d, set_palette
+from cnplot import (
+    FS_AXTITLE,
+    FS_TICK,
+    annotate_landmarks,
+    plot_cnv_profile,
+    plot_scatter_2d,
+    set_palette,
+)
 from hatchet.utils import sort_df_chr
 from hatchet import const
 from hatchet.plot import plot_cn as _plot_cn
@@ -42,6 +49,13 @@ def _fmt_prop(v):
     return "0" if pct == 0 else f"{pct}%"
 
 
+# Pool page layout, in inches unless noted.
+_POOL_ROW_GAP = 0.15
+_POOL_KEY_H = 1.0
+# Height of one row-label line, in font sizes.
+_POOL_LABEL_LINE = 1.25
+
+
 def plot_pool_cnp(
     pool_instances,
     genome_size,
@@ -57,6 +71,11 @@ def plot_pool_cnp(
 ):
     """Plot a single multi-row CNV profile panel of Pareto solutions into out_dir.
 
+    Every row shares one genome axis, so chromosome names are written once,
+    above the first row. A row is as tall as its clones need or as its label
+    needs (pool tag, objective, one line per sample), whichever is larger, and
+    the page height is the sum of its rows, the gaps and the key.
+
     Args:
         pool_instances: {sol_id: {"imf_obj", "reg_obj", "cA", "cB", "u", ...}}.
         region_bed: Path to the whitelist region BED file.
@@ -65,7 +84,7 @@ def plot_pool_cnp(
         segs: {sol_id: seg_df} pre-computed segmentation DataFrames.
         title: Optional figure title.
         width: Figure width in inches.
-        height: Height in inches per profile row.
+        height: Height in inches per clone in a profile row.
         dpi: Output resolution.
         genome_size: Chromosome-sizes path for the genome axis.
     """
@@ -105,14 +124,21 @@ def plot_pool_cnp(
     first_seg_df = entries[0][1]
     n_clones = len([c for c in first_seg_df.columns if c.startswith("cn_")])
     n_samples = first_seg_df["SAMPLE"].nunique()
-    row_h = height * max(1, n_clones - 1) + 0.2 * max(0, n_samples - 1)
+    label_h = (2 + n_samples) * _POOL_LABEL_LINE * FS_TICK / 72.0
+    row_h = max(height * max(1, n_clones - 1), label_h)
+    heights = [row_h] * nrows + [_POOL_KEY_H]
     fig, axes = plt.subplots(
         nrows=nrows + 1,
         ncols=1,
-        figsize=(width, row_h * nrows),
-        gridspec_kw={"height_ratios": [row_h] * nrows + [2 * height]},
+        figsize=(width, sum(heights) + _POOL_ROW_GAP * nrows),
+        gridspec_kw={
+            "height_ratios": heights,
+            # NB: hspace is a fraction of the mean axes height
+            "hspace": _POOL_ROW_GAP * (nrows + 1) / sum(heights),
+            "top": 1.0,
+            "bottom": 0.0,
+        },
     )
-    fig.subplots_adjust(hspace=0.6 + 0.1 * max(0, n_samples - 1))
     main_axes = axes[:-1] if nrows > 1 else [axes[0]]
     ax_leg = axes[-1]
 
@@ -129,7 +155,7 @@ def plot_pool_cnp(
             seg_info,
             genome_axis,
             ax_leg=(ax_leg if i == nrows - 1 else None),
-            plot_chrname=True,
+            plot_chrname=(i == 0),
             show_prop=False,
         )
 
@@ -146,11 +172,17 @@ def plot_pool_cnp(
         ylabel = f"{short_label}\nimf {round(obj, 2)}\n" + "\n".join(prop_lines)
         color = "red" if is_selected else "black"
         main_axes[i].set_ylabel(
-            ylabel, rotation=0, ha="right", va="center", color=color
+            ylabel,
+            rotation=0,
+            ha="right",
+            va="center",
+            color=color,
+            fontsize=FS_TICK,
+            linespacing=_POOL_LABEL_LINE / 1.2,
         )
 
     if title:
-        main_axes[0].set_title(title)
+        main_axes[0].set_title(title, fontsize=FS_AXTITLE)
     out_file = os.path.join(out_dir, out_name)
     plt.savefig(out_file, dpi=dpi, bbox_inches="tight")
     plt.close()
