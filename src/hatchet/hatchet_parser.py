@@ -223,6 +223,23 @@ def add_arguments_cluster_bins(parser: argparse.ArgumentParser):
         default=argparse.SUPPRESS,
         help="Use log(RDR) instead of raw RDR in the Gaussian emission (default: False).",
     )
+    parser.add_argument(
+        "--rdr_emission",
+        required=False,
+        default=argparse.SUPPRESS,
+        type=str,
+        choices=["gaussian", "negbinom"],
+        help="RDR emission model: 'gaussian' on bb.rdr.npz, or 'negbinom' on the per-bin "
+        "counts in bb.count.npz with matched-normal offsets; negbinom runs on the "
+        "Python HMM backend (default: gaussian)",
+    )
+    parser.add_argument(
+        "--share_invphi",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Share NB dispersion phi across clusters within a sample (negbinom only) "
+        "(default: False)",
+    )
 
     ##################################################
     # aux files

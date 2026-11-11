@@ -25,10 +25,13 @@ from hatchet.cluster_bins.cluster_utils import (
     estimate_BB_dispersion_normal,
     estimate_BB_dispersion_segment,
     estimate_ig_beta,
+    estimate_nb_phi,
     estimate_rdr_vars,
     filter_clusters,
     label_balanced_clusters,
     mat2segs,
+    nb_counts_offsets,
+    nb_rdr_vars,
     plot_elbo_traces,
     plot_score,
 )
@@ -61,7 +64,12 @@ def run(args=None):
         bb.tsv.gz         — bin metadata (chr, start, end, region_id, switchprobs)
         bb.rdr.npz        — (N, M+1) RDR matrix
         bb.depth.npz      - (N, M+1) Read-depth matrix
+        bb.count.npz      - (N, M+1) per-bin read counts (rdr_emission=negbinom only)
         bb.{A,B,T}allele.npz — (N, M+1) allele count matrices
+
+    With rdr_emission=negbinom, tumor counts are NB2 with mean rho * lambda_i * T_s
+    (lambda_i from the pooled normals), RDR is counts / offsets, and the fitted
+    phi is reported as the implied per-bin RDR variance in RD-var and RD-se.
 
     Outputs (written to bbc_dir/):
         bulk.bbc / bulk.seg     — BBC and SEG files for the optimal K
@@ -85,6 +93,7 @@ def run(args=None):
     sample_file = os.path.join(bb_dir, const.SAMPLE_IDS)
     rdr_mfile = os.path.join(bb_dir, const.BB_RDR_NPZ)
     depth_mfile = os.path.join(bb_dir, const.BB_DEPTH_NPZ)
+    count_mfile = os.path.join(bb_dir, const.BB_COUNT_NPZ)
     a_mfile = os.path.join(bb_dir, const.BB_A_ALLELE_NPZ)
     b_mfile = os.path.join(bb_dir, const.BB_B_ALLELE_NPZ)
     t_mfile = os.path.join(bb_dir, const.BB_T_ALLELE_NPZ)
@@ -113,6 +122,11 @@ def run(args=None):
     score_method = args["score_method"]
     score_criteria = args["score_criteria"]
     log_rdr = args["log_rdr"]
+    rdr_emission = args["rdr_emission"]
+    share_invphi = args["share_invphi"]
+    negbinom = rdr_emission == "negbinom"
+    if negbinom and log_rdr:
+        raise ValueError("--log_rdr applies to the gaussian RDR emission only")
     init_method = args["init_method"]
     training_method = args["training_method"]
 
@@ -175,6 +189,16 @@ def run(args=None):
     X_betas_all = np.load(b_mfile)["mat"].astype(np.int32)
     X_totals_all = np.load(t_mfile)["mat"].astype(np.int32)
 
+    X_counts, X_nb_offsets = None, None
+    if negbinom:
+        X_counts, X_nb_offsets = nb_counts_offsets(
+            np.load(count_mfile)["mat"], normal_idx, tumor_idx
+        )
+        X_rdrs = (X_counts / X_nb_offsets).astype(np.float32)
+        logging.info(
+            "negbinom RDR emission: RDR = counts / offsets, Python HMM backend"
+        )
+
     ##################################################
     # HMM inputs
     X_hmm_rdrs = X_rdrs
@@ -220,14 +244,18 @@ def run(args=None):
                 min_tau=min_tau,
                 max_tau=max_tau,
             )
-    rdr_vars0 = estimate_rdr_vars(X_hmm_rdrs, X_lengths, min_var=min_covar)
+    if negbinom:
+        rdr_vars0 = estimate_nb_phi(X_counts, X_nb_offsets, X_lengths)
+    else:
+        rdr_vars0 = estimate_rdr_vars(X_hmm_rdrs, X_lengths, min_var=min_covar)
     ig_beta = estimate_ig_beta(ig_alpha, rdr_vars0)
     logging.info("Init emission parameters:")
     for si, sample in enumerate(tumor_samples):
         logging.info(
-            "  %s: BAF tau=%.3f, RDR var=%.3f, IG beta=%.6f",
+            "  %s: BAF tau=%.3f, RDR %s=%.4g, IG beta=%.6f",
             sample,
             baf_taus0[si],
+            "phi" if negbinom else "var",
             rdr_vars0[0, si],
             ig_beta[0, si],
         )
@@ -261,6 +289,9 @@ def run(args=None):
             bal_margin=args["bal_margin"],
             cna_plus_plus_d=args["cna_plus_plus_d"],
             collect_diag=DEBUG,
+            rdr_emission=rdr_emission,
+            X_counts=X_counts,
+            X_nb_offsets=X_nb_offsets,
         )
     plot_2d_inits(
         X_rdrs,
@@ -355,6 +386,10 @@ def run(args=None):
                 ig_alpha=ig_alpha,
                 ig_beta=ig_beta,
                 baf_k_start=baf_k_start,
+                rdr_emission=rdr_emission,
+                share_invphi=share_invphi,
+                X_counts=X_counts,
+                X_nb_offsets=X_nb_offsets,
             )
             model_ll = sol["model_ll"]
             obj_ll = sol["obj_ll"]
@@ -368,7 +403,9 @@ def run(args=None):
                 K,
                 ntumor_samples,
                 nbbs,
+                rdr_emission=rdr_emission,
                 share_tau=share_tau,
+                share_invphi=share_invphi,
             )
             score_records.append({"K": K, "restart_it": it, "ll": model_ll, **scores})
             if model_ll > best_ll:
@@ -412,6 +449,10 @@ def run(args=None):
         k_cids = np.unique(k_labels)
         k_rdr_means = best_sol["RDR_means"][k_cids]
         k_rdr_vars = best_sol["RDR_vars"][k_cids]
+        if negbinom:
+            k_rdr_vars = nb_rdr_vars(
+                k_labels, k_cids, k_rdr_means, k_rdr_vars, X_nb_offsets
+            )
         k_baf_means = best_sol["BAF_means"][k_cids]
         k_baf_taus = best_sol["BAF_taus"][k_cids]  # (len(k_cids), M)
 

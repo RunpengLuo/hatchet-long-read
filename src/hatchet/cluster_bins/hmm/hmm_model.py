@@ -177,6 +177,8 @@ def run_baum_welch(
     """Run EM training for a K-state 2-mixture BAF+RDR HMM.
 
     All data arrays are C-contiguous float64 numpy (int64 for X_lengths).
+    The C++ backend runs gaussian RDR + betabinom BAF; other emissions run the
+    Python backend regardless of HATCHET_DISABLE_CPP.
     Alternates between:
       - E-step: numpy loglik kernel + Numba forward-backward.
       - M-step: closed-form RDR Gaussian updates + scipy Brent BAF updates.
@@ -228,17 +230,11 @@ def run_baum_welch(
         np.broadcast_to(baf_taus, (K, M)), dtype=np.float64
     )  # (K, M); rows equal when init is per-sample
 
-    if (rdr_emission, baf_emission) != (
+    # NB: C++ backend implements gaussian RDR + betabinom BAF only
+    if _hmm_backend._USE_CPP and (rdr_emission, baf_emission) == (
         "gaussian",
         "betabinom",
-    ) and _hmm_backend._USE_CPP:
-        raise NotImplementedError(
-            f"C++ HMM backend supports only gaussian RDR + betabinom BAF; "
-            f"got rdr_emission={rdr_emission!r}, baf_emission={baf_emission!r}. "
-            f"Set HATCHET_DISABLE_CPP=1 to use the Python emission dispatch."
-        )
-
-    if _hmm_backend._USE_CPP:
+    ):
         return _run_hmm_cpp(
             K=K,
             X_rdrs=X_rdrs,
@@ -388,6 +384,10 @@ def run_baum_welch(
         rdr_vars,
         baf_means,
         baf_taus,
+        rdr_emission=rdr_emission,
+        baf_emission=baf_emission,
+        X_counts=X_counts,
+        X_nb_offsets=X_nb_offsets,
     )
 
     return {
@@ -572,6 +572,10 @@ def run_viterbi_training(
         rdr_vars,
         baf_means,
         baf_taus,
+        rdr_emission=rdr_emission,
+        baf_emission=baf_emission,
+        X_counts=X_counts,
+        X_nb_offsets=X_nb_offsets,
     )
     phase_posts = np.sum(posts, axis=1)
     cluster_posts = np.sum(posts, axis=2)

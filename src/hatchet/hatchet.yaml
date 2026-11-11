@@ -38,6 +38,9 @@ ig_alpha: 10.0
 tau_iters: 3
 seed: 42
 log_rdr: false
+# rdr_emission: gaussian | negbinom
+rdr_emission: gaussian
+share_invphi: false
 # per-bin |BAF-0.5| band selecting the diploid RDR anchor during seeding
 bal_margin: 0.03
 

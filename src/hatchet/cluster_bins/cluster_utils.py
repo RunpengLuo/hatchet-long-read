@@ -175,6 +175,87 @@ def estimate_rdr_vars(
     return global_var[None, :]  # (1, M)
 
 
+def nb_counts_offsets(X_counts_all, normal_idx, tumor_idx):
+    """Tumor counts and matched-normal NB offsets for the negbinom RDR emission.
+
+    The offset of bin i in tumor sample s is lambda_i * T_s, with lambda_i the
+    pooled-normal count fraction of bin i and T_s the total count of sample s, so
+    counts / offsets is the library-size-normalized RDR.
+
+    Args:
+        X_counts_all: (N, M+1) per-bin read counts of all samples.
+        normal_idx:   column indices of the normal samples.
+        tumor_idx:    column indices of the tumor samples.
+
+    Returns:
+        X_counts:     (N, M) float64 tumor counts.
+        X_nb_offsets: (N, M) float64 offsets lambda_i * T_s.
+
+    Raises:
+        ValueError: without a normal sample, or if a bin has zero normal count.
+    """
+    if not normal_idx:
+        raise ValueError("negbinom RDR emission requires a matched normal sample")
+    normal = X_counts_all[:, normal_idx].sum(axis=1).astype(np.float64)
+    if np.any(normal <= 0):
+        raise ValueError(f"{np.sum(normal <= 0)} bins have zero normal count")
+    X_counts = np.ascontiguousarray(X_counts_all[:, tumor_idx], dtype=np.float64)
+    lambdas = normal / normal.sum()
+    X_nb_offsets = np.ascontiguousarray(
+        lambdas[:, None] * X_counts.sum(axis=0)[None, :], dtype=np.float64
+    )
+    return X_counts, X_nb_offsets
+
+
+def estimate_nb_phi(X_counts, X_nb_offsets, X_lengths, min_phi=1e-6):
+    """Estimate the NB dispersion phi per sample from first-difference MAD.
+
+    Under NB2, the per-bin relative copy x_i = y_i / c_i has variance
+    rho / c_i + phi * rho**2. The noise variance of x comes from estimate_rdr_vars
+    (robust to CN-state transitions), and the Poisson part rho * median(1/c) is
+    subtracted, with rho taken as median(x).
+
+    Args:
+        X_counts:     (N, M) per-bin counts.
+        X_nb_offsets: (N, M) NB offsets lambda_i * T_s.
+        X_lengths:    (S,) number of bins per segment.
+        min_phi:      lower floor on phi.
+
+    Returns:
+        phi0: (1, M) initial NB dispersion.
+    """
+    X_rel = X_counts / X_nb_offsets
+    noise_var = estimate_rdr_vars(X_rel, X_lengths, min_var=0.0)[0]
+    rho = np.median(X_rel, axis=0)
+    poisson_var = rho * np.median(1.0 / X_nb_offsets, axis=0)
+    phi0 = np.maximum((noise_var - poisson_var) / rho**2, min_phi)
+    logging.info(f"NB init phi: {np.array2string(phi0, precision=4)}")
+    return phi0[None, :]
+
+
+def nb_rdr_vars(k_labels, k_cids, rhos, phis, X_nb_offsets):
+    """Per-bin RDR variance implied by a fitted NB cluster.
+
+    RDR_i = y_i / c_i has variance rho / c_i + phi * rho**2 under NB2; the
+    cluster value averages 1 / c_i over its bins.
+
+    Args:
+        k_labels:     (N,) cluster assignment per bin.
+        k_cids:       (K,) ordered active cluster IDs.
+        rhos:         (K, M) fitted relative copies.
+        phis:         (K, M) fitted NB dispersions.
+        X_nb_offsets: (N, M) NB offsets lambda_i * T_s.
+
+    Returns:
+        rdr_vars: (K, M) per-bin RDR variances.
+    """
+    rdr_vars = np.empty_like(rhos, dtype=np.float64)
+    for ci, c in enumerate(k_cids):
+        inv_off = np.mean(1.0 / X_nb_offsets[k_labels == c], axis=0)
+        rdr_vars[ci] = rhos[ci] * inv_off + phis[ci] * rhos[ci] ** 2
+    return rdr_vars
+
+
 def estimate_ig_beta(ig_alpha, vars):
     return vars * (ig_alpha + 1)
 
